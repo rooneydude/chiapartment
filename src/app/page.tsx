@@ -4,7 +4,6 @@ import {
   listBuildings,
   listUnits,
   recentPriceChanges,
-  typeHistory,
   typeSummary,
 } from "@/lib/db/queries";
 

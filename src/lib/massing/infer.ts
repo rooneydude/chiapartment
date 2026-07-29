@@ -206,6 +206,12 @@ export function inferBuilding(input: InferInput): InferResult {
   // --- vertical segmentation ---------------------------------------------
   const segments = inferSegments(placeable, lineStats, baseFloor, topFloor, notes);
 
+  // `baseFloor` on the spec is the lowest *modelled* floor, which is the base
+  // of the segment stack — floor 1 whenever there is a podium, not the lowest
+  // floor that happens to have a listing. Getting this wrong offsets every
+  // height above the podium by the podium's floor count.
+  const specBaseFloor = Math.min(...segments.map((s) => s.fromFloor));
+
   if (input.lat == null || input.lng == null) {
     notes.push(
       "No coordinates were scraped, so the building is placed at the Loop centroid. " +
@@ -223,7 +229,7 @@ export function inferBuilding(input: InferInput): InferResult {
     },
     headingDeg: input.headingDeg ?? 0,
     footprint: outline,
-    baseFloor,
+    baseFloor: specBaseFloor,
     topFloor,
     skippedFloors,
     segments,
@@ -479,11 +485,14 @@ function inferSegments(
   topFloor: number,
   notes: string[],
 ): MassingSegment[] {
-  const podiumTop = Math.max(baseFloor - 1, baseFloor);
   const segments: MassingSegment[] = [];
 
   // Floors below the lowest listed unit are podium: taller, full footprint.
-  if (baseFloor > 1) {
+  // The podium must stop one floor *below* the first residential floor —
+  // overlapping segments get counted twice by floorSlabHeight, which detaches
+  // the roof and misplaces every unit above the overlap.
+  const podiumTop = baseFloor - 1;
+  if (podiumTop >= 1) {
     segments.push({
       fromFloor: 1,
       toFloor: podiumTop,

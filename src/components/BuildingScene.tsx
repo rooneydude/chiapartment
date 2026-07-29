@@ -10,6 +10,7 @@ import {
   floorSlabHeight,
   orderedSegments,
   segmentFloorCount,
+  segmentForFloor,
 } from "@/lib/massing/spec";
 import type { FloorPlate, Point } from "@/lib/floorplan/schema";
 import type { UnitPlacement } from "@/lib/units/placement";
@@ -43,6 +44,25 @@ interface Props {
   onSelect?: (unitCode: string) => void;
 }
 
+const FOV = 38;
+/** Fraction of the viewport the building should occupy vertically. */
+const FILL = 0.82;
+
+/**
+ * Distance at which a building of this height fits the frame.
+ *
+ * Deriving it from the field of view rather than guessing a multiple of the
+ * height is what keeps a 12-storey bar block and a 60-storey tower both framed
+ * correctly — a fixed multiplier gets one of them wrong every time.
+ */
+function framingDistance(height: number, span: number): number {
+  const halfFov = (FOV * Math.PI) / 360;
+  const fitHeight = height / FILL / (2 * Math.tan(halfFov));
+  // Wide, short buildings are constrained by width instead.
+  const fitWidth = span * 1.9;
+  return Math.max(fitHeight, fitWidth);
+}
+
 export default function BuildingScene({
   spec,
   plate,
@@ -52,14 +72,23 @@ export default function BuildingScene({
 }: Props) {
   const height = buildingHeightM(spec);
   const span = plateSpan(plate.outline);
-  // Frame the whole tower with a little headroom, from the south-east.
-  const distance = Math.max(height * 1.15, span * 2.4);
+  const distance = framingDistance(height, span);
+  const target: [number, number, number] = [0, height * 0.45, 0];
+
+  // Look from the south-east and slightly above the midpoint, placed at
+  // exactly `distance` from the target so the framing math actually holds.
+  const dir = normalize([0.62, 0.32, 0.72]);
+  const position: [number, number, number] = [
+    target[0] + dir[0] * distance,
+    target[1] + dir[1] * distance,
+    target[2] + dir[2] * distance,
+  ];
 
   return (
     <Canvas
       shadows={false}
       dpr={[1, 2]}
-      camera={{ position: [distance * 0.62, height * 0.72, distance * 0.72], fov: 38, far: 8000 }}
+      camera={{ position, fov: FOV, near: 1, far: 20_000 }}
       gl={{ antialias: true }}
       style={{ background: "linear-gradient(180deg,#12161d 0%,#0b0d10 100%)" }}
     >
@@ -73,13 +102,18 @@ export default function BuildingScene({
       <OrbitControls
         makeDefault
         enablePan
-        minDistance={span * 0.6}
-        maxDistance={distance * 3}
+        minDistance={span * 0.8}
+        maxDistance={distance * 2.5}
         maxPolarAngle={Math.PI * 0.495}
-        target={[0, height * 0.45, 0]}
+        target={target}
       />
     </Canvas>
   );
+}
+
+function normalize([x, y, z]: [number, number, number]): [number, number, number] {
+  const len = Math.hypot(x, y, z);
+  return [x / len, y / len, z / len];
 }
 
 function SceneContents({ spec, plate, units, selectedUnitCode, onSelect }: Props) {
@@ -109,7 +143,10 @@ function SceneContents({ spec, plate, units, selectedUnitCode, onSelect }: Props
         />
       ))}
 
-      {selected && <ViewCone placement={selected.placement} length={span * 3.2} />}
+      {selected && (
+        <SelectedFloorRing spec={spec} plate={plate} placement={selected.placement} />
+      )}
+      {selected && <ViewCone placement={selected.placement} length={span * 1.35} />}
       {selected && <UnitCallout unit={selected} />}
 
       <SkyGradient height={height} />
@@ -276,17 +313,58 @@ function UnitSlab({
         e.stopPropagation();
         onSelect?.(unit.unitCode);
       }}
-      // Selected units render slightly proud of the facade so they never z-fight.
-      scale={selected ? 1.012 : 1.004}
+      // Selected units sit clearly proud of the facade: at typical framing
+      // distances a fractional offset is sub-pixel and the highlight vanishes
+      // into the wall.
+      scale={selected ? 1.035 : 1.004}
     >
       <meshBasicMaterial
         color={selected ? "#ffb038" : "#ffd79a"}
-        transparent
+        transparent={!selected}
         opacity={emphasis}
-        depthWrite={selected}
+        depthWrite
         toneMapped={false}
       />
     </mesh>
+  );
+}
+
+/**
+ * A bright band around the whole floor plate at the selected unit's level.
+ *
+ * The unit slab alone is easy to lose against a 38-storey facade, especially
+ * once the camera is far enough back to frame the building. The ring reads at
+ * any distance and answers "which floor" before you've found the unit itself.
+ */
+function SelectedFloorRing({
+  spec,
+  plate,
+  placement,
+}: {
+  spec: BuildingSpec;
+  plate: FloorPlate;
+  placement: UnitPlacement;
+}) {
+  const geometry = useMemo(() => {
+    const seg = segmentForFloor(spec, placement.floor);
+    const ring = insetRing(plate.outline, seg.inset);
+    const positions: number[] = [];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      positions.push(a.x, 0, -a.y, b.x, 0, -b.y);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    return g;
+  }, [spec, plate, placement.floor]);
+
+  return (
+    <group position={[0, placement.slabHeightM + 1.3, 0]}>
+      <lineSegments geometry={geometry}>
+        <lineBasicMaterial color="#ffb038" transparent opacity={0.85} toneMapped={false} />
+      </lineSegments>
+    </group>
   );
 }
 
@@ -297,52 +375,91 @@ function UnitSlab({
  */
 function ViewCone({ placement, length }: { placement: UnitPlacement; length: number }) {
   const geometry = useMemo(() => {
-    const spread = (34 * Math.PI) / 180;
+    const spread = (30 * Math.PI) / 180;
     const heading = (placement.facingDeg * Math.PI) / 180;
-    const origin = new THREE.Vector3(placement.center.x, 0, -placement.center.y);
-    const positions: number[] = [];
+    const ox = placement.center.x;
+    const oz = -placement.center.y;
 
-    for (const side of [-1, 1]) {
-      const a = heading + side * spread;
+    // A filled fan rather than two loose rays: as lines it reads as stray
+    // geometry crossing the scene, as a wedge it reads as a direction.
+    const steps = 12;
+    const positions: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      const a0 = heading - spread + (2 * spread * i) / steps;
+      const a1 = heading - spread + (2 * spread * (i + 1)) / steps;
       // Bearing 0 = north = −Z; bearing 90 = east = +X.
       positions.push(
-        origin.x,
-        0,
-        origin.z,
-        origin.x + Math.sin(a) * length,
-        0,
-        origin.z - Math.cos(a) * length,
+        ox, 0, oz,
+        ox + Math.sin(a0) * length, 0, oz - Math.cos(a0) * length,
+        ox + Math.sin(a1) * length, 0, oz - Math.cos(a1) * length,
       );
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    g.computeVertexNormals();
     return g;
   }, [placement, length]);
 
   return (
-    <lineSegments geometry={geometry} position={[0, placement.slabHeightM + 1.4, 0]}>
-      <lineBasicMaterial color="#ffb038" transparent opacity={0.5} />
-    </lineSegments>
+    <mesh geometry={geometry} position={[0, placement.slabHeightM + 1.4, 0]}>
+      <meshBasicMaterial
+        color="#ffb038"
+        transparent
+        opacity={0.14}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
   );
 }
 
+/** Height of the callout above the unit, metres. */
+const CALLOUT_LIFT_M = 26;
+
 function UnitCallout({ unit }: { unit: SceneUnit }) {
   const { placement } = unit;
+
+  // A leader line, so lifting the label clear of the unit doesn't disconnect
+  // the two. Without the lift the label covers the very slab it describes.
+  const leader = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        [
+          placement.center.x, placement.slabHeightM + 1.5, -placement.center.y,
+          placement.center.x, placement.slabHeightM + CALLOUT_LIFT_M, -placement.center.y,
+        ],
+        3,
+      ),
+    );
+    return g;
+  }, [placement]);
+
   return (
-    <Html
-      position={[placement.center.x, placement.slabHeightM + 3, -placement.center.y]}
-      center
-      distanceFactor={90}
-      zIndexRange={[10, 0]}
-    >
-      <div className="pointer-events-none whitespace-nowrap rounded-md border border-accent/40 bg-ink-950/90 px-2.5 py-1.5 text-[11px] leading-tight text-ink-100 shadow-lg">
-        <div className="font-semibold tracking-tight">Unit {unit.unitCode}</div>
-        <div className="tnum text-ink-400">
-          Floor {placement.floor} · {placement.exposureLabel} ·{" "}
-          {placement.areaSqft.toLocaleString()} sqft
+    <>
+      <lineSegments geometry={leader}>
+        <lineBasicMaterial color="#ffb038" transparent opacity={0.55} toneMapped={false} />
+      </lineSegments>
+      <Html
+        position={[
+          placement.center.x,
+          placement.slabHeightM + CALLOUT_LIFT_M,
+          -placement.center.y,
+        ]}
+        center
+        zIndexRange={[10, 0]}
+      >
+        <div className="pointer-events-none whitespace-nowrap rounded-md border border-accent/40 bg-ink-950/90 px-2.5 py-1.5 text-[11px] leading-tight text-ink-100 shadow-lg">
+          <div className="font-semibold tracking-tight">Unit {unit.unitCode}</div>
+          <div className="tnum text-ink-400">
+            Floor {placement.floor} · {placement.exposureLabel} ·{" "}
+            {placement.areaSqft.toLocaleString()} sqft
+          </div>
         </div>
-      </div>
-    </Html>
+      </Html>
+    </>
   );
 }
 
@@ -376,7 +493,6 @@ function CompassRing({ radius }: { radius: number }) {
             key={label}
             position={[Math.sin(rad) * radius, 0.4, -Math.cos(rad) * radius]}
             center
-            distanceFactor={120}
           >
             <div className="pointer-events-none select-none text-[13px] font-semibold tracking-widest text-ink-500">
               {label}

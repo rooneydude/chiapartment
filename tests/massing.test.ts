@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { inferBuilding, type InferUnitInput } from "@/lib/massing/infer";
-import { buildingHeightM, floorSlabHeight, physicalFloorIndex } from "@/lib/massing/spec";
+import {
+  buildingHeightM,
+  floorSlabHeight,
+  physicalFloorIndex,
+  segmentFloorCount,
+} from "@/lib/massing/spec";
 import { resolveUnitPlacement } from "@/lib/units/placement";
 import { polygonArea } from "@/lib/geo";
 
@@ -24,8 +29,15 @@ describe("inferBuilding", () => {
   const result = inferBuilding({ slug: "t", name: "Tower", units: towerUnits() });
 
   it("recovers the floor range from the unit labels", () => {
-    expect(result.spec.baseFloor).toBe(4);
+    // baseFloor is the lowest *modelled* floor — floor 1, because floors below
+    // the lowest listing are modelled as podium. The lowest floor carrying
+    // units is 4, which is where the tower segment starts.
+    expect(result.spec.baseFloor).toBe(1);
     expect(result.spec.topFloor).toBe(38);
+    const tower = result.spec.segments.find((s) => s.label === "Tower");
+    expect(tower?.fromFloor).toBe(4);
+    const podium = result.spec.segments.find((s) => s.label === "Podium");
+    expect(podium).toMatchObject({ fromFloor: 1, toFloor: 3 });
   });
 
   it("detects that the building skips 13", () => {
@@ -57,6 +69,55 @@ describe("inferBuilding", () => {
     for (const stack of result.plate.stacks) {
       const area = polygonArea(stack.polygon.map((p) => ({ x: p.x, y: p.y })));
       expect(area).toBeGreaterThan(10);
+    }
+  });
+
+  it("emits segments that tile the building without overlapping", () => {
+    const segs = [...result.spec.segments].sort((a, b) => a.fromFloor - b.fromFloor);
+    for (let i = 0; i < segs.length; i++) {
+      expect(segs[i].toFloor).toBeGreaterThanOrEqual(segs[i].fromFloor);
+      if (i > 0) {
+        // Overlapping segments get counted twice by floorSlabHeight, which
+        // detaches the roof and misplaces every unit above the overlap.
+        expect(segs[i].fromFloor).toBe(segs[i - 1].toFloor + 1);
+      }
+    }
+    expect(segs[0].fromFloor).toBe(1);
+    expect(segs.at(-1)!.toFloor).toBe(result.spec.topFloor);
+  });
+
+  it("stacks segments contiguously with no gap or overlap in height", () => {
+    // Every segment must start exactly where the one below it ended. When the
+    // floor-index origin disagrees with the segment stack's base, this drifts
+    // by the podium's height — which detaches the roof and floats the units.
+    const segs = [...result.spec.segments].sort((a, b) => a.fromFloor - b.fromFloor);
+    let expected = 0;
+    for (const seg of segs) {
+      expect(floorSlabHeight(result.spec, seg.fromFloor)).toBeCloseTo(expected, 6);
+      expected += segmentFloorCount(result.spec, seg) * seg.floorHeight;
+    }
+    // The top of the last segment is where the roof sits.
+    expect(floorSlabHeight(result.spec, result.spec.topFloor + 1)).toBeCloseTo(expected, 6);
+    expect(buildingHeightM(result.spec)).toBeCloseTo(
+      expected + result.spec.roofHeightM,
+      6,
+    );
+  });
+
+  it("places every unit inside the building envelope", () => {
+    const roofBase = floorSlabHeight(result.spec, result.spec.topFloor + 1);
+    for (const stack of result.plate.stacks) {
+      for (const floor of [result.spec.topFloor, 20, Math.max(1, result.spec.baseFloor)]) {
+        const p = resolveUnitPlacement(result.spec, result.plate, {
+          unitCode: `${floor}${stack.line}`,
+          floor,
+          line: stack.line,
+        });
+        if (!p) continue;
+        expect(p.slabHeightM).toBeGreaterThanOrEqual(0);
+        // A unit must sit below the roof, with room for its own storey.
+        expect(p.slabHeightM).toBeLessThanOrEqual(roofBase);
+      }
     }
   });
 

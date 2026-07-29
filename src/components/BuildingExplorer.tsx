@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import type { BuildingSpec } from "@/lib/massing/spec";
 import type { FloorPlate } from "@/lib/floorplan/schema";
+import CompassDial from "./CompassDial";
 import type { SceneUnit } from "./BuildingScene";
 
 // The canvas has no server rendering path, and it is the heaviest thing on the
@@ -250,15 +251,23 @@ function UnitDetail({ unit, topFloor }: { unit: ExplorerUnit; topFloor: number }
         </div>
       </div>
 
-      <dl className="mt-3.5 grid grid-cols-3 gap-2.5">
-        <Stat label="Floor" value={`${p.floor}`} sub={`of ${topFloor}`} />
-        <Stat label="Faces" value={p.facing} sub={p.isCorner ? "corner unit" : "single exposure"} />
-        <Stat
-          label="Size"
-          value={p.areaSqft.toLocaleString()}
-          sub="sqft"
-        />
-      </dl>
+      <div className="mt-3.5 flex items-stretch gap-3">
+        <dl className="grid flex-1 grid-cols-3 gap-2.5">
+          <Stat label="Floor" value={`${p.floor}`} sub={`of ${topFloor}`} />
+          <Stat
+            label="Faces"
+            value={p.facing}
+            sub={p.isCorner ? "corner unit" : "single exposure"}
+          />
+          <Stat label="Size" value={p.areaSqft.toLocaleString()} sub="sqft" />
+        </dl>
+        <div
+          className="grid shrink-0 place-items-center rounded-lg bg-ink-850 px-2"
+          title={p.exposureLabel}
+        >
+          <CompassDial exposures={p.exposures} size={84} />
+        </div>
+      </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-500">
         <span className="tnum">{Math.round(p.slabHeightM)} m above street</span>
