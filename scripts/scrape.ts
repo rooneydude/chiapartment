@@ -95,7 +95,7 @@ async function main() {
       "",
       "Flags:",
       "  --adapter <id>   force an adapter instead of detecting one",
-      "  --dry-run        parse and print, write nothing",
+      "  --dry-run        parse and print, write nothing (works with --add too)",
       "  --no-images      skip downloading floor plan images",
       "  --no-infer       skip re-deriving the 3D massing after the run",
       "  --cache <sec>    reuse cached pages younger than <sec>",
@@ -154,6 +154,14 @@ async function addSource(rawUrl: string) {
     log,
   });
   reportParse(result.units.length, result.plans.length, result.warnings);
+
+  if (args.dryRun) {
+    console.log(
+      `\n${dim("Dry run — nothing written.")}\n` +
+        dim(`  register it for real with:  npm run scrape -- --add ${url}`),
+    );
+    return;
+  }
 
   const db = getDb();
   db.insert(schema.buildings)
