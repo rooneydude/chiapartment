@@ -31,6 +31,26 @@ npm run scrape -- --all                         # ...or every registered source
 every adapter, runs a real test parse, and tells you what it found before
 writing anything.
 
+Refreshing is just re-running the scrape. Nothing is overwritten: new prices
+append to the unit's history, units that vanish from the feed are marked
+leased, and a re-run against unchanged data is a complete no-op.
+
+To add what an agent told you:
+
+```bash
+npm run ingest -- --building the-leo --file tour-email.txt
+pbpaste | npm run ingest -- --building the-leo          # straight from the clipboard
+```
+
+To try the whole thing without touching anyone's website:
+
+```bash
+npm run fixture -- --port 4310 --round 1   # a stand-in leasing site
+npm run scrape  -- --add http://127.0.0.1:4310/
+npm run scrape  -- 127-0-0-1
+# restart the fixture with --round 2 and scrape again to watch the refresh
+```
+
 ---
 
 ## How it works
@@ -105,7 +125,51 @@ track a building.
   reporting multiple exposures (`S + E corner`)
 - **Size** — advertised sqft where published, derived polygon area otherwise
 
-### 4. Price tracking
+### 4. What the rent actually includes
+
+Advertised rent is not comparable across buildings. The Leo quotes rent and
+bills a separate bundled-utility fee that scales with unit type ($50 studio →
+$115 two-bed) plus $65 internet; Old Town Park splits utilities through RUBS
+and adds $375 parking and a $12 liability waiver; Stead 220 quotes an "all in"
+number with utilities already inside it. Comparing the headline numbers
+compares three different things.
+
+So every levy is modelled as a `Charge` and the all-in figure is computed:
+
+```
+$5,050  base rent                 unit 707, The Leo
+   $65  internet (Zentro)
+  $115  bundled utilities, 2 bed   gas, water, sewer, trash, recycling
+------
+$5,230  all-in monthly            + metered electric on your own ComEd account
+  $575  on signing                 $500 admin + $75 application
+```
+
+Two rules keep it honest. A charge with no fixed amount — a RUBS split,
+metered electric — is never treated as zero; it is carried as a variable line
+so an all-in total reads as a floor rather than a promise. And a fee sheet's
+unit-type rows are alternatives, not a list to sum: a "1 Bedroom + Den" pays
+the $105 den tier *instead of* the $90 one-bedroom tier.
+
+### 5. Agent emails
+
+Tour follow-up emails are the highest-quality source in the pipeline, and the
+only one that states a unit's orientation outright — "Southeast facing view",
+"Views Facing South", "View: South-West facing". A scraped listing page never
+says which way a unit looks; the agent always does.
+
+`npm run ingest` reads unit blocks (rent, all-in, size, lease term, move-in
+range, tower designator) and fee schedules out of that prose, then feeds the
+stated facings back into the geometry solver as observations. Compound compass
+directions are matched before their components, and a direction is only
+trusted next to "view"/"facing"/"exposure", so "741 N Wells St" is not read as
+north-facing.
+
+Floor-plan PDFs are worth keeping for the same reason: most carry a key plate
+showing every tier on the plate with a north arrow, which pins the arrangement
+down completely.
+
+### 6. Price tracking
 
 - `price_snapshots` is append-only, one row per unit per material change. A unit
   vanishing from the feed is recorded as `leased` — the disappearance *is* the
@@ -127,7 +191,9 @@ track a building.
 | `npm run scrape -- --all` | Scrape every enabled source |
 | `npm run scrape -- --list` | List registered sources |
 | `npm run infer -- <slug> -v` | Re-derive geometry; `-v` prints each line's facing |
-| `npm run seed:demo` | Load a synthetic building |
+| `npm run ingest -- --building <slug> --file <email>` | Ingest an agent's tour email |
+| `npm run seed:demo` | Load two synthetic buildings |
+| `npm run fixture -- --port 4310 --round 1` | Run a stand-in leasing site |
 | `npm test` | Run the test suite |
 
 Useful scrape flags: `--dry-run` (parse, print, write nothing), `--adapter <id>`
@@ -145,9 +211,10 @@ Run `npm run scrape -- <slug> --dry-run` and read the warnings. The usual causes
    JSON it returns, so an adapter is usually just the URL plus a call to it.
 2. **Unit labels aren't `<floor><line>`.** Placement needs a floor and a line.
    The run reports how many labels it couldn't split.
-3. **The compass exposures look wrong.** Line ordering around the plate is a
-   convention (clockwise from the north-west, ascending line number), not a
-   verified fact. Correcting it per building is the highest-value manual fix.
+3. **The compass exposures look wrong.** Ingest a tour email stating any
+   unit's facing. With no observations the line arrangement is only a
+   convention (clockwise from the north-west, ascending line number); with one
+   or two it is fitted, and the model reports the fit error.
 
 ---
 
@@ -158,10 +225,13 @@ src/lib/scrape/     adapters, robots-aware fetcher, shape recognition
 src/lib/massing/    BuildingSpec schema, geometry solver, persistence
 src/lib/floorplan/  floor plate and unit plan schemas
 src/lib/units/      unit-code parsing, placement solver
+src/lib/pricing/    charge model and the all-in calculation
+src/lib/ingest/     agent-email parsing
 src/lib/db/         Drizzle schema and queries
+src/lib/testing/    the stand-in leasing site
 src/components/     3D viewer, explorer, charts
-scripts/            scrape / infer / seed CLIs
-tests/              63 tests over parsing, geometry and detection
+scripts/            scrape / ingest / infer / seed / fixture CLIs
+tests/              126 tests, including a full scrape-and-refresh run
 ```
 
 Data lives in `data/chiapartment.db` (SQLite, gitignored). Set `CHIAPARTMENT_DB`

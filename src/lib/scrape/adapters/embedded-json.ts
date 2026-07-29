@@ -79,7 +79,7 @@ export const embeddedJsonAdapter: Adapter = {
 };
 
 /** Building name/address from JSON-LD, falling back to the <title>. */
-function readBuildingInfo(html: string, blobs: unknown[]) {
+export function readBuildingInfo(html: string, blobs: unknown[]) {
   for (const blob of blobs) {
     const found = findPostalAddress(blob);
     if (found) return found;

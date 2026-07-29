@@ -6,6 +6,7 @@ import { getDb, schema } from "../db";
 import { parseUnitCode } from "../units/code";
 import { createFetcher, type Fetcher } from "./http";
 import { detectPlatform } from "./fingerprint";
+import { inferForBuilding } from "../massing/persist";
 import { detectAdapter, getAdapter } from "./registry";
 import { planKey as toPlanKey } from "./parse";
 import type { ScrapeContext, ScrapeResult } from "./types";
@@ -22,6 +23,12 @@ export interface RunOptions {
   dryRun?: boolean;
   /** Skip downloading floor plan images. */
   skipImages?: boolean;
+  /**
+   * Re-derive the building's geometry once the listings are in. On by default:
+   * every scrape adds lines and floors, so the massing is only correct if it
+   * is refreshed alongside the data it is derived from.
+   */
+  inferGeometry?: boolean;
   log?: (msg: string) => void;
 }
 
@@ -38,6 +45,8 @@ export interface RunSummary {
   warnings: string[];
   /** Units whose label could not be split into floor + line. */
   unparsedUnitCodes: string[];
+  /** Notes from the geometry solver, when it ran. */
+  geometryNotes: string[];
 }
 
 /**
@@ -245,6 +254,37 @@ async function persist(
       .run();
   }
 
+  // Availability tables routinely name a plan the site has no separate entry
+  // for — every plan without a marketing image, in practice. Those still need
+  // a record, both to satisfy the unit → floorplan reference and because the
+  // massing solver reads plan square footage.
+  const existingPlanIds = new Set(
+    db
+      .select({ id: schema.floorplans.id })
+      .from(schema.floorplans)
+      .where(eq(schema.floorplans.buildingSlug, source.buildingSlug))
+      .all()
+      .map((r) => r.id),
+  );
+
+  for (const u of result.units) {
+    if (!u.planKey) continue;
+    const id = `${source.buildingSlug}:${toPlanKey(u.planKey)}`;
+    if (existingPlanIds.has(id)) continue;
+    db.insert(schema.floorplans)
+      .values({
+        id,
+        buildingSlug: source.buildingSlug,
+        name: u.planKey,
+        bedrooms: u.bedrooms ?? null,
+        bathrooms: u.bathrooms ?? null,
+        sqft: u.sqft ?? null,
+      })
+      .onConflictDoNothing()
+      .run();
+    existingPlanIds.add(id);
+  }
+
   // --- units --------------------------------------------------------------
   // The building's line vocabulary sharpens unit-code parsing, so collect the
   // candidate lines from a first pass before committing to a split.
@@ -352,6 +392,24 @@ async function persist(
   const typeRows = rollUpByType(source.buildingSlug, opts.runId);
   opts.log(`wrote ${typeRows} unit-type snapshot(s)`);
 
+  // --- geometry -----------------------------------------------------------
+  // Derived here rather than in the CLI so every caller — command line,
+  // scheduled run, API route — ends up with geometry consistent with the
+  // listings that were just written.
+  let geometryNotes: string[] = [];
+  if (opts.inferGeometry !== false && result.units.length > 0) {
+    try {
+      const inferred = inferForBuilding(source.buildingSlug);
+      geometryNotes = inferred.notes;
+      opts.log(
+        `massing derived: ${inferred.spec.topFloor} floors, ` +
+          `${inferred.plate.stacks.length} lines (${inferred.confidence})`,
+      );
+    } catch (err) {
+      warnings.push(`Geometry not derived: ${(err as Error).message}`);
+    }
+  }
+
   if (unparsed.length) {
     warnings.push(
       `${unparsed.length} unit label(s) carried no floor/line information and cannot be placed in 3D: ` +
@@ -372,6 +430,7 @@ async function persist(
     imagesDownloaded,
     warnings,
     unparsedUnitCodes: unparsed,
+    geometryNotes,
   };
 }
 
@@ -568,5 +627,6 @@ function emptySummary(
     imagesDownloaded: 0,
     warnings: result.warnings,
     unparsedUnitCodes: unparsed,
+    geometryNotes: [],
   };
 }

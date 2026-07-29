@@ -188,7 +188,10 @@ function parseTable(
           unit.leaseTermMonths = parseLeaseTerm(text);
           break;
         case "plan":
-          if (text) unit.planKey = toPlanKey(text);
+          // Keep the label verbatim; the runner slugifies it and uses the
+          // original text to name a plan record when the site publishes no
+          // separate floor-plan entry for it.
+          if (text) unit.planKey = text;
           break;
       }
     });

@@ -6,6 +6,10 @@
  * per-field parsing lives here, is adapter-agnostic, and is unit tested.
  */
 
+const WORD_NUMBERS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5,
+};
+
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
@@ -77,6 +81,9 @@ export function parseBedrooms(input: unknown): number | undefined {
   if (/\bstudio\b|\bconvertible\b|\befficiency\b|^s$|\bs0\b/.test(s)) return 0;
   const m = s.match(/(\d+(?:\.\d+)?)\s*(?:bed|bd|br\b|bedroom)/) ?? s.match(/^(\d)\s*b$/);
   if (m) return Number(m[1]);
+  // Agents and plan names spell the count out: "Two Bedroom", "One Bed + Den".
+  const word = s.match(/\b(one|two|three|four|five)\s*[-\s]?\s*bed(?:room)?/);
+  if (word) return WORD_NUMBERS[word[1]];
   // A cell that is *only* a small number came from a column already known to
   // be the bed count — table parsing relies on this.
   const bare = s.match(/^\s*(\d(?:\.5)?)\s*$/);

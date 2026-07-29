@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "scrape": "tsx scripts/scrape.ts",
     "infer": "tsx scripts/infer.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "fixture": "tsx scripts/fixture-server.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

@@ -28,8 +28,10 @@ export function computeCost(
   options: Partial<CostOptions> = {},
 ): CostBreakdown {
   const opts = CostOptionsSchema.parse(options);
-  const applicable = input.charges.filter((c) =>
-    appliesTo(c, input.bedrooms, input.planName ?? null),
+  const applicable = selectApplicable(
+    input.charges,
+    input.bedrooms,
+    input.planName ?? null,
   );
 
   const required: CostLine[] = [];
@@ -114,6 +116,45 @@ export function computeCost(
     includes: [...includes],
     excluded: [...excluded],
   };
+}
+
+/**
+ * Pick the charges that apply, resolving fee *tiers* to a single winner.
+ *
+ * A fee sheet's unit-type rows are alternatives, not a list to sum: a
+ * "1 Bedroom + Den" pays the $105 den tier *instead of* the $90 one-bedroom
+ * tier, not as well as it. So within each kind, scoped charges compete and the
+ * most specific match wins, while unscoped charges (internet, parking) always
+ * apply.
+ */
+function selectApplicable(
+  charges: Charge[],
+  bedrooms: number | null,
+  planName: string | null,
+): Charge[] {
+  const out: Charge[] = [];
+  const byKind = new Map<string, Charge[]>();
+
+  for (const c of charges) {
+    const unscoped = c.appliesToBedrooms == null && c.appliesToPlanName == null;
+    if (unscoped) {
+      out.push(c);
+      continue;
+    }
+    const arr = byKind.get(c.kind) ?? [];
+    arr.push(c);
+    byKind.set(c.kind, arr);
+  }
+
+  for (const tiers of byKind.values()) {
+    const matching = tiers.filter((c) => appliesTo(c, bedrooms, planName));
+    if (matching.length === 0) continue;
+    // A plan-name match is more specific than a bedroom-count match.
+    const byPlan = matching.filter((c) => c.appliesToPlanName != null);
+    out.push(...(byPlan.length > 0 ? byPlan : matching));
+  }
+
+  return out;
 }
 
 /**

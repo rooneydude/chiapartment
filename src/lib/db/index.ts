@@ -146,5 +146,42 @@ function migrate(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS type_snapshots_building_idx
       ON type_snapshots(building_slug, bedrooms, observed_at);
     CREATE INDEX IF NOT EXISTS type_snapshots_time_idx ON type_snapshots(observed_at);
+
+    CREATE TABLE IF NOT EXISTS charges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      building_slug TEXT NOT NULL REFERENCES buildings(slug) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      label TEXT NOT NULL,
+      amount REAL,
+      cadence TEXT NOT NULL DEFAULT 'monthly',
+      requirement TEXT NOT NULL DEFAULT 'required',
+      applies_to_bedrooms REAL,
+      applies_to_plan_name TEXT,
+      includes TEXT,
+      note TEXT,
+      source_kind TEXT NOT NULL DEFAULT 'manual',
+      source_ref TEXT,
+      observed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS charges_building_idx ON charges(building_slug);
+    CREATE UNIQUE INDEX IF NOT EXISTS charges_unique
+      ON charges(building_slug, kind, label,
+                 COALESCE(applies_to_bedrooms, -1),
+                 COALESCE(applies_to_plan_name, ''));
+
+    CREATE TABLE IF NOT EXISTS facing_observations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      building_slug TEXT NOT NULL REFERENCES buildings(slug) ON DELETE CASCADE,
+      line TEXT NOT NULL,
+      unit_code TEXT,
+      bearing_deg REAL NOT NULL,
+      weight REAL NOT NULL DEFAULT 1,
+      statement TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      observed_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS facing_obs_unique
+      ON facing_observations(building_slug, line, source);
+    CREATE INDEX IF NOT EXISTS facing_obs_building_idx ON facing_observations(building_slug);
   `);
 }

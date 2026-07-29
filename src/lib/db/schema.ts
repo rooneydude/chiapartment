@@ -219,7 +219,69 @@ export const typeSnapshots = sqliteTable(
   ],
 );
 
+/**
+ * Everything a building can charge on top of rent. Populated from fee sheets
+ * and tour emails; the all-in monthly figure is computed from these rather
+ * than scraped, because no two buildings quote the same thing.
+ */
+export const charges = sqliteTable(
+  "charges",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    buildingSlug: text("building_slug")
+      .notNull()
+      .references(() => buildings.slug, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    label: text("label").notNull(),
+    /** Null when the charge is real but not a fixed amount (RUBS, metered). */
+    amount: real("amount"),
+    cadence: text("cadence").notNull().default("monthly"),
+    requirement: text("requirement").notNull().default("required"),
+    appliesToBedrooms: real("applies_to_bedrooms"),
+    appliesToPlanName: text("applies_to_plan_name"),
+    /** JSON array of what the charge covers. */
+    includes: text("includes"),
+    note: text("note"),
+    sourceKind: text("source_kind").notNull().default("manual"),
+    sourceRef: text("source_ref"),
+    observedAt: text("observed_at"),
+  },
+  (t) => [index("charges_building_idx").on(t.buildingSlug)],
+);
+
+/**
+ * A unit orientation stated by someone who knows — a leasing agent's
+ * "Southeast facing view", or a key plate on a floor-plan PDF. These are what
+ * turn the floor plate's line arrangement from a convention into a fit.
+ */
+export const facingObservations = sqliteTable(
+  "facing_observations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    buildingSlug: text("building_slug")
+      .notNull()
+      .references(() => buildings.slug, { onDelete: "cascade" }),
+    /** Unit line the observation pins down. */
+    line: text("line").notNull(),
+    /** Unit the statement was actually about, for traceability. */
+    unitCode: text("unit_code"),
+    bearingDeg: real("bearing_deg").notNull(),
+    /** Confidence: a key plate outranks a remembered conversation. */
+    weight: real("weight").notNull().default(1),
+    /** The words used, verbatim. */
+    statement: text("statement"),
+    source: text("source").notNull().default("manual"),
+    observedAt: integer("observed_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("facing_obs_unique").on(t.buildingSlug, t.line, t.source),
+    index("facing_obs_building_idx").on(t.buildingSlug),
+  ],
+);
+
 export type Building = typeof buildings.$inferSelect;
+export type ChargeRow = typeof charges.$inferSelect;
+export type FacingObservationRow = typeof facingObservations.$inferSelect;
 export type TypeSnapshot = typeof typeSnapshots.$inferSelect;
 export type NewBuilding = typeof buildings.$inferInsert;
 export type Source = typeof sources.$inferSelect;

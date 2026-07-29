@@ -1,3 +1,4 @@
+import { angleDeltaDeg, normalizeDeg } from "../geo";
 import type { BuildingSpec, MassingSegment } from "./spec";
 import { BuildingSpecSchema } from "./spec";
 import type { FloorPlate, Point, Stack, UnitPlan } from "../floorplan/schema";
@@ -76,6 +77,11 @@ export interface InferInput {
   aspectRatio?: number;
   units: InferUnitInput[];
   plans?: InferPlanInput[];
+  /**
+   * Stated orientations, from tour emails or floor-plan key plates. Even one
+   * turns the line arrangement from a convention into a fitted result.
+   */
+  facingObservations?: FacingObservation[];
 }
 
 export interface InferResult {
@@ -179,29 +185,55 @@ export function inferBuilding(input: InferInput): InferResult {
   const core = coreRectangle(width, depth, unitDepth);
 
   // --- allocate lines around the perimeter --------------------------------
-  const stacks: Stack[] = [];
   const orderedLines = [...lineStats].sort(compareLines);
-  notes.push(
-    "Lines are placed clockwise from the north-west corner in ascending line " +
-      "order — the standard convention, but not verified for this building. " +
-      "Override with `lineOrder` in the building's spec if the facings look wrong.",
-  );
 
   // Reserve the lift lobby's share of the perimeter, then divide the rest
   // between the lines in proportion to their floor area.
   const usablePerimeter = perimeter * (1 - CORE_FRONTAGE_FRACTION);
-  let t = perimeter * CORE_FRONTAGE_FRACTION;
-  for (const line of orderedLines) {
-    const frontage = usablePerimeter * ((line.sqft / SQFT_PER_SQM) / netAreaSqm);
-    const polygon = perimeterSlab(width, depth, t, t + frontage, unitDepth);
-    t += frontage;
-    stacks.push({
+  const startT = perimeter * CORE_FRONTAGE_FRACTION;
+  const frontages = orderedLines.map(
+    (l) => usablePerimeter * ((l.sqft / SQFT_PER_SQM) / netAreaSqm),
+  );
+
+  const arrangement = fitArrangement({
+    lines: orderedLines,
+    frontages,
+    width,
+    depth,
+    startT,
+    observations: input.facingObservations ?? [],
+  });
+
+  if (arrangement.matched > 0) {
+    notes.push(
+      `Line positions fitted to ${arrangement.matched} stated facing(s) — ` +
+        `${arrangement.direction === 1 ? "clockwise" : "counter-clockwise"} from line ` +
+        `${orderedLines[arrangement.startIndex].line}, mean error ` +
+        `${arrangement.score.toFixed(0)}°.`,
+    );
+    if (arrangement.score > 45) {
+      notes.push(
+        "That fit is poor — the plate is probably not a simple rectangle, or " +
+          "the building has more lines than have been listed so far.",
+      );
+    }
+  } else {
+    notes.push(
+      "Lines are placed clockwise from the north-west corner in ascending line " +
+        "order — the standard convention, but unverified for this building. " +
+        "Ingest a tour email stating any unit's facing to pin this down.",
+    );
+  }
+
+  const stacks: Stack[] = orderedLines.map((line) => {
+    const [t0, t1] = arrangement.arcs.get(line.line)!;
+    return {
       line: line.line,
-      polygon,
+      polygon: perimeterSlab(width, depth, t0, t1, unitDepth),
       planId: line.planKey ?? `line-${line.line}`,
       floors: line.floorRange,
-    });
-  }
+    };
+  });
 
   // --- vertical segmentation ---------------------------------------------
   const segments = inferSegments(placeable, lineStats, baseFloor, topFloor, notes);
@@ -439,6 +471,151 @@ function perimeterPolyline(
   }
   pts.push(perimeterPoint(width, depth, t1));
   return pts;
+}
+
+// ---------------------------------------------------------------------------
+// Fitting line positions to stated facings
+// ---------------------------------------------------------------------------
+
+/**
+ * A unit's orientation as stated by someone who knows — a leasing agent's
+ * "Southeast facing view", or a key plate on a floor plan PDF.
+ */
+export interface FacingObservation {
+  line: string;
+  /** Compass bearing, degrees from north. */
+  bearingDeg: number;
+  /** Relative confidence. A key plate outranks a remembered conversation. */
+  weight?: number;
+  source?: string;
+}
+
+interface Arrangement {
+  startIndex: number;
+  direction: 1 | -1;
+  /** Perimeter arc [t0, t1] for each line. */
+  arcs: Map<string, [number, number]>;
+  /** Mean absolute angular error against the observations, degrees. */
+  score: number;
+  matched: number;
+}
+
+/**
+ * Choose where each line sits on the plate.
+ *
+ * Without evidence this is pure convention — ascending line numbers running
+ * clockwise from the north-west corner — and that convention is wrong often
+ * enough to matter, because it decides every unit's compass exposure.
+ *
+ * Given even one or two stated facings the arrangement stops being a guess:
+ * the number of consistent layouts is small (which line sits at the anchor,
+ * times which way round the plate the numbering runs), so all of them are
+ * enumerated and scored against what was actually observed.
+ */
+function fitArrangement(args: {
+  lines: LineStat[];
+  frontages: number[];
+  width: number;
+  depth: number;
+  startT: number;
+  observations: FacingObservation[];
+}): Arrangement {
+  const { lines, frontages, width, depth, startT, observations } = args;
+  const n = lines.length;
+
+  const known = new Map<string, FacingObservation>();
+  for (const o of observations) {
+    const key = o.line.trim().toUpperCase();
+    if (lines.some((l) => l.line.toUpperCase() === key)) known.set(key, o);
+  }
+
+  let best: Arrangement | null = null;
+
+  for (const direction of [1, -1] as const) {
+    for (let startIndex = 0; startIndex < n; startIndex++) {
+      const arcs = layOut(lines, frontages, startIndex, direction, startT);
+
+      let error = 0;
+      let weight = 0;
+      let matched = 0;
+      for (const [line, [t0, t1]] of arcs) {
+        const obs = known.get(line.toUpperCase());
+        if (!obs) continue;
+        const predicted = arcFacing(width, depth, t0, t1);
+        const w = obs.weight ?? 1;
+        error += Math.abs(angleDeltaDeg(predicted, obs.bearingDeg)) * w;
+        weight += w;
+        matched++;
+      }
+
+      const score = weight > 0 ? error / weight : Number.POSITIVE_INFINITY;
+      // With no observations every candidate ties, so the first one wins —
+      // which is the conventional clockwise-from-north-west layout.
+      if (!best || score < best.score) {
+        best = { startIndex, direction, arcs, score, matched };
+      }
+    }
+  }
+
+  return best!;
+}
+
+/** Walk the lines around the perimeter from a given anchor and direction. */
+function layOut(
+  lines: LineStat[],
+  frontages: number[],
+  startIndex: number,
+  direction: 1 | -1,
+  startT: number,
+): Map<string, [number, number]> {
+  const n = lines.length;
+  const out = new Map<string, [number, number]>();
+  let t = startT;
+  for (let k = 0; k < n; k++) {
+    const i = (((startIndex + direction * k) % n) + n) % n;
+    out.set(lines[i].line, [t, t + frontages[i]]);
+    t += frontages[i];
+  }
+  return out;
+}
+
+/**
+ * Outward bearing of the wall an arc covers, as a length-weighted circular
+ * mean. A unit wrapping a corner correctly comes out diagonal rather than
+ * snapping to whichever edge happens to hold its midpoint.
+ */
+export function arcFacing(
+  width: number,
+  depth: number,
+  t0: number,
+  t1: number,
+): number {
+  const P = 2 * (width + depth);
+  // Edge spans in the clockwise-from-north-west parameterisation, and the
+  // outward compass bearing of each.
+  const edges: Array<[number, number, number]> = [
+    [0, width, 0], // north
+    [width, width + depth, 90], // east
+    [width + depth, 2 * width + depth, 180], // south
+    [2 * width + depth, P, 270], // west
+  ];
+
+  let sx = 0;
+  let sy = 0;
+  // Sweep one period either side so an arc that wraps the origin is covered.
+  for (let period = -1; period <= 1; period++) {
+    for (const [a, b, bearing] of edges) {
+      const lo = Math.max(t0, a + period * P);
+      const hi = Math.min(t1, b + period * P);
+      const len = hi - lo;
+      if (len <= 0) continue;
+      const r = (bearing * Math.PI) / 180;
+      sx += Math.sin(r) * len;
+      sy += Math.cos(r) * len;
+    }
+  }
+  if (sx === 0 && sy === 0) return 0;
+  return normalizeDeg((Math.atan2(sx, sy) * 180) / Math.PI);
 }
 
 /**

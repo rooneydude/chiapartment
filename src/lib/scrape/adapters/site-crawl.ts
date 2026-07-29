@@ -3,6 +3,7 @@ import { extractJsonBlobs } from "../json-blobs";
 import { absoluteUrl, clean, planKey as toPlanKey } from "../parse";
 import { harvestPlans, harvestUnits } from "../shape";
 import { extractPlansFromDom, extractUnitsFromDom } from "./dom-heuristic";
+import { readBuildingInfo } from "./embedded-json";
 import type { Adapter, ScrapeResult, ScrapedPlan, ScrapedUnit } from "../types";
 
 /**
@@ -111,9 +112,9 @@ export const siteCrawlAdapter: Adapter = {
     return {
       adapter: this.id,
       platform: this.platform,
-      building: {
-        name: clean(ctx.$("title").first().text()).split(/\s*[|–—-]\s*/)[0] || undefined,
-      },
+      // Address and coordinates usually live in JSON-LD on the entry page,
+      // and the coordinates are what place the building on the map.
+      building: readBuildingInfo(ctx.html, extractJsonBlobs(ctx.html)),
       units: [...units.values()],
       plans: [...plans.values()],
       warnings,

@@ -109,7 +109,13 @@ const FIELD_PATTERNS: Array<{
   { key: "sqft", re: /\bsize\s*:?\s*([^\n]+)/i, parse: parseSqft },
   { key: "sqft", re: /\b([\d,]{3,5})\s*(?:sq\.?\s*ft|sf)\b/i, parse: parseSqft },
   { key: "leaseMonths", re: /\blease\s*length\s*:?\s*([^\n]+)/i, parse: parseLeaseTerm },
-  { key: "bedrooms", re: /\b(studio|convertible|[\d.]+\s*bed[^\n]*)/i, parse: parseBedrooms },
+  {
+    key: "bedrooms",
+    // Plan headings spell the count out ("Two Bedroom"), so word forms have to
+    // be admitted here as well as in parseBedrooms.
+    re: /\b(studio|convertible|(?:one|two|three|four|five|[\d.]+)\s*[-\s]?\s*bed[^\n]*)/i,
+    parse: parseBedrooms,
+  },
 ];
 
 /**
@@ -131,7 +137,9 @@ export function parseAgentEmail(
   for (let i = 0; i < anchors.length; i++) {
     const start = anchors[i].index;
     const end = i + 1 < anchors.length ? anchors[i + 1].index : text.length;
-    const block = text.slice(start, end);
+    // A heading above the anchor belongs to it — "The Leo | Two Bedroom |
+    // Tier 07" sits on the line before "Unit: 707" and carries the bed count.
+    const block = withHeading(text, start, i > 0 ? anchors[i - 1].index : 0) + text.slice(start, end);
 
     const fact: UnitFact = { unitCode: anchors[i].unit };
     if (anchors[i].wing) fact.wing = anchors[i].wing;
@@ -184,6 +192,23 @@ export function parseAgentEmail(
   for (const line of extractPolicyNotes(text)) notes.push(line);
 
   return { buildingHint, units: dedupe(units), charges, notes, warnings };
+}
+
+/**
+ * The line immediately above a unit anchor, when it looks like a plan heading
+ * rather than another unit's detail. Bounded by the previous anchor so one
+ * unit can never absorb the tail of the one before it.
+ */
+function withHeading(text: string, start: number, floor: number): string {
+  const before = text.slice(floor, start);
+  const lines = before.split("\n").filter((l) => l.trim() !== "");
+  const candidate = lines.at(-1);
+  if (!candidate) return "";
+  // Must name a unit type, and must not itself be a unit record.
+  if (!/studio|bed|convertible|\bden\b/i.test(candidate)) return "";
+  if (/\bunit\s*#?\s*:?\s*\d{3,5}/i.test(candidate)) return "";
+  if (/\$\s*[\d,]{3,}/.test(candidate)) return "";
+  return candidate + "\n";
 }
 
 interface Anchor {

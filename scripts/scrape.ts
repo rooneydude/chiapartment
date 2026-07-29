@@ -15,7 +15,17 @@ import { checkRobots, createFetcher, RobotsDisallowedError } from "../src/lib/sc
 import { detectPlatform, PLATFORMS } from "../src/lib/scrape/fingerprint";
 import { detectAdapter } from "../src/lib/scrape/registry";
 import { fetchAndParse, runSource } from "../src/lib/scrape/runner";
-import { inferForBuilding } from "../src/lib/massing/persist";
+
+// Colour helpers are declared before the top-level main() call: they are
+// consts, so using them from main() while still in the temporal dead zone
+// throws before any output is produced.
+const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
+const wrap = (code: string) => (s: string) => useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
+const bold = wrap("1");
+const dim = wrap("2");
+const red = wrap("31");
+const green = wrap("32");
+const yellow = wrap("33");
 
 interface Args {
   add?: string;
@@ -222,6 +232,7 @@ async function runOne(slug: string) {
     cacheMaxAgeSec: args.cacheSec,
     dryRun: args.dryRun,
     skipImages: args.skipImages,
+    inferGeometry: !args.noInfer,
     log,
   });
 
@@ -233,18 +244,7 @@ async function runOne(slug: string) {
     );
   }
 
-  if (!args.dryRun && !args.noInfer && summary.unitsFound > 0) {
-    try {
-      const inferred = inferForBuilding(source.buildingSlug);
-      console.log(
-        `  ${green("✔")} massing derived: ${inferred.spec.topFloor} floors, ` +
-          `${inferred.plate.stacks.length} lines ${dim(`(${inferred.confidence})`)}`,
-      );
-      for (const note of inferred.notes) console.log(dim(`     · ${note}`));
-    } catch (err) {
-      console.log(`  ${yellow("!")} massing not derived: ${(err as Error).message}`);
-    }
-  }
+  for (const note of summary.geometryNotes) console.log(dim(`     · ${note}`));
 }
 
 function reportParse(units: number, plans: number, warnings: string[]) {
@@ -284,10 +284,3 @@ function slugFromUrl(url: string): string {
   return host.replace(/\.(com|net|org|co|io|us)$/i, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 }
 
-const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
-const wrap = (code: string) => (s: string) => useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
-const bold = wrap("1");
-const dim = wrap("2");
-const red = wrap("31");
-const green = wrap("32");
-const yellow = wrap("33");

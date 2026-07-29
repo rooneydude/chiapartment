@@ -175,6 +175,21 @@ describe("The Leo tour email", () => {
     expect(u707.availableThrough).toBe("2026-09-03");
   });
 
+  it("takes the bed count from the heading above the unit", () => {
+    // "The Leo | Two Bedroom | Tier 07" sits on the line before "Unit: 707",
+    // and it is the only place the bed count appears. Without it the unit gets
+    // charged the wrong bundled-utility tier.
+    expect(result.units.find((u) => u.unitCode === "707")?.bedrooms).toBe(2);
+    expect(result.units.find((u) => u.unitCode === "1709")?.bedrooms).toBe(0);
+  });
+
+  it("does not let a unit absorb the previous unit's heading", () => {
+    const u1310 = result.units.find((u) => u.unitCode === "1310")!;
+    // 1310 is the one-bed-plus-den, not the two-bed above it.
+    expect(u1310.bedrooms).toBe(1);
+    expect(u1310.rent).toBe(4225);
+  });
+
   it("does not mistake a street name for an orientation", () => {
     // "741 N WELLS ST" must not read as north-facing.
     const stray = parseAgentEmail(
@@ -311,6 +326,30 @@ describe("computeCost", () => {
   it("describes what the rent covers", () => {
     const c = computeCost({ rent: 5050, bedrooms: 2, charges: leoCharges });
     expect(describeInclusions(c)).toMatch(/gas|water|internet/i);
+  });
+
+  it("charges the den tier only when the plan name says den", () => {
+    const plain = computeCost({
+      rent: 4225,
+      bedrooms: 1,
+      charges: leoCharges,
+    });
+    const den = computeCost({
+      rent: 4225,
+      bedrooms: 1,
+      planName: "1 Bedroom + Den",
+      charges: leoCharges,
+    });
+    // Plain one-bed pays $90; the den tier pays $105.
+    expect(den.allInMonthly! - plain.allInMonthly!).toBe(15);
+  });
+
+  it("reproduces The Leo's real all-in for unit 707", () => {
+    // $5,050 rent + $115 two-bed utilities + $65 internet.
+    const c = computeCost({ rent: 5050, bedrooms: 2, charges: leoCharges });
+    expect(c.allInMonthly).toBe(5230);
+    // $500 admin + $75 application for one occupant.
+    expect(c.oneTimeTotal).toBe(575);
   });
 
   it("reconciles with the all-in figure Stead quoted", () => {

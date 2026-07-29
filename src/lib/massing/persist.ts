@@ -35,6 +35,13 @@ export function inferForBuilding(buildingSlug: string): InferResult {
     .where(eq(schema.floorplans.buildingSlug, buildingSlug))
     .all();
 
+  // Stated facings turn the line arrangement from a convention into a fit.
+  const observations = db
+    .select()
+    .from(schema.facingObservations)
+    .where(eq(schema.facingObservations.buildingSlug, buildingSlug))
+    .all();
+
   const result = inferBuilding({
     slug: buildingSlug,
     name: building.name,
@@ -48,6 +55,12 @@ export function inferForBuilding(buildingSlug: string): InferResult {
       sqft: u.sqft,
       bedrooms: u.bedrooms,
       planKey: u.floorplanId?.split(":").slice(1).join(":") ?? null,
+    })),
+    facingObservations: observations.map((o) => ({
+      line: o.line,
+      bearingDeg: o.bearingDeg,
+      weight: o.weight,
+      source: o.source,
     })),
     plans: plans.map((p) => ({
       key: p.id.split(":").slice(1).join(":"),
