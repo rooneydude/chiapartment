@@ -52,7 +52,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await site?.close();
-  rmSync(tempDir, { recursive: true, force: true });
+  // Windows refuses to delete a file SQLite still holds open, so close the
+  // connection before removing the temp directory.
+  db?.closeDb();
+  rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe("adapter selection", () => {

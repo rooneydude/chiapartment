@@ -330,6 +330,9 @@ function impliedUtilityCharge(units: UnitFact[]): Charge | null {
 }
 
 function readStdin(): string {
+  // Reading fd 0 blocks forever on a Windows console when nothing is piped in.
+  // Only read when stdin is actually a pipe, so the usage error can surface.
+  if (process.stdin.isTTY) return "";
   try {
     return readFileSync(0, "utf8");
   } catch {

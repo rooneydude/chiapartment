@@ -4,20 +4,21 @@
  *
  *   npm run doctor
  *
- * Setup fails in a handful of predictable ways — the wrong Node version, a
- * native module that never compiled, a port already in use — and each of them
- * surfaces as something unhelpful like "localhost refused to connect". This
- * checks each one directly and says which it is.
+ * Setup fails in a handful of predictable ways, and each surfaces as something
+ * unhelpful — "localhost refused to connect", or on Windows a console that
+ * simply goes quiet. This checks each one directly and says which it is.
+ *
+ * The important case is `better-sqlite3`. Its prebuilt binaries target
+ * Node-API 10, which exists only in Node >=22.14 and >=23.6. On anything older
+ * `require()` *succeeds* and the process is then killed by a segmentation
+ * fault the moment a database is opened — an uncatchable signal, not a
+ * throwable error. So the addon is probed in a child process: a crash there is
+ * an exit code to report rather than the end of this one.
  */
-import { execSync } from "node:child_process";
-import { createRequire } from "node:module";
+import { execSync, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-
-// The project is ESM, so `require` does not exist. better-sqlite3 is a
-// CommonJS native module and has to be loaded through a created require.
-const require = createRequire(import.meta.url);
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const wrap = (code: string) => (s: string) =>
@@ -43,25 +44,38 @@ interface Result {
   fatal?: boolean;
 }
 
-const MIN_NODE_MAJOR = 22;
+/**
+ * Node-API version the shipped better-sqlite3 binaries were built against.
+ * `process.versions.napi` reports what the running Node supports.
+ */
+const REQUIRED_NAPI = 10;
+const NODE_ADVICE =
+  "Install Node 22.14 or newer from https://nodejs.org (the current LTS is\n" +
+  "    fine), then close and reopen your terminal and check:  node --version";
+
 const DEFAULT_PORT = 3000;
 
 const checks: Check[] = [
   {
     name: "Node version",
     run() {
-      const major = Number(process.versions.node.split(".")[0]);
-      if (major >= MIN_NODE_MAJOR) {
-        return { ok: true, detail: `v${process.versions.node}` };
+      const napi = Number(process.versions.napi ?? 0);
+      const version = process.versions.node;
+
+      if (napi >= REQUIRED_NAPI) {
+        return { ok: true, detail: `v${version}` };
       }
       return {
         ok: false,
         fatal: true,
-        detail: `v${process.versions.node} — too old`,
+        detail: `v${version} — too old (Node-API ${napi}, need ${REQUIRED_NAPI})`,
         fix:
-          `better-sqlite3 requires Node ${MIN_NODE_MAJOR} or newer.\n` +
-          `    Install the current LTS from https://nodejs.org, then close and\n` +
-          `    reopen your terminal and run:  node --version`,
+          "This Node is too old for the SQLite driver, and the failure is a\n" +
+          "    silent crash rather than an error message — which is why this\n" +
+          "    check exists.\n\n" +
+          `    ${NODE_ADVICE}\n\n` +
+          "    Note that Node 22.0 through 22.13 are affected, including some\n" +
+          "    installers labelled 22 LTS. You need 22.14 or newer specifically.",
       };
     },
   },
@@ -92,37 +106,69 @@ const checks: Check[] = [
     },
   },
   {
-    name: "SQLite native module",
+    name: "SQLite driver",
     run() {
-      // This is the one that fails on Windows: better-sqlite3 ships compiled
-      // binaries per Node version, and without a matching one npm falls back
-      // to building from source, which needs Visual Studio Build Tools.
-      try {
-        const Database = require("better-sqlite3");
-        const db = new Database(":memory:");
-        db.exec("CREATE TABLE t (x INTEGER)");
-        db.close();
-        return { ok: true, detail: "loads and runs" };
-      } catch (err) {
-        const message = (err as Error).message;
-        const notBuilt =
-          /was compiled against a different Node|Could not locate the bindings|MODULE_NOT_FOUND|invalid ELF|not a valid Win32/i.test(
-            message,
-          );
+      // Deliberately out-of-process: a Node-API mismatch kills the runtime with
+      // a signal, which no try/catch can intercept. In a child it is just an
+      // exit status.
+      const probe = spawnSync(
+        process.execPath,
+        [
+          "-e",
+          "const D = require('better-sqlite3');" +
+            "const d = new D(':memory:');" +
+            "d.exec('CREATE TABLE t (x INTEGER)');" +
+            "d.prepare('INSERT INTO t VALUES (1)').run();" +
+            "d.close();",
+        ],
+        { cwd: process.cwd(), encoding: "utf8", timeout: 60_000 },
+      );
+
+      if (probe.status === 0) return { ok: true, detail: "loads and runs" };
+
+      // POSIX reports the signal; Windows reports 0xC0000005 as a status.
+      const crashed =
+        probe.signal === "SIGSEGV" ||
+        probe.signal === "SIGABRT" ||
+        probe.status === 3221225477 ||
+        probe.status === 139;
+
+      if (crashed) {
         return {
           ok: false,
           fatal: true,
-          detail: notBuilt ? "installed but not built for this Node" : message.split("\n")[0],
+          detail: "crashes on load — Node is too old for this binary",
           fix:
-            "Rebuild it against your Node version:\n" +
-            "      npm rebuild better-sqlite3\n" +
-            "    If that fails on Windows, the compiler is missing. Either:\n" +
-            "      - install Node 22 LTS (which has a prebuilt binary), or\n" +
-            "      - install the C++ build tools:\n" +
-            "          winget install Microsoft.VisualStudio.2022.BuildTools\n" +
-            "        then:  npm install --build-from-source better-sqlite3",
+            "The SQLite driver's prebuilt binary needs Node-API " +
+            `${REQUIRED_NAPI}, which requires Node 22.14 or newer.\n` +
+            `    You are on v${process.versions.node} (Node-API ${process.versions.napi}).\n\n` +
+            `    ${NODE_ADVICE}`,
         };
       }
+
+      if (process.platform === "win32" && process.arch === "ia32") {
+        return {
+          ok: false,
+          fatal: true,
+          detail: "no binary for 32-bit Windows",
+          fix:
+            "There is no prebuilt SQLite binary for 32-bit Node.\n" +
+            "    Install the 64-bit (x64 or arm64) Node 22 LTS build from\n" +
+            "    https://nodejs.org and run  npm install  again.",
+        };
+      }
+
+      const message = (probe.stderr || probe.error?.message || "").trim();
+      return {
+        ok: false,
+        fatal: true,
+        detail: message.split("\n")[0] || `exited ${probe.status}`,
+        fix:
+          "The SQLite driver did not load. Reinstall it:\n" +
+          "      npm install --force better-sqlite3\n" +
+          "    If that does not help, install Node 22.14 or newer from\n" +
+          "    https://nodejs.org and run  npm install  again.",
+      };
     },
   },
   {
@@ -131,68 +177,101 @@ const checks: Check[] = [
       const dbPath = process.env.CHIAPARTMENT_DB ?? resolve("data/chiapartment.db");
       try {
         mkdirSync(dirname(dbPath), { recursive: true });
-        const Database = require("better-sqlite3");
-        const db = new Database(dbPath);
-        db.pragma("journal_mode = WAL");
-        db.close();
-        return { ok: true, detail: dbPath };
       } catch (err) {
         return {
           ok: false,
           detail: (err as Error).message.split("\n")[0],
           fix:
-            "The app could not create or open its database file.\n" +
-            "    Check you have write permission in this folder, and that the\n" +
-            "    project is not inside a synced folder (OneDrive, Dropbox) that\n" +
-            "    locks files.",
+            "Could not create the data folder. Check you have write permission\n" +
+            "    here, and that the project is not inside a synced folder\n" +
+            "    (OneDrive, Dropbox) that locks files.",
         };
       }
+
+      const probe = spawnSync(
+        process.execPath,
+        [
+          "-e",
+          "const D = require('better-sqlite3');" +
+            "const d = new D(process.argv[1]);" +
+            "d.pragma('journal_mode = WAL');" +
+            "d.close();",
+          dbPath,
+        ],
+        { cwd: process.cwd(), encoding: "utf8", timeout: 60_000 },
+      );
+      if (probe.status === 0) return { ok: true, detail: dbPath };
+
+      return {
+        ok: false,
+        detail: (probe.stderr || "could not open the database").trim().split("\n")[0],
+        fix:
+          "The app could not create or open its database file.\n" +
+          "    Check write permission, and avoid OneDrive/Dropbox folders —\n" +
+          "    their file locking interferes with SQLite.",
+      };
     },
   },
   {
     name: "Database has content",
     run() {
       const dbPath = process.env.CHIAPARTMENT_DB ?? resolve("data/chiapartment.db");
-      try {
-        const Database = require("better-sqlite3");
-        const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-        const row = db
-          .prepare("SELECT COUNT(*) AS n FROM buildings")
-          .get() as { n: number };
-        db.close();
-        if (row.n === 0) {
-          return {
-            ok: false,
-            detail: "no buildings yet",
-            fix:
-              "Load the demo data so there is something to look at:\n" +
-              "      npm run seed:demo\n" +
-              "    or add a real building:\n" +
-              "      npm run scrape -- --add https://example.com/",
-          };
-        }
-        return { ok: true, detail: `${row.n} building(s)` };
-      } catch {
+      if (!existsSync(dbPath)) {
+        return { ok: false, detail: "not created yet", fix: "Run:  npm run seed:demo" };
+      }
+      const probe = spawnSync(
+        process.execPath,
+        [
+          "-e",
+          "const D = require('better-sqlite3');" +
+            "const d = new D(process.argv[1], { readonly: true, fileMustExist: true });" +
+            "process.stdout.write(String(d.prepare('SELECT COUNT(*) AS n FROM buildings').get().n));" +
+            "d.close();",
+          dbPath,
+        ],
+        { cwd: process.cwd(), encoding: "utf8", timeout: 60_000 },
+      );
+
+      if (probe.status !== 0) {
+        return { ok: false, detail: "not readable yet", fix: "Run:  npm run seed:demo" };
+      }
+      const count = Number(probe.stdout.trim());
+      if (!Number.isFinite(count) || count === 0) {
         return {
           ok: false,
-          detail: "not created yet",
-          fix: "Run:  npm run seed:demo",
+          detail: "no buildings yet",
+          fix:
+            "Load the demo data so there is something to look at:\n" +
+            "      npm run seed:demo\n" +
+            "    or add a real building:\n" +
+            "      npm run scrape -- --add https://example.com/",
         };
       }
+      return { ok: true, detail: `${count} building(s)` };
     },
   },
   {
     name: `Port ${DEFAULT_PORT} free`,
     async run() {
-      const free = await isPortFree(DEFAULT_PORT);
-      if (free) return { ok: true, detail: "available" };
+      const status = await probePort(DEFAULT_PORT);
+      if (status === "free") return { ok: true, detail: "available" };
+
+      if (status === "EACCES") {
+        return {
+          ok: false,
+          detail: "blocked by the OS",
+          fix:
+            `Permission denied binding port ${DEFAULT_PORT}. Use another one:\n` +
+            "      npm run dev -- --port 3005",
+        };
+      }
       return {
         ok: false,
         detail: "something is already listening",
         fix:
-          `Next will start on ${DEFAULT_PORT + 1} instead, so open that instead of\n` +
-          `    ${DEFAULT_PORT}. Read the "Local:" line the dev server prints — that URL\n` +
-          "    is always the right one. To use a specific port:\n" +
+          `Next will start on ${DEFAULT_PORT + 1} instead, so open that rather than\n` +
+          `    ${DEFAULT_PORT}. The dev server prints a "Local:" line — that URL is\n` +
+          "    always the right one. To pick a port yourself:\n" +
           "      npm run dev -- --port 3005",
       };
     },
@@ -204,9 +283,9 @@ const checks: Check[] = [
         const version = execSync("npx next --version", {
           encoding: "utf8",
           stdio: ["ignore", "pipe", "pipe"],
-          timeout: 60_000,
+          timeout: 120_000,
         }).trim();
-        // `next --version` prints "Next.js v16.2.12"; keep one leading "v".
+        // `next --version` prints "Next.js v16.2.12"; keep exactly one "v".
         return { ok: true, detail: version.replace(/^Next\.js\s*v?/i, "v") };
       } catch (err) {
         return {
@@ -221,7 +300,12 @@ const checks: Check[] = [
 
 async function main() {
   console.log(`\n${bold("chiapartment doctor")}`);
-  console.log(dim(`  ${process.platform} ${process.arch} · node ${process.versions.node}\n`));
+  console.log(
+    dim(
+      `  ${process.platform} ${process.arch} · node ${process.versions.node} ` +
+        `(Node-API ${process.versions.napi})\n`,
+    ),
+  );
 
   const failures: Array<{ name: string; result: Result }> = [];
   let stopped = false;
@@ -262,18 +346,30 @@ async function main() {
     console.log(`\n  ${red("✖")} ${bold(name)}`);
     if (result.fix) console.log(`    ${result.fix}`);
   }
-  console.log(
-    `\n${dim("Fix the first one listed and run  npm run doctor  again.")}\n`,
-  );
+  console.log(`\n${dim("Fix the first one listed and run  npm run doctor  again.")}\n`);
   process.exitCode = 1;
 }
 
-function isPortFree(port: number): Promise<boolean> {
+type PortStatus = "free" | "EADDRINUSE" | "EACCES" | "other";
+
+/**
+ * Probe the port the way the dev server binds it — the wildcard address, not
+ * loopback — so the check and the server can't disagree about availability.
+ */
+function probePort(port: number): Promise<PortStatus> {
   return new Promise((done) => {
     const server = createServer();
-    server.once("error", () => done(false));
-    server.once("listening", () => server.close(() => done(true)));
-    server.listen(port, "127.0.0.1");
+    server.once("error", (err: NodeJS.ErrnoException) => {
+      done(
+        err.code === "EADDRINUSE"
+          ? "EADDRINUSE"
+          : err.code === "EACCES"
+            ? "EACCES"
+            : "other",
+      );
+    });
+    server.once("listening", () => server.close(() => done("free")));
+    server.listen(port);
   });
 }
 

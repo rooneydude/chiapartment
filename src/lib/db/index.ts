@@ -7,6 +7,7 @@ import * as schema from "./schema";
 export const DB_PATH = process.env.CHIAPARTMENT_DB ?? resolve("data/chiapartment.db");
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let _sqlite: Database.Database | null = null;
 
 export function getDb() {
   if (_db) return _db;
@@ -15,8 +16,23 @@ export function getDb() {
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   migrate(sqlite);
+  _sqlite = sqlite;
   _db = drizzle(sqlite, { schema });
   return _db;
+}
+
+/**
+ * Close the connection and drop the cached handle.
+ *
+ * POSIX lets a file be unlinked while it is still open, so tests could get
+ * away with deleting the database directly. Windows cannot — the delete fails
+ * with EBUSY/EPERM — so anything that removes the database file must close it
+ * first.
+ */
+export function closeDb() {
+  _sqlite?.close();
+  _sqlite = null;
+  _db = null;
 }
 
 export { schema };

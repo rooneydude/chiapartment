@@ -23,24 +23,30 @@ npm run dev
 Then open the URL the dev server prints — usually `http://localhost:3000`, but
 it moves to 3001 if 3000 is taken.
 
-Requires **Node 22 or newer** (`better-sqlite3` needs it). If anything fails,
-`npm run doctor` names the cause; run each command separately rather than
-chaining them with `&&`, so a failure is visible instead of scrolling past.
+Requires **Node 22.14 or newer**. If anything fails, `npm run doctor` names
+the cause; run each command separately rather than chaining them with `&&`, so
+a failure is visible instead of scrolling past.
 
 <details>
-<summary>Windows notes</summary>
+<summary>Why Node 22.14 specifically</summary>
 
-`better-sqlite3` is a native module. On Node 22 LTS npm downloads a prebuilt
-binary and there is nothing to compile. On other Node versions it falls back to
-building from source, which needs the C++ build tools:
+`better-sqlite3` ships prebuilt binaries targeting Node-API 10, which exists
+only in Node >= 22.14 and >= 23.6. There is no source-build fallback — the
+package has no install script — so on an older Node the prebuilt binary is
+loaded regardless, `require()` succeeds, and the process is then killed by a
+segmentation fault the first time a database is opened. No error, no stack, no
+message; on Windows the console simply goes quiet with exit code `0xC0000005`.
 
-```
-winget install Microsoft.VisualStudio.2022.BuildTools
-npm install --build-from-source better-sqlite3
-```
+Node **22.0 through 22.13 are affected**, which includes installers labelled
+"22 LTS" from late 2024. `npm install` on those versions succeeds with no
+warning at all.
 
-Installing Node 22 LTS is the easier fix. Avoid putting the project inside
-OneDrive — file locking there interferes with SQLite.
+`.npmrc` sets `engine-strict=true` so npm refuses to install rather than
+warning, and `npm run doctor` probes the driver in a child process so a crash
+is something it can report rather than something that kills it.
+
+On Windows, also avoid putting the project inside OneDrive — its file locking
+interferes with SQLite.
 
 The `pbpaste |` examples below are macOS; on Windows use
 `npm run ingest -- --building <slug> --file email.txt` instead.
