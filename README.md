@@ -15,9 +15,36 @@ listing in a 3D model — with nobody measuring anything.
 
 ```bash
 npm install
-npm run seed:demo        # synthetic building, so you can look around immediately
-npm run dev              # http://localhost:3000
+npm run doctor           # checks this machine can run it, and says what's wrong if not
+npm run seed:demo        # two synthetic buildings, so you can look around immediately
+npm run dev
 ```
+
+Then open the URL the dev server prints — usually `http://localhost:3000`, but
+it moves to 3001 if 3000 is taken.
+
+Requires **Node 22 or newer** (`better-sqlite3` needs it). If anything fails,
+`npm run doctor` names the cause; run each command separately rather than
+chaining them with `&&`, so a failure is visible instead of scrolling past.
+
+<details>
+<summary>Windows notes</summary>
+
+`better-sqlite3` is a native module. On Node 22 LTS npm downloads a prebuilt
+binary and there is nothing to compile. On other Node versions it falls back to
+building from source, which needs the C++ build tools:
+
+```
+winget install Microsoft.VisualStudio.2022.BuildTools
+npm install --build-from-source better-sqlite3
+```
+
+Installing Node 22 LTS is the easier fix. Avoid putting the project inside
+OneDrive — file locking there interferes with SQLite.
+
+The `pbpaste |` examples below are macOS; on Windows use
+`npm run ingest -- --building <slug> --file email.txt` instead.
+</details>
 
 To track a real building:
 
@@ -194,6 +221,7 @@ down completely.
 | `npm run ingest -- --building <slug> --file <email>` | Ingest an agent's tour email |
 | `npm run seed:demo` | Load two synthetic buildings |
 | `npm run fixture -- --port 4310 --round 1` | Run a stand-in leasing site |
+| `npm run doctor` | Check this machine can run it |
 | `npm test` | Run the test suite |
 
 Useful scrape flags: `--dry-run` (parse, print, write nothing), `--adapter <id>`
