@@ -39,16 +39,22 @@ a failure is visible instead of scrolling past.
 <details>
 <summary>Why Node 22.14 specifically</summary>
 
-`better-sqlite3` ships prebuilt binaries targeting Node-API 10, which exists
-only in Node >= 22.14 and >= 23.6. There is no source-build fallback — the
-package has no install script — so on an older Node the prebuilt binary is
-loaded regardless, `require()` succeeds, and the process is then killed by a
-segmentation fault the first time a database is opened. No error, no stack, no
-message; on Windows the console simply goes quiet with exit code `0xC0000005`.
+`better-sqlite3` bundles prebuilt binaries for each platform, targeting
+Node-API 10. Two different things go wrong on either side of Node 22:
 
-Node **22.0 through 22.13 are affected**, which includes installers labelled
-"22 LTS" from late 2024. `npm install` on those versions succeeds with no
-warning at all.
+**Below Node 22.14**, Node-API 10 does not exist. The bundled binary is loaded
+anyway, `require()` succeeds, and the process is killed by a segmentation
+fault the first time a database is opened — no error, no stack; on Windows the
+console just goes quiet with exit code `0xC0000005`. Node 22.0 through 22.13
+are affected, including installers labelled "22 LTS" from late 2024, and
+`npm install` on them succeeds with no warning at all.
+
+**On Node 23 and newer**, the bundled binary would work, but npm 11 ignores the
+package's `gypfile: false` and runs `node-gyp rebuild` anyway. That needs a C++
+compiler, so the install fails on any machine without Visual Studio Build
+Tools. Node 22 ships npm 10, which uses the bundled binary and never compiles.
+
+Hence Node 22 LTS specifically: it is the line where neither failure happens.
 
 `.npmrc` sets `engine-strict=true` so npm refuses to install rather than
 warning, and `npm run doctor` probes the driver in a child process so a crash

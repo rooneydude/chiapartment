@@ -44,13 +44,27 @@ if [ "$(node -p 'process.versions.napi>=10?1:0')" != "1" ]; then
 fi
 echo "  [OK] Node $NODE_VER"
 
+# Node 22 is the tested line. On Node 23+ npm compiles the database driver from
+# source instead of using the binary that ships with it.
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "$NODE_MAJOR" != "22" ]; then
+  echo
+  echo "  [!] Node $NODE_VER is newer than the tested version (22 LTS)."
+  echo "      If the install below fails mentioning node-gyp, install Node 22."
+fi
+
 # --- 3. Install dependencies ------------------------------------------------
 echo
 echo "  Installing dependencies. This takes a minute or two..."
 echo
 if ! npm install; then
   echo
-  echo "  [X] npm install failed. The lines above say why."
+  echo "  [X] npm install failed."
+  echo
+  echo "      If the errors mention node-gyp or a missing compiler, the cause"
+  echo "      is the Node version: 23+ has no ready-made database driver, so"
+  echo "      npm tries to compile one. Install Node 22 LTS from"
+  echo "      https://nodejs.org/en/download, delete node_modules, and rerun."
   echo
   exit 1
 fi

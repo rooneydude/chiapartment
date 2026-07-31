@@ -52,6 +52,18 @@ if !NAPI! LSS 10 (
 )
 echo   [OK] Node !NODE_VER!
 
+REM Node 22 is the tested line. On Node 23+ npm compiles the database driver
+REM from source instead of using the binary that ships with it, which needs a
+REM C++ compiler most machines do not have.
+for /f "tokens=1 delims=." %%m in ("!NODE_VER:v=!") do set "NODE_MAJOR=%%m"
+if not "!NODE_MAJOR!"=="22" (
+  echo.
+  echo   [!] Node !NODE_VER! is newer than the tested version.
+  echo       If the install below fails mentioning "node-gyp" or
+  echo       "Visual Studio", install Node 22 LTS instead - see the message
+  echo       that will appear.
+)
+
 REM --- 3. Install dependencies ------------------------------------------------
 echo.
 echo   Installing dependencies. This takes a minute or two...
@@ -59,8 +71,25 @@ echo.
 call npm install
 if errorlevel 1 (
   echo.
-  echo   [X] npm install failed. The lines above say why.
-  echo       Copy them and send them over.
+  echo   [X] npm install failed.
+  echo.
+  echo       If the errors mention "node-gyp", "Visual Studio" or "MSB",
+  echo       the cause is the Node version. Node 23 and newer have no
+  echo       ready-made database driver, so npm tries to compile one and
+  echo       needs a C++ compiler.
+  echo.
+  echo       FIX - takes about five minutes:
+  echo         1. Go to  https://nodejs.org/en/download
+  echo         2. Choose Node 22 LTS ^(not the newest version^)
+  echo         3. Install it, then CLOSE this window
+  echo         4. Delete the node_modules folder in this directory
+  echo         5. Open the folder again and run setup.bat
+  echo.
+  echo       If the errors instead mention EPERM or "operation not
+  echo       permitted", move this folder to your C: drive - antivirus and
+  echo       external drives lock files mid-install.
+  echo.
+  echo       Anything else: copy the errors above and send them over.
   echo.
   pause
   exit /b 1
