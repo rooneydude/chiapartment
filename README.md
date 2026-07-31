@@ -13,6 +13,15 @@ listing in a 3D model — with nobody measuring anything.
 
 ## Quick start
 
+**Windows:** double-click `setup.bat`.
+**macOS / Linux:** run `./setup.sh`.
+
+Either one checks your Node version, installs everything, loads demo data,
+starts the app and opens your browser. If a step fails it stops and says why,
+in plain English, instead of scrolling past.
+
+Doing it by hand is four commands:
+
 ```bash
 npm install
 npm run doctor           # checks this machine can run it, and says what's wrong if not
