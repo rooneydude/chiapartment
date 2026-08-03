@@ -14,7 +14,7 @@
       "lat": 41.90455,
       "lon": -87.6346,
       "url": "https://1225oldtown.com/",
-      "adapter": "playwright-generic",
+      "adapter": "sightmap",
       "geometry": {
         "floors": 16,
         "floorHeightM": 3.2,
@@ -75,6 +75,9 @@
           }
         },
         "defaultFacing": "E"
+      },
+      "adapterOptions": {
+        "sightmapApiUrl": "https://sightmap.com/app/api/v1/60p7xoklv7n/sightmaps/87594"
       }
     },
     {
@@ -306,7 +309,7 @@
       "lat": 41.8961,
       "lon": -87.6341,
       "url": "https://leochicago.com/",
-      "adapter": "playwright-generic",
+      "adapter": "leo",
       "geometry": {
         "floors": 21,
         "floorHeightM": 3.1,

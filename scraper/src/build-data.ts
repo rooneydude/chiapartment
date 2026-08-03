@@ -39,6 +39,8 @@ export function buildData(root: string): void {
       delta: null,
       perUnit: {},
       perFloorplan: {},
+      perUnitMeta: {},
+      warnings: [],
       runs: [],
     };
 

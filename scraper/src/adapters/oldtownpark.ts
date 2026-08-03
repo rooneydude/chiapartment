@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { parseAvailableDate } from "../../../shared/src/parse";
 import type { UnitListing } from "../../../shared/src/types";
 import { dedupeListings } from "../normalize";
 import type { Adapter } from "./types";
@@ -52,18 +53,22 @@ export const oldtownpark: Adapter = {
           if (!unitNumber || !Number.isFinite(rentMin) || beds === null) return;
 
           const cardText = $(el).text().replace(/\s+/g, " ");
-          const availM = /available\s*(now|[a-z]{3,9}\.?\s*\d{1,2}(?:,?\s*\d{4})?)/i.exec(cardText);
-          const sqftM = /([\d,]{3,})\s*(?:sq\.?\s?ft|sf\b)/i.exec(cardText);
+          const availM = /available\s*(?:now|[a-z]{3,9}\.?\s*\d{1,2}(?:,?\s*\d{4})?)?/i.exec(cardText);
+          // Sqft appears both as "565 sq ft" and "Total SQFT: 565".
+          const sqftM =
+            /([\d,]{3,})\s*(?:sq\.?\s?ft|sf\b)/i.exec(cardText) ??
+            /SQFT:?\s*([\d,]{3,})/i.exec(cardText);
+          const sqft = sqftM ? Number.parseInt(sqftM[1]!.replace(/,/g, ""), 10) : null;
 
           listings.push({
             unitNumber,
             floorplanName,
             beds,
             baths: null,
-            sqft: sqftM ? Number.parseInt(sqftM[1]!.replace(/,/g, ""), 10) : null,
+            sqft: sqft !== null && sqft >= 150 && sqft <= 6000 ? sqft : null,
             price: rentMin,
             ...(Number.isFinite(rentMax) && rentMax > rentMin ? { priceMax: rentMax } : {}),
-            availableDate: availM ? availM[1]! : null,
+            availableDate: availM ? parseAvailableDate(availM[0], new Date()) : null,
             url,
           });
         });
