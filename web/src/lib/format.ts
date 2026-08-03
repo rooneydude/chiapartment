@@ -17,3 +17,6 @@ export const longDate = (iso: string): string =>
   });
 
 export const bedsLabel = (beds: number): string => (beds === 0 ? "Studio" : `${beds} BR`);
+
+export const daysSince = (iso: string): number =>
+  Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400e3));

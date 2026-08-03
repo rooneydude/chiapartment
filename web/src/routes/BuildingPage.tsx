@@ -79,6 +79,13 @@ export default function BuildingPage() {
           {history.latest ? ` · updated ${longDate(history.latest.timestamp)}` : ""}
         </span>
       </div>
+      {(history.warnings?.length ?? 0) > 0 && (
+        <div className="warning-banner">
+          {history.warnings.map((w) => (
+            <div key={w.code}>⚠ {w.message}</div>
+          ))}
+        </div>
+      )}
       <DeltaSummary delta={history.delta} />
       <div style={{ height: 10 }} />
       <Filters maxFloor={building.geometry.floors} />
@@ -91,7 +98,12 @@ export default function BuildingPage() {
               locate in 3D
             </span>
           </div>
-          <AvailabilityTable units={filteredUnits} delta={history.delta} mapping={building.unitMapping} />
+          <AvailabilityTable
+            units={filteredUnits}
+            delta={history.delta}
+            mapping={building.unitMapping}
+            meta={history.perUnitMeta ?? {}}
+          />
         </div>
         <div className="panel">
           <Scene3D building={building} allBuildings={config.buildings} history={history} />

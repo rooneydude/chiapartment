@@ -73,6 +73,11 @@ export default function Dashboard() {
               ))}
             </div>
             <div className="badges">
+              {history.warnings?.length > 0 && (
+                <span className="badge bad" title={history.warnings.map((w) => w.message).join("\n")}>
+                  ⚠ data
+                </span>
+              )}
               {units.length > 0 && <span className="badge">{units.length} available</span>}
               {(d?.newUnits.length ?? 0) > 0 && (
                 <span className="badge new">{d!.newUnits.length} new</span>

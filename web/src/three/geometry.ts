@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { isBuildingFeature } from "../../../shared/src/types";
 import type { SkylineCollection, SkylineFeature } from "../../../shared/src/types";
 import type { Vec2 } from "../../../shared/src/placement";
 
@@ -64,6 +65,7 @@ export function buildContextGeometry(
 ): THREE.BufferGeometry | null {
   const parts: THREE.BufferGeometry[] = [];
   for (const f of skyline.features) {
+    if (!isBuildingFeature(f)) continue; // v2 files carry roads/stations too
     if (excludeOsmIds.has(f.properties.osmId)) continue;
     const geo = extrudeFeature(f, heightOverrides.get(f.properties.osmId));
     if (geo) parts.push(geo);

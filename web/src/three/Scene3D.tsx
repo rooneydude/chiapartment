@@ -12,6 +12,7 @@ import {
   type UnitPlacement,
   type Vec2,
 } from "../../../shared/src/placement";
+import { isBuildingFeature } from "../../../shared/src/types";
 import type {
   BuildingConfig,
   BuildingHistory,
@@ -56,7 +57,7 @@ function configuredHeight(b: BuildingConfig): number {
 }
 
 function findFeature(building: BuildingConfig, skyline: SkylineCollection) {
-  return skyline.features.find(
+  return skyline.features.filter(isBuildingFeature).find(
     (f) =>
       (building.geometry.osmWayId !== undefined &&
         f.properties.osmId === building.geometry.osmWayId) ||

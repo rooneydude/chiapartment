@@ -490,6 +490,18 @@ table.units tbody tr.sel {
   font-size: 13px;
 }
 
+.warning-banner {
+  border: 1px solid var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 12%, var(--surface-1));
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .loading,
 .error-box {
   padding: 60px 0;

@@ -223,6 +223,18 @@ export interface SkylinePointFeature {
 
 export type AnySkylineFeature = SkylineFeature | SkylineLineFeature | SkylinePointFeature;
 
+export function isBuildingFeature(f: AnySkylineFeature): f is SkylineFeature {
+  return f.geometry.type === "Polygon";
+}
+
+export function isLineFeature(f: AnySkylineFeature): f is SkylineLineFeature {
+  return f.geometry.type === "LineString";
+}
+
+export function isStationFeature(f: AnySkylineFeature): f is SkylinePointFeature {
+  return f.geometry.type === "Point";
+}
+
 export interface SkylineCollection {
   type: "FeatureCollection";
   meta: {

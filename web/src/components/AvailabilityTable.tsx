@@ -1,11 +1,16 @@
 import { useMemo, useState } from "react";
-import type { SnapshotDelta, UnitListing, UnitMapping } from "../../../shared/src/types";
+import type {
+  BuildingHistory,
+  SnapshotDelta,
+  UnitListing,
+  UnitMapping,
+} from "../../../shared/src/types";
 import { parseUnitNumber } from "../../../shared/src/parse";
 import { UnitMappingSchema } from "../../../shared/src/types";
-import { bedsLabel, money, shortDate } from "../lib/format";
+import { bedsLabel, daysSince, money, shortDate } from "../lib/format";
 import { useStore } from "../state/store";
 
-type SortKey = "unit" | "floor" | "plan" | "beds" | "sqft" | "price" | "avail";
+type SortKey = "unit" | "floor" | "plan" | "beds" | "sqft" | "price" | "avail" | "listed";
 
 const FALLBACK_MAPPING = UnitMappingSchema.parse({});
 
@@ -13,10 +18,12 @@ export default function AvailabilityTable({
   units,
   delta,
   mapping,
+  meta,
 }: {
   units: UnitListing[];
   delta: SnapshotDelta | null;
   mapping: UnitMapping | undefined;
+  meta: BuildingHistory["perUnitMeta"];
 }) {
   const selectedUnit = useStore((s) => s.selectedUnit);
   const selectUnit = useStore((s) => s.selectUnit);
@@ -51,6 +58,8 @@ export default function AvailabilityTable({
           return u.sqft ?? 0;
         case "avail":
           return u.availableDate ?? "9999";
+        case "listed":
+          return u.unitNumber ? (meta[u.unitNumber]?.firstSeen ?? "9999") : "9999";
         default:
           return u.price;
       }
@@ -96,6 +105,7 @@ export default function AvailabilityTable({
               {header("price", "Price", true)}
               <th className="num">Δ</th>
               {header("avail", "Avail")}
+              {header("listed", "Listed", true)}
             </tr>
           </thead>
           <tbody>
@@ -129,15 +139,39 @@ export default function AvailabilityTable({
                     {u.priceMax ? `+` : ""}
                   </td>
                   <td className="num">
-                    {change ? (
+                    {change && (
                       <span className={change.to < change.from ? "delta-down" : "delta-up"}>
                         {change.to < change.from ? "▼" : "▲"} {money(Math.abs(change.to - change.from))}
                       </span>
-                    ) : (
-                      ""
                     )}
+                    {(() => {
+                      const m = u.unitNumber ? meta[u.unitNumber] : undefined;
+                      if (!m || m.firstPrice === u.price) return null;
+                      const drop = u.price < m.firstPrice;
+                      return (
+                        <span
+                          className={drop ? "delta-down" : "delta-up"}
+                          title={`vs first listing ${shortDate(m.firstSeen)} at ${money(m.firstPrice)}`}
+                          style={{ marginLeft: change ? 6 : 0, opacity: 0.75 }}
+                        >
+                          Σ{drop ? "▼" : "▲"}{money(Math.abs(u.price - m.firstPrice))}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>{u.availableDate ? shortDate(u.availableDate) : "—"}</td>
+                  <td
+                    className="num"
+                    title={
+                      u.unitNumber && meta[u.unitNumber]
+                        ? `first seen ${shortDate(meta[u.unitNumber]!.firstSeen)}`
+                        : undefined
+                    }
+                  >
+                    {u.unitNumber && meta[u.unitNumber]
+                      ? `${daysSince(meta[u.unitNumber]!.firstSeen)}d`
+                      : "—"}
+                  </td>
                 </tr>
               );
             })}
