@@ -3,9 +3,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeProjector, type LonLat, type Projector } from "../../shared/src/geo";
 import type {
+  AnySkylineFeature,
   BuildingConfig,
   SkylineCollection,
   SkylineFeature,
+  SkylineLineFeature,
+  SkylinePointFeature,
 } from "../../shared/src/types";
 import { loadConfig } from "./run";
 
@@ -33,6 +36,11 @@ const DEFAULT_HEIGHT_M = 10;
 const SIMPLIFY_TOLERANCE_M = 0.75;
 /** Buildings within this distance of each other share one Overpass bbox. */
 const CLUSTER_SPAN_M = 1600;
+const ROAD_SIMPLIFY_TOLERANCE_M = 1.5;
+/** Short minor streets add bytes, not context. */
+const MIN_MINOR_ROAD_LENGTH_M = 40;
+const SIZE_WARN_BYTES = 2_000_000;
+const SIZE_TRUNCATE_BYTES = 2_500_000;
 
 // ---------------------------------------------------------------------------
 // Overpass
@@ -46,18 +54,31 @@ interface OverpassElement {
   members?: { role: string; geometry?: { lat: number; lon: number }[] }[];
 }
 
-async function overpassQuery(bbox: [number, number, number, number], cacheDir: string) {
+function buildingsQuery(bbox: [number, number, number, number]): string {
   const [s, w, n, e] = bbox;
-  const query = `[out:json][timeout:120];
+  return `[out:json][timeout:120];
 (
   way["building"](${s},${w},${n},${e});
   relation["building"](${s},${w},${n},${e});
 );
 out tags geom;`;
+}
 
+function transportQuery(bbox: [number, number, number, number]): string {
+  const [s, w, n, e] = bbox;
+  return `[out:json][timeout:120];
+(
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|pedestrian)$"](${s},${w},${n},${e});
+  way["railway"~"^(rail|subway|light_rail)$"](${s},${w},${n},${e});
+  node["railway"="station"](${s},${w},${n},${e});
+);
+out tags geom;`;
+}
+
+async function overpassQuery(query: string, cacheDir: string) {
   const cacheFile = join(cacheDir, `overpass-${createHash("sha1").update(query).digest("hex").slice(0, 12)}.json`);
   if (existsSync(cacheFile)) {
-    console.log(`  using cached Overpass response for bbox ${bbox.map((v) => v.toFixed(4)).join(",")}`);
+    console.log(`  using cached Overpass response (${cacheFile.split("/").pop()})`);
     return JSON.parse(readFileSync(cacheFile, "utf8")) as { elements: OverpassElement[] };
   }
 
@@ -191,6 +212,69 @@ function ringCentroidLL(ring: { lat: number; lon: number }[]): LonLat {
 }
 
 // ---------------------------------------------------------------------------
+// Roads / rail / stations (skyline v2)
+// ---------------------------------------------------------------------------
+
+function polylineLength(pts: Pt[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.hypot(pts[i]![0] - pts[i - 1]![0], pts[i]![1] - pts[i - 1]![1]);
+  }
+  return len;
+}
+
+const MINOR_ROAD_CLASSES = new Set(["residential", "pedestrian"]);
+
+/** Pure transform: Overpass transport elements → line/point features. */
+export function roadFeaturesFromElements(
+  elements: OverpassElement[],
+  projector: Projector,
+): (SkylineLineFeature | SkylinePointFeature)[] {
+  const out: (SkylineLineFeature | SkylinePointFeature)[] = [];
+  for (const el of elements) {
+    const tags = el.tags ?? {};
+    if (el.type === "node") {
+      if (tags["railway"] !== "station") continue;
+      const node = el as unknown as { lat: number; lon: number };
+      if (typeof node.lat !== "number") continue;
+      const [x, y] = projector.toLocal(node.lon, node.lat);
+      out.push({
+        type: "Feature",
+        properties: {
+          kind: "station",
+          ...(tags["name"] ? { name: tags["name"] } : {}),
+          ...(tags["station"] ? { station: tags["station"] } : {}),
+        },
+        geometry: { type: "Point", coordinates: [round1(x), round1(y)] },
+      });
+      continue;
+    }
+    if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
+    const isRail = tags["railway"] !== undefined;
+    const cls = tags["railway"] ?? tags["highway"];
+    if (!cls) continue;
+
+    const local: Pt[] = el.geometry.map((p) => projector.toLocal(p.lon, p.lat) as Pt);
+    if (MINOR_ROAD_CLASSES.has(cls) && polylineLength(local) < MIN_MINOR_ROAD_LENGTH_M) continue;
+    const simplified = douglasPeucker(local, ROAD_SIMPLIFY_TOLERANCE_M).map(
+      (p): [number, number] => [round1(p[0]), round1(p[1])],
+    );
+    if (simplified.length < 2) continue;
+
+    out.push({
+      type: "Feature",
+      properties: {
+        kind: isRail ? "rail" : "road",
+        class: cls,
+        ...(tags["name"] ? { name: tags["name"] } : {}),
+      },
+      geometry: { type: "LineString", coordinates: simplified },
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -246,7 +330,7 @@ export async function generateSkyline(root: string): Promise<void> {
 
   for (const bbox of bboxes) {
     console.log(`Fetching OSM buildings for bbox ${bbox.map((v) => v.toFixed(4)).join(", ")}`);
-    const data = await overpassQuery(bbox, cacheDir);
+    const data = await overpassQuery(buildingsQuery(bbox), cacheDir);
     console.log(`  ${data.elements.length} elements`);
 
     for (const el of data.elements) {
@@ -328,14 +412,45 @@ export async function generateSkyline(root: string): Promise<void> {
     }
   }
 
+  // v2: streets, rail, stations for scene context.
+  let transport: (SkylineLineFeature | SkylinePointFeature)[] = [];
+  const seenLineKeys = new Set<string>();
+  for (const bbox of bboxes) {
+    console.log(`Fetching OSM transport for bbox ${bbox.map((v) => v.toFixed(4)).join(", ")}`);
+    const data = await overpassQuery(transportQuery(bbox), cacheDir);
+    console.log(`  ${data.elements.length} elements`);
+    for (const f of roadFeaturesFromElements(data.elements, projector)) {
+      const key = JSON.stringify(f.geometry.coordinates[0]) + (f.properties as { name?: string }).name;
+      if (seenLineKeys.has(key)) continue; // bbox overlap dedupe
+      seenLineKeys.add(key);
+      transport.push(f);
+    }
+  }
+
+  let allFeatures: AnySkylineFeature[] = [...features, ...transport];
+  let bytes = Buffer.byteLength(JSON.stringify(allFeatures));
+  if (bytes > SIZE_TRUNCATE_BYTES) {
+    console.warn(`Transport layer pushes file to ${bytes} bytes — dropping minor roads`);
+    transport = transport.filter(
+      (f) => f.geometry.type === "Point" || !MINOR_ROAD_CLASSES.has((f.properties as { class?: string }).class ?? ""),
+    );
+    allFeatures = [...features, ...transport];
+    bytes = Buffer.byteLength(JSON.stringify(allFeatures));
+  } else if (bytes > SIZE_WARN_BYTES) {
+    console.warn(`skyline.geojson is getting large (${bytes} bytes)`);
+  }
+
   const collection: SkylineCollection = {
     type: "FeatureCollection",
-    meta: { origin, generated: new Date().toISOString(), bboxes },
-    features,
+    meta: { origin, generated: new Date().toISOString(), bboxes, schemaVersion: 2 },
+    features: allFeatures,
   };
   const outPath = join(root, "data", "skyline.geojson");
   mkdirSync(join(root, "data"), { recursive: true });
   writeFileSync(outPath, JSON.stringify(collection));
   const kb = Math.round(Buffer.byteLength(JSON.stringify(collection)) / 1024);
-  console.log(`\nWrote ${features.length} footprints (${kb} kB) → ${outPath}`);
+  const stations = transport.filter((f) => f.geometry.type === "Point").length;
+  console.log(
+    `\nWrote ${features.length} footprints, ${transport.length - stations} road/rail lines, ${stations} stations (${kb} kB) → ${outPath}`,
+  );
 }

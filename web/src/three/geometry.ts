@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { isBuildingFeature } from "../../../shared/src/types";
+import { isBuildingFeature, isLineFeature } from "../../../shared/src/types";
 import type { SkylineCollection, SkylineFeature } from "../../../shared/src/types";
 import type { Vec2 } from "../../../shared/src/placement";
 
@@ -76,6 +76,31 @@ export function buildContextGeometry(
   return merged;
 }
 
+/**
+ * Merged line-segment geometry for roads or rail: one draw call per kind.
+ * Roads hover just above the ground plane, rail slightly higher.
+ */
+export function buildLineGeometry(
+  skyline: SkylineCollection,
+  kind: "road" | "rail",
+): THREE.BufferGeometry | null {
+  const y = kind === "rail" ? 0.35 : 0.15;
+  const positions: number[] = [];
+  for (const f of skyline.features) {
+    if (!isLineFeature(f) || f.properties.kind !== kind) continue;
+    const pts = f.geometry.coordinates;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, ay] = pts[i - 1]!;
+      const [bx, by] = pts[i]!;
+      positions.push(ax, y, -ay, bx, y, -by); // planToThree inline
+    }
+  }
+  if (positions.length === 0) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geo;
+}
+
 export interface SceneTheme {
   background: string;
   ground: string;
@@ -84,6 +109,10 @@ export interface SceneTheme {
   accent: string;
   slab: string;
   marker: string;
+  road: string;
+  rail: string;
+  station: string;
+  label: string;
 }
 
 export const LIGHT_THEME: SceneTheme = {
@@ -94,6 +123,10 @@ export const LIGHT_THEME: SceneTheme = {
   accent: "#2a78d6",
   slab: "#2a78d6",
   marker: "#eb6834",
+  road: "#c6c5be",
+  rail: "#a09e96",
+  station: "#4a3aa7",
+  label: "#52514e",
 };
 
 export const DARK_THEME: SceneTheme = {
@@ -104,4 +137,8 @@ export const DARK_THEME: SceneTheme = {
   accent: "#3987e5",
   slab: "#3987e5",
   marker: "#d95926",
+  road: "#26262a",
+  rail: "#3c3c40",
+  station: "#9085e9",
+  label: "#c3c2b7",
 };

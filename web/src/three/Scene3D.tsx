@@ -23,12 +23,14 @@ import { loadSkyline, loadUnitMap } from "../lib/data";
 import { useStore } from "../state/store";
 import {
   buildContextGeometry,
+  buildLineGeometry,
   DARK_THEME,
   extrudeRing,
   LIGHT_THEME,
   planToThree,
   type SceneTheme,
 } from "./geometry";
+import Landmarks from "./Landmarks";
 
 function useTheme(): SceneTheme {
   const [dark, setDark] = useState(
@@ -49,7 +51,11 @@ interface SceneModel {
   center: Vec2;
   buildingHeight: number;
   contextGeometry: THREE.BufferGeometry | null;
+  roadGeometry: THREE.BufferGeometry | null;
+  railGeometry: THREE.BufferGeometry | null;
   trackedGeometry: THREE.BufferGeometry;
+  skyline: SkylineCollection | null;
+  trackedOsmIds: Set<number>;
   fromOsm: boolean;
 }
 
@@ -76,6 +82,9 @@ function buildModel(
 
   let ring: Vec2[] | null = null;
   let contextGeometry: THREE.BufferGeometry | null = null;
+  let roadGeometry: THREE.BufferGeometry | null = null;
+  let railGeometry: THREE.BufferGeometry | null = null;
+  const trackedOsmIds = new Set<number>();
   let fromOsm = false;
 
   if (skyline) {
@@ -91,10 +100,13 @@ function buildModel(
     for (const b of allBuildings) {
       const f = findFeature(b, skyline);
       if (!f) continue;
+      trackedOsmIds.add(f.properties.osmId);
       if (b.id === building.id) exclude.add(f.properties.osmId);
       else overrides.set(f.properties.osmId, configuredHeight(b));
     }
     contextGeometry = buildContextGeometry(skyline, exclude, overrides);
+    roadGeometry = buildLineGeometry(skyline, "road");
+    railGeometry = buildLineGeometry(skyline, "rail");
     if (!ring) {
       const projector = makeProjector(skyline.meta.origin);
       const [x, y] = projector.toLocal(building.lon, building.lat);
@@ -113,7 +125,11 @@ function buildModel(
     center: ringCentroid(ring),
     buildingHeight,
     contextGeometry,
+    roadGeometry,
+    railGeometry,
     trackedGeometry,
+    skyline,
+    trackedOsmIds,
     fromOsm,
   };
 }
@@ -270,6 +286,28 @@ function SceneContent({
         <mesh geometry={model.contextGeometry}>
           <meshLambertMaterial color={theme.context} flatShading />
         </mesh>
+      )}
+
+      {/* streets + rail (2 draw calls) */}
+      {model.roadGeometry && (
+        <lineSegments geometry={model.roadGeometry}>
+          <lineBasicMaterial color={theme.road} />
+        </lineSegments>
+      )}
+      {model.railGeometry && (
+        <lineSegments geometry={model.railGeometry}>
+          <lineBasicMaterial color={theme.rail} />
+        </lineSegments>
+      )}
+
+      {/* station markers + landmark labels */}
+      {model.skyline && (
+        <Landmarks
+          skyline={model.skyline}
+          center={model.center}
+          theme={theme}
+          excludeOsmIds={model.trackedOsmIds}
+        />
       )}
 
       {/* the tracked building */}
