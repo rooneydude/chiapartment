@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "skyline": {
+    "clusterRadiusM": 800,
+    "nearRadiusM": 250,
+    "minHeightNearM": 4,
+    "minHeightFarM": 20
+  },
+  "buildings": [
+    {
+      "id": "1225-old-town",
+      "name": "1225 Old Town",
+      "address": "1225 N Wells St, Chicago, IL 60610",
+      "lat": 41.90455,
+      "lon": -87.6346,
+      "url": "https://1225oldtown.com/",
+      "adapter": "generic",
+      "geometry": { "floors": 16, "floorHeightM": 3.2, "groundFloorOffsetM": 6 },
+      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+    },
+    {
+      "id": "old-town-park-1",
+      "name": "Old Town Park I",
+      "address": "1140 N Wells St, Chicago, IL 60610",
+      "lat": 41.9031,
+      "lon": -87.6344,
+      "url": "https://oldtownpark.com/",
+      "adapter": "generic",
+      "group": "old-town-park",
+      "geometry": { "floors": 32, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
+      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+    },
+    {
+      "id": "old-town-park-2",
+      "name": "Old Town Park II",
+      "address": "1130 N Wells St, Chicago, IL 60610",
+      "lat": 41.9034,
+      "lon": -87.6355,
+      "url": "https://oldtownpark.com/",
+      "adapter": "generic",
+      "group": "old-town-park",
+      "geometry": { "floors": 40, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
+      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+    },
+    {
+      "id": "old-town-park-3",
+      "name": "Old Town Park III",
+      "address": "168 W Oak St, Chicago, IL 60610",
+      "lat": 41.9027,
+      "lon": -87.6357,
+      "url": "https://oldtownpark.com/",
+      "adapter": "generic",
+      "group": "old-town-park",
+      "geometry": { "floors": 41, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
+      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+    },
+    {
+      "id": "the-leo",
+      "name": "The Leo",
+      "address": "741 N Wells St, Chicago, IL 60654",
+      "lat": 41.8961,
+      "lon": -87.6341,
+      "url": "https://leochicago.com/",
+      "adapter": "generic",
+      "geometry": { "floors": 21, "floorHeightM": 3.1, "groundFloorOffsetM": 4 },
+      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+    },
+    {
+      "id": "stead-220",
+      "name": "Stead 220",
+      "address": "220 N Ada St, Chicago, IL 60607",
+      "lat": 41.8857,
+      "lon": -87.6606,
+      "url": "https://stead220.com/",
+      "adapter": "generic",
+      "geometry": { "floors": 29, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
+      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+    }
+  ]
+}

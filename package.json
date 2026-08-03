@@ -1,0 +1,25 @@
+{
+  "name": "chiapartment",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Track Chicago apartment prices over time, visualized in 3D",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "workspaces": ["shared", "scraper", "web"],
+  "scripts": {
+    "refresh": "tsx scraper/src/cli.ts refresh",
+    "skyline": "tsx scraper/src/cli.ts skyline",
+    "build:data": "tsx scraper/src/cli.ts build-data",
+    "dev": "npm run build:data && npm run -w web dev",
+    "build": "npm run build:data && npm run -w web build",
+    "preview": "npm run -w web preview",
+    "test": "vitest run",
+    "typecheck": "tsc -p shared && tsc -p scraper && tsc -p web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
