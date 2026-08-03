@@ -15,8 +15,66 @@
       "lon": -87.6346,
       "url": "https://1225oldtown.com/",
       "adapter": "generic",
-      "geometry": { "floors": 16, "floorHeightM": 3.2, "groundFloorOffsetM": 6 },
-      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+      "geometry": {
+        "floors": 16,
+        "floorHeightM": 3.2,
+        "groundFloorOffsetM": 6
+      },
+      "unitMapping": {
+        "scheme": "floor-prefix",
+        "stackDigits": 2,
+        "stacks": {
+          "10": {
+            "facing": "E",
+            "u": 0.5
+          },
+          "11": {
+            "facing": "S",
+            "u": 0.5
+          },
+          "12": {
+            "facing": "W",
+            "u": 0.5
+          },
+          "01": {
+            "facing": "N",
+            "u": 0.3
+          },
+          "02": {
+            "facing": "N",
+            "u": 0.7
+          },
+          "03": {
+            "facing": "E",
+            "u": 0.3
+          },
+          "04": {
+            "facing": "E",
+            "u": 0.7
+          },
+          "05": {
+            "facing": "S",
+            "u": 0.3
+          },
+          "06": {
+            "facing": "S",
+            "u": 0.7
+          },
+          "07": {
+            "facing": "W",
+            "u": 0.3
+          },
+          "08": {
+            "facing": "W",
+            "u": 0.7
+          },
+          "09": {
+            "facing": "N",
+            "u": 0.5
+          }
+        },
+        "defaultFacing": "E"
+      }
     },
     {
       "id": "old-town-park-1",
@@ -27,8 +85,66 @@
       "url": "https://oldtownpark.com/",
       "adapter": "generic",
       "group": "old-town-park",
-      "geometry": { "floors": 32, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
-      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+      "geometry": {
+        "floors": 32,
+        "floorHeightM": 3.1,
+        "groundFloorOffsetM": 5
+      },
+      "unitMapping": {
+        "scheme": "floor-prefix",
+        "stackDigits": 2,
+        "stacks": {
+          "10": {
+            "facing": "E",
+            "u": 0.5
+          },
+          "11": {
+            "facing": "S",
+            "u": 0.5
+          },
+          "12": {
+            "facing": "W",
+            "u": 0.5
+          },
+          "01": {
+            "facing": "N",
+            "u": 0.3
+          },
+          "02": {
+            "facing": "N",
+            "u": 0.7
+          },
+          "03": {
+            "facing": "E",
+            "u": 0.3
+          },
+          "04": {
+            "facing": "E",
+            "u": 0.7
+          },
+          "05": {
+            "facing": "S",
+            "u": 0.3
+          },
+          "06": {
+            "facing": "S",
+            "u": 0.7
+          },
+          "07": {
+            "facing": "W",
+            "u": 0.3
+          },
+          "08": {
+            "facing": "W",
+            "u": 0.7
+          },
+          "09": {
+            "facing": "N",
+            "u": 0.5
+          }
+        },
+        "defaultFacing": "E"
+      }
     },
     {
       "id": "old-town-park-2",
@@ -39,8 +155,66 @@
       "url": "https://oldtownpark.com/",
       "adapter": "generic",
       "group": "old-town-park",
-      "geometry": { "floors": 40, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
-      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+      "geometry": {
+        "floors": 40,
+        "floorHeightM": 3.1,
+        "groundFloorOffsetM": 5
+      },
+      "unitMapping": {
+        "scheme": "floor-prefix",
+        "stackDigits": 2,
+        "stacks": {
+          "10": {
+            "facing": "E",
+            "u": 0.5
+          },
+          "11": {
+            "facing": "S",
+            "u": 0.5
+          },
+          "12": {
+            "facing": "W",
+            "u": 0.5
+          },
+          "01": {
+            "facing": "N",
+            "u": 0.3
+          },
+          "02": {
+            "facing": "N",
+            "u": 0.7
+          },
+          "03": {
+            "facing": "E",
+            "u": 0.3
+          },
+          "04": {
+            "facing": "E",
+            "u": 0.7
+          },
+          "05": {
+            "facing": "S",
+            "u": 0.3
+          },
+          "06": {
+            "facing": "S",
+            "u": 0.7
+          },
+          "07": {
+            "facing": "W",
+            "u": 0.3
+          },
+          "08": {
+            "facing": "W",
+            "u": 0.7
+          },
+          "09": {
+            "facing": "N",
+            "u": 0.5
+          }
+        },
+        "defaultFacing": "E"
+      }
     },
     {
       "id": "old-town-park-3",
@@ -51,8 +225,66 @@
       "url": "https://oldtownpark.com/",
       "adapter": "generic",
       "group": "old-town-park",
-      "geometry": { "floors": 41, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
-      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+      "geometry": {
+        "floors": 41,
+        "floorHeightM": 3.1,
+        "groundFloorOffsetM": 5
+      },
+      "unitMapping": {
+        "scheme": "floor-prefix",
+        "stackDigits": 2,
+        "stacks": {
+          "10": {
+            "facing": "E",
+            "u": 0.5
+          },
+          "11": {
+            "facing": "S",
+            "u": 0.5
+          },
+          "12": {
+            "facing": "W",
+            "u": 0.5
+          },
+          "01": {
+            "facing": "N",
+            "u": 0.3
+          },
+          "02": {
+            "facing": "N",
+            "u": 0.7
+          },
+          "03": {
+            "facing": "E",
+            "u": 0.3
+          },
+          "04": {
+            "facing": "E",
+            "u": 0.7
+          },
+          "05": {
+            "facing": "S",
+            "u": 0.3
+          },
+          "06": {
+            "facing": "S",
+            "u": 0.7
+          },
+          "07": {
+            "facing": "W",
+            "u": 0.3
+          },
+          "08": {
+            "facing": "W",
+            "u": 0.7
+          },
+          "09": {
+            "facing": "N",
+            "u": 0.5
+          }
+        },
+        "defaultFacing": "E"
+      }
     },
     {
       "id": "the-leo",
@@ -62,8 +294,66 @@
       "lon": -87.6341,
       "url": "https://leochicago.com/",
       "adapter": "generic",
-      "geometry": { "floors": 21, "floorHeightM": 3.1, "groundFloorOffsetM": 4 },
-      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+      "geometry": {
+        "floors": 21,
+        "floorHeightM": 3.1,
+        "groundFloorOffsetM": 4
+      },
+      "unitMapping": {
+        "scheme": "floor-prefix",
+        "stackDigits": 2,
+        "stacks": {
+          "10": {
+            "facing": "E",
+            "u": 0.5
+          },
+          "11": {
+            "facing": "S",
+            "u": 0.5
+          },
+          "12": {
+            "facing": "W",
+            "u": 0.5
+          },
+          "01": {
+            "facing": "N",
+            "u": 0.3
+          },
+          "02": {
+            "facing": "N",
+            "u": 0.7
+          },
+          "03": {
+            "facing": "E",
+            "u": 0.3
+          },
+          "04": {
+            "facing": "E",
+            "u": 0.7
+          },
+          "05": {
+            "facing": "S",
+            "u": 0.3
+          },
+          "06": {
+            "facing": "S",
+            "u": 0.7
+          },
+          "07": {
+            "facing": "W",
+            "u": 0.3
+          },
+          "08": {
+            "facing": "W",
+            "u": 0.7
+          },
+          "09": {
+            "facing": "N",
+            "u": 0.5
+          }
+        },
+        "defaultFacing": "E"
+      }
     },
     {
       "id": "stead-220",
@@ -73,8 +363,66 @@
       "lon": -87.6606,
       "url": "https://stead220.com/",
       "adapter": "generic",
-      "geometry": { "floors": 29, "floorHeightM": 3.1, "groundFloorOffsetM": 5 },
-      "unitMapping": { "scheme": "floor-prefix", "stackDigits": 2 }
+      "geometry": {
+        "floors": 29,
+        "floorHeightM": 3.1,
+        "groundFloorOffsetM": 5
+      },
+      "unitMapping": {
+        "scheme": "floor-prefix",
+        "stackDigits": 2,
+        "stacks": {
+          "10": {
+            "facing": "E",
+            "u": 0.5
+          },
+          "11": {
+            "facing": "S",
+            "u": 0.5
+          },
+          "12": {
+            "facing": "W",
+            "u": 0.5
+          },
+          "01": {
+            "facing": "N",
+            "u": 0.3
+          },
+          "02": {
+            "facing": "N",
+            "u": 0.7
+          },
+          "03": {
+            "facing": "E",
+            "u": 0.3
+          },
+          "04": {
+            "facing": "E",
+            "u": 0.7
+          },
+          "05": {
+            "facing": "S",
+            "u": 0.3
+          },
+          "06": {
+            "facing": "S",
+            "u": 0.7
+          },
+          "07": {
+            "facing": "W",
+            "u": 0.3
+          },
+          "08": {
+            "facing": "W",
+            "u": 0.7
+          },
+          "09": {
+            "facing": "N",
+            "u": 0.5
+          }
+        },
+        "defaultFacing": "E"
+      }
     }
   ]
 }
