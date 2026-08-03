@@ -15,6 +15,10 @@ on:
         description: "Regenerate the OSM skyline"
         type: boolean
         default: false
+  push:
+    # Alternative trigger: commit a change to this file (its words become
+    # flags: "capture", "skyline", "buildings=a,b").
+    paths: [".github/refresh-trigger"]
 
 permissions:
   contents: write
@@ -42,15 +46,28 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
 
+      - name: Resolve flags (inputs or trigger file)
+        id: flags
+        run: |
+          TRIG=""
+          [ -f .github/refresh-trigger ] && TRIG=$(cat .github/refresh-trigger)
+          CAPTURE=false; SKYLINE=false; BUILDINGS="${{ inputs.buildings }}"
+          if [ "${{ inputs.capture }}" = "true" ] || echo "$TRIG" | grep -qw capture; then CAPTURE=true; fi
+          if [ "${{ inputs.skyline }}" = "true" ] || echo "$TRIG" | grep -qw skyline; then SKYLINE=true; fi
+          if [ -z "$BUILDINGS" ]; then BUILDINGS=$(echo "$TRIG" | grep -o 'buildings=[a-z0-9,-]*' | cut -d= -f2 || true); fi
+          echo "capture=$CAPTURE" >> "$GITHUB_OUTPUT"
+          echo "skyline=$SKYLINE" >> "$GITHUB_OUTPUT"
+          echo "buildings=$BUILDINGS" >> "$GITHUB_OUTPUT"
+
       - name: Generate skyline (when missing or requested)
-        if: inputs.skyline || hashFiles('data/skyline.geojson') == ''
+        if: steps.flags.outputs.skyline == 'true' || hashFiles('data/skyline.geojson') == ''
         run: npm run skyline
 
       - name: Scrape
         run: |
           FLAGS=""
-          if [ -n "${{ inputs.buildings }}" ]; then FLAGS="$FLAGS --buildings=${{ inputs.buildings }}"; fi
-          if [ "${{ inputs.capture }}" = "true" ]; then FLAGS="$FLAGS --capture"; fi
+          if [ -n "${{ steps.flags.outputs.buildings }}" ]; then FLAGS="$FLAGS --buildings=${{ steps.flags.outputs.buildings }}"; fi
+          if [ "${{ steps.flags.outputs.capture }}" = "true" ]; then FLAGS="$FLAGS --capture"; fi
           npm run refresh -- $FLAGS
 
       - name: Commit results
