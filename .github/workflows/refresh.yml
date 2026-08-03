@@ -1,0 +1,74 @@
+name: Refresh prices
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildings:
+        description: "Comma-separated building ids (empty = all)"
+        required: false
+        default: ""
+      capture:
+        description: "Capture raw responses as fixtures (for adapter development)"
+        type: boolean
+        default: false
+      skyline:
+        description: "Regenerate the OSM skyline"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: refresh
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+
+      - name: Generate skyline (when missing or requested)
+        if: inputs.skyline || hashFiles('data/skyline.geojson') == ''
+        run: npm run skyline
+
+      - name: Scrape
+        run: |
+          FLAGS=""
+          if [ -n "${{ inputs.buildings }}" ]; then FLAGS="$FLAGS --buildings=${{ inputs.buildings }}"; fi
+          if [ "${{ inputs.capture }}" = "true" ]; then FLAGS="$FLAGS --capture"; fi
+          npm run refresh -- $FLAGS
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshots data/skyline.geojson scraper/fixtures 2>/dev/null || git add data/snapshots
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "data: snapshot $(date -u +%FT%TZ)"
+            git push
+          fi
+
+  deploy:
+    needs: scrape
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
