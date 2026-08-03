@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseUnitNumber } from "../src/parse";
+import { parseAvailableDate, parseUnitNumber, stackFromPlan } from "../src/parse";
 import { UnitMappingSchema } from "../src/types";
 
 const floorPrefix = UnitMappingSchema.parse({ scheme: "floor-prefix" });
@@ -29,6 +29,54 @@ describe("parseUnitNumber (floor-prefix)", () => {
   it("applies floorOffset", () => {
     const m = UnitMappingSchema.parse({ scheme: "floor-prefix", floorOffset: 2 });
     expect(parseUnitNumber("314", m)).toEqual({ floor: 5, stack: "14" });
+  });
+});
+
+describe("parseAvailableDate", () => {
+  const ref = new Date("2026-08-03T12:00:00Z");
+
+  it("maps now/available/today to the reference date", () => {
+    expect(parseAvailableDate("Available Now", ref)).toBe("2026-08-03");
+    expect(parseAvailableDate("Available", ref)).toBe("2026-08-03");
+    expect(parseAvailableDate("today", ref)).toBe("2026-08-03");
+  });
+
+  it("parses month-day with current year", () => {
+    expect(parseAvailableDate("Available Aug 15", ref)).toBe("2026-08-15");
+    expect(parseAvailableDate("Sep. 1st", ref)).toBe("2026-09-01");
+  });
+
+  it("keeps explicit years and ISO dates", () => {
+    expect(parseAvailableDate("Aug 15, 2027", ref)).toBe("2027-08-15");
+    expect(parseAvailableDate("2026-10-09", ref)).toBe("2026-10-09");
+  });
+
+  it("infers next year when the date already passed (with grace)", () => {
+    expect(parseAvailableDate("Jan 15", ref)).toBe("2027-01-15"); // long past
+    expect(parseAvailableDate("Jul 30", ref)).toBe("2026-07-30"); // within 7-day grace
+  });
+
+  it("returns null for garbage", () => {
+    expect(parseAvailableDate("call for details", ref)).toBeNull();
+    expect(parseAvailableDate(null, ref)).toBeNull();
+  });
+});
+
+describe("stackFromPlan", () => {
+  const m = UnitMappingSchema.parse({
+    scheme: "floor-prefix",
+    stackFromPlanRegex: "Unit\\s*0?(\\d{1,2})\\b",
+  });
+
+  it("extracts and zero-pads the stack", () => {
+    expect(stackFromPlan("Large Studio - Unit 01", m)).toBe("01");
+    expect(stackFromPlan("Medium 1BR - Unit 3", m)).toBe("03");
+    expect(stackFromPlan("Large 1BR - Unit 12", m)).toBe("12");
+  });
+
+  it("misses cleanly", () => {
+    expect(stackFromPlan("A1", m)).toBeNull();
+    expect(stackFromPlan("A1", UnitMappingSchema.parse({}))).toBeNull();
   });
 });
 

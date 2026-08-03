@@ -19,6 +19,11 @@ export const UnitMappingSchema = z.object({
   stackDigits: z.number().int().min(1).max(3).default(2),
   /** regex scheme: pattern with named groups (?<floor>...) and optional (?<stack>...). */
   regex: z.string().optional(),
+  /**
+   * When floorplans ARE stacks (e.g. Stead 220's "Large Studio - Unit 01"),
+   * a regex whose first capture group extracts the stack from the plan name.
+   */
+  stackFromPlanRegex: z.string().optional(),
   /** Added to the parsed floor (e.g. numbering starts above a podium). */
   floorOffset: z.number().int().default(0),
   stacks: z
@@ -93,6 +98,8 @@ export const UnitListingSchema = z.object({
   price: z.number().positive(),
   priceMax: z.number().positive().optional(),
   availableDate: z.string().nullable(),
+  /** Concession text, e.g. "1 month free on 13-month leases". */
+  specials: z.string().optional(),
   url: z.string().optional(),
 });
 export type UnitListing = z.infer<typeof UnitListingSchema>;
@@ -145,6 +152,11 @@ export interface SnapshotDelta {
   priceChanges: PriceChange[];
 }
 
+export interface DataWarning {
+  code: "scrape-error" | "empty-run" | "price-jump" | "count-drop";
+  message: string;
+}
+
 export interface BuildingHistory {
   buildingId: string;
   latest: { timestamp: string; units: UnitListing[] } | null;
@@ -153,9 +165,22 @@ export interface BuildingHistory {
   perUnit: Record<string, PricePoint[]>;
   /** floorplanName → aggregate series */
   perFloorplan: Record<string, FloorplanPoint[]>;
+  /** unitNumber → first time (and price at which) the unit was ever listed. */
+  perUnitMeta: Record<string, { firstSeen: string; firstPrice: number }>;
+  /** Data-sanity alarms for the latest state of this building. */
+  warnings: DataWarning[];
   /** Timestamps of every snapshot run that included this building (ok only). */
   runs: string[];
 }
+
+/** Shape of the compiled config.json (buildings.json + build-time health). */
+export type CompiledConfig = BuildingsConfig & {
+  health?: {
+    generated: string;
+    /** buildingId → warning count for dashboard badges. */
+    buildings: Record<string, number>;
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Skyline (data/skyline.geojson) — coordinates are LOCAL METERS around
@@ -182,12 +207,61 @@ export interface SkylineFeature {
   };
 }
 
+/** v2: streets and rail lines (local meters). */
+export interface SkylineLineFeature {
+  type: "Feature";
+  properties: { kind: "road" | "rail"; class: string; name?: string };
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+}
+
+/** v2: transit stations (local meters). */
+export interface SkylinePointFeature {
+  type: "Feature";
+  properties: { kind: "station"; name?: string; station?: string };
+  geometry: { type: "Point"; coordinates: [number, number] };
+}
+
+export type AnySkylineFeature = SkylineFeature | SkylineLineFeature | SkylinePointFeature;
+
 export interface SkylineCollection {
   type: "FeatureCollection";
   meta: {
     origin: { lat: number; lon: number };
     generated: string;
     bboxes: [number, number, number, number][]; // [s, w, n, e] in lon/lat
+    /** Absent = v1 (buildings only). 2 = adds roads/rail/stations. */
+    schemaVersion?: 2;
   };
-  features: SkylineFeature[];
+  features: AnySkylineFeature[];
+}
+
+// ---------------------------------------------------------------------------
+// Unit-position sidecar (data/unitmaps/<id>.json) — exact unit locations
+// derived from a georeferenced floorplate source (e.g. SightMap).
+// Coordinates are WGS84 lon/lat so the file survives skyline-origin changes;
+// the web projects them with makeProjector(skyline.meta.origin) at load.
+// ---------------------------------------------------------------------------
+
+export interface UnitPositionEntry {
+  lon: number;
+  lat: number;
+  facing?: Facing;
+  levelIndex?: number;
+}
+
+export interface UnitMapSidecar {
+  schemaVersion: 1;
+  buildingId: string;
+  source: { sightmapId: string; assetUrl: string; capturedAt: string };
+  fit: {
+    metersPerPixel: number;
+    bearingDeg: number;
+    /** Translation snap applied to align with the OSM footprint (meters E/N). */
+    translationCorrectionM: [number, number];
+    /** Worst distance of any unit centroid outside the footprint ring. */
+    residualM: number;
+    anchor: "center" | "top-left";
+  };
+  /** unitNumber → position. Accumulates across runs (merge, never overwrite). */
+  units: Record<string, UnitPositionEntry>;
 }

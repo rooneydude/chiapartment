@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  facadeParam,
   facadePoint,
+  facingFromNormal,
   makeBoxRing,
   normalizeRing,
+  orientedBoxRing,
+  placeStackBand,
   placeUnit,
   ringCentroid,
   ringSignedArea,
@@ -104,5 +108,62 @@ describe("placeUnit", () => {
     const ring = makeBoxRing(100, 50, 40, 20);
     expect(ringSignedArea(ring)).toBe(800);
     expect(ringCentroid(ring)).toEqual([100, 50]);
+  });
+
+  it("places exactly when a sidecar position is provided", () => {
+    const p = placeUnit("2305", mapping, geometry, square, { x: 17, y: 4 });
+    expect(p.confidence).toBe("exact");
+    expect(p.marker).toEqual([17, 4, 73.5]);
+    expect(p.floorSlab).toEqual({ zMin: 72, zMax: 75 });
+    // Nearest facade to (17,4) is the east edge (3 m) → camera looks east.
+    expect(p.viewCamera!.dir[0]).toBeCloseTo(1);
+  });
+});
+
+describe("facingFromNormal / facadeParam", () => {
+  it("snaps normals to compass facings", () => {
+    expect(facingFromNormal([0, 1])).toBe("N");
+    expect(facingFromNormal([1, 0.05])).toBe("E");
+    expect(facingFromNormal([0.7, -0.7])).toBe("SE");
+  });
+
+  it("round-trips facadePoint through facadeParam", () => {
+    const fp = facadePoint(square, "E", 0.25)!;
+    const back = facadeParam(square, fp.point)!;
+    expect(back.facing).toBe("E");
+    expect(back.u).toBeCloseTo(0.25, 5);
+    expect(back.normal[0]).toBeCloseTo(1);
+  });
+});
+
+describe("placeStackBand / orientedBoxRing", () => {
+  const geometry = BuildingGeometrySchema.parse({
+    floors: 10,
+    floorHeightM: 3,
+    groundFloorOffsetM: 4,
+  });
+
+  it("builds a ground-to-roof band on the mapped facade", () => {
+    const mapping = UnitMappingSchema.parse({
+      stacks: { "03": { facing: "S", u: 0.25 } },
+    });
+    const band = placeStackBand("03", mapping, geometry, square)!;
+    expect(band.facing).toBe("S");
+    expect(band.point[0]).toBeCloseTo(5);
+    expect(band.point[1]).toBeCloseTo(0);
+    expect(band.zMin).toBe(4);
+    expect(band.zMax).toBe(34);
+  });
+
+  it("returns null with no mapping or facade", () => {
+    expect(placeStackBand("99", UnitMappingSchema.parse({}), geometry, square)).toBeNull();
+  });
+
+  it("orientedBoxRing is CCW and centered at the point", () => {
+    const ring = orientedBoxRing([10, 0], [0, -1], 8, 4);
+    expect(ringSignedArea(ring)).toBeCloseTo(32);
+    const [cx, cy] = ringCentroid(ring);
+    expect(cx).toBeCloseTo(10);
+    expect(cy).toBeCloseTo(0);
   });
 });

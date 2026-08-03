@@ -11,7 +11,7 @@ export type Vec3 = [number, number, number];
 
 export interface UnitPlacement {
   floor: number | null;
-  confidence: "stack" | "floor-only" | "none";
+  confidence: "exact" | "stack" | "floor-only" | "none";
   /** Point just inside the facade, mid-floor height. */
   marker: Vec3 | null;
   /** Vertical extent of the unit's floor. */
@@ -95,6 +95,35 @@ export const FACING_VECTORS: Record<Facing, Vec2> = {
   NW: [-SQ, SQ],
 };
 
+const FACING_ORDER: Facing[] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+/** Snap a direction vector to the nearest 8-way compass facing. */
+export function facingFromNormal(n: Vec2): Facing {
+  // atan2(east, north) = compass bearing; 45° sectors.
+  const bearing = ((Math.atan2(n[0], n[1]) * 180) / Math.PI + 360) % 360;
+  return FACING_ORDER[Math.round(bearing / 45) % 8]!;
+}
+
+/** Compass bearing (0=N, 90=E) of a facing. */
+export function facingBearingDeg(facing: Facing): number {
+  return FACING_ORDER.indexOf(facing) * 45;
+}
+
+/** Axis-aligned-in-local-frame box ring centered at `point`, rotated so its
+ * width runs along the facade (perpendicular to `normal`). */
+export function orientedBoxRing(point: Vec2, normal: Vec2, width: number, depth: number): Vec2[] {
+  const len = Math.hypot(normal[0], normal[1]) || 1;
+  const n: Vec2 = [normal[0] / len, normal[1] / len];
+  const t: Vec2 = [-n[1], n[0]]; // tangent along the facade
+  const hw = width / 2;
+  const hd = depth / 2;
+  const corner = (a: number, b: number): Vec2 => [
+    point[0] + t[0] * a + n[0] * b,
+    point[1] + t[1] * a + n[1] * b,
+  ];
+  return normalizeRing([corner(-hw, -hd), corner(hw, -hd), corner(hw, hd), corner(-hw, hd)]);
+}
+
 interface Edge {
   a: Vec2;
   b: Vec2;
@@ -153,6 +182,78 @@ export function facadePoint(ring: Vec2[], facing: Facing, u: number): FacadePoin
   return null;
 }
 
+/**
+ * Inverse of facadePoint: for a point at/near the ring, find which facade it
+ * sits on and the fraction u along that facade. Used by tune mode and exact
+ * placement.
+ */
+export function facadeParam(
+  ring: Vec2[],
+  point: Vec2,
+): { facing: Facing; u: number; normal: Vec2; point: Vec2 } | null {
+  const edges = ringEdges(ring);
+  if (edges.length === 0) return null;
+
+  // Nearest edge by perpendicular distance to the segment.
+  let best: { edge: Edge; t: number; dist: number } | null = null;
+  for (const e of edges) {
+    const dx = e.b[0] - e.a[0];
+    const dy = e.b[1] - e.a[1];
+    const len2 = dx * dx + dy * dy;
+    const t = Math.max(
+      0,
+      Math.min(1, ((point[0] - e.a[0]) * dx + (point[1] - e.a[1]) * dy) / len2),
+    );
+    const px = e.a[0] + dx * t;
+    const py = e.a[1] + dy * t;
+    const dist = Math.hypot(point[0] - px, point[1] - py);
+    if (!best || dist < best.dist) best = { edge: e, t, dist };
+  }
+  if (!best) return null;
+
+  const facing = facingFromNormal(best.edge.normal);
+  const target = FACING_VECTORS[facing];
+  const facadeEdges = edges.filter(
+    (e) => e.normal[0] * target[0] + e.normal[1] * target[1] >= COS_45,
+  );
+  let walked = 0;
+  let total = 0;
+  for (const e of facadeEdges) {
+    if (e === best.edge) walked = total + best.t * e.length;
+    total += e.length;
+  }
+  if (total === 0) return null;
+  const onEdge: Vec2 = [
+    best.edge.a[0] + (best.edge.b[0] - best.edge.a[0]) * best.t,
+    best.edge.a[1] + (best.edge.b[1] - best.edge.a[1]) * best.t,
+  ];
+  return { facing, u: walked / total, normal: best.edge.normal, point: onEdge };
+}
+
+/**
+ * Full-height band for a stack (used when floorplans are stacks and no floor
+ * is known): position on the facade plus ground→roof vertical extent.
+ */
+export function placeStackBand(
+  stack: string,
+  mapping: UnitMapping,
+  geometry: BuildingGeometry,
+  ring: Vec2[],
+): { facing: Facing; point: Vec2; normal: Vec2; zMin: number; zMax: number } | null {
+  const info = mapping.stacks[stack];
+  const facing = info?.facing ?? mapping.defaultFacing;
+  if (!facing) return null;
+  const fp = facadePoint(ring, facing, info?.u ?? 0.5);
+  if (!fp) return null;
+  return {
+    facing,
+    point: fp.point,
+    normal: fp.normal,
+    zMin: geometry.groundFloorOffsetM,
+    zMax: geometry.groundFloorOffsetM + geometry.floors * geometry.floorHeightM,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The placement heuristic
 // ---------------------------------------------------------------------------
@@ -166,6 +267,8 @@ export function placeUnit(
   geometry: BuildingGeometry,
   /** Building footprint in scene-local meters; null if unknown. */
   ring: Vec2[] | null,
+  /** Exact unit position (scene-local meters) from a floorplate sidecar. */
+  exact?: { x: number; y: number },
 ): UnitPlacement {
   const none: UnitPlacement = {
     floor: null,
@@ -182,6 +285,29 @@ export function placeUnit(
   const zMin = geometry.groundFloorOffsetM + (floor - 1) * geometry.floorHeightM;
   const zMax = zMin + geometry.floorHeightM;
   const floorSlab = { zMin, zMax };
+  const midZExact = (zMin + zMax) / 2;
+
+  // Exact placement from a floorplate map beats every heuristic.
+  if (exact && ring) {
+    const fp = facadeParam(ring, [exact.x, exact.y]);
+    const viewCamera = fp
+      ? {
+          position: [
+            fp.point[0] + fp.normal[0] * 0.5,
+            fp.point[1] + fp.normal[1] * 0.5,
+            zMin + EYE_HEIGHT_M,
+          ] as Vec3,
+          dir: [fp.normal[0], fp.normal[1], 0] as Vec3,
+        }
+      : null;
+    return {
+      floor,
+      confidence: "exact",
+      marker: [exact.x, exact.y, midZExact],
+      floorSlab,
+      viewCamera,
+    };
+  }
 
   const stackInfo = stack ? mapping.stacks[stack] : undefined;
   const facing = stackInfo?.facing ?? mapping.defaultFacing;
