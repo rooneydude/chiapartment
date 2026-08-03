@@ -24,7 +24,10 @@ export function makeFixtureFetch(fixtureDir: string): typeof fetch {
   return async (input) => {
     const url =
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const entry = entries.find((e) => url.includes(e.match));
+    // Longest match wins — "https://x.com/" must not shadow "https://x.com/availability".
+    const entry = entries
+      .filter((e) => url.includes(e.match))
+      .sort((a, b) => b.match.length - a.match.length)[0];
     if (!entry) {
       return new Response("fixture miss", { status: 404 });
     }

@@ -94,7 +94,7 @@ export default function BuildingPage() {
           <AvailabilityTable units={filteredUnits} delta={history.delta} mapping={building.unitMapping} />
         </div>
         <div className="panel">
-          <Scene3D building={building} history={history} />
+          <Scene3D building={building} allBuildings={config.buildings} history={history} />
         </div>
       </div>
       <div style={{ height: 16 }} />

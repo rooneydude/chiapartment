@@ -89,7 +89,7 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
   for (const building of targets) {
     const cacheKey =
       !opts.fixtures && building.group
-        ? `${building.group}:${building.url}:${building.adapter}`
+        ? `${building.group}:${building.url}:${building.adapter}:${JSON.stringify(building.adapterOptions ?? null)}`
         : null;
     let result = cacheKey ? groupCache.get(cacheKey) : undefined;
     if (!result) {

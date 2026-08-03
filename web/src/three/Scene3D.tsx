@@ -22,7 +22,6 @@ import { useStore } from "../state/store";
 import {
   buildContextGeometry,
   DARK_THEME,
-  extrudeFeature,
   extrudeRing,
   LIGHT_THEME,
   planToThree,
@@ -52,42 +51,68 @@ interface SceneModel {
   fromOsm: boolean;
 }
 
-function buildModel(building: BuildingConfig, skyline: SkylineCollection | null): SceneModel {
+function configuredHeight(b: BuildingConfig): number {
+  return b.geometry.groundFloorOffsetM + b.geometry.floors * b.geometry.floorHeightM;
+}
+
+function findFeature(building: BuildingConfig, skyline: SkylineCollection) {
+  return skyline.features.find(
+    (f) =>
+      (building.geometry.osmWayId !== undefined &&
+        f.properties.osmId === building.geometry.osmWayId) ||
+      f.properties.trackedId === building.id,
+  );
+}
+
+function buildModel(
+  building: BuildingConfig,
+  allBuildings: BuildingConfig[],
+  skyline: SkylineCollection | null,
+): SceneModel {
   const g = building.geometry;
-  const buildingHeight = g.groundFloorOffsetM + g.floors * g.floorHeightM;
+  const buildingHeight = configuredHeight(building);
 
   let ring: Vec2[] | null = null;
   let contextGeometry: THREE.BufferGeometry | null = null;
-  let trackedGeometry: THREE.BufferGeometry | null = null;
+  let fromOsm = false;
 
   if (skyline) {
-    const feature = skyline.features.find((f) => f.properties.trackedId === building.id);
+    const feature = findFeature(building, skyline);
     if (feature?.geometry.coordinates[0]) {
       ring = normalizeRing(feature.geometry.coordinates[0] as Vec2[]);
-      // Extrude the tracked building to its CONFIGURED height (floors-derived),
-      // which the floor math uses — OSM height may disagree slightly.
-      trackedGeometry = extrudeRing(ring, 0, buildingHeight);
-      void extrudeFeature; // (kept for potential OSM-height rendering)
+      fromOsm = true;
     }
-    contextGeometry = buildContextGeometry(skyline, building.id);
+    // Other tracked towers keep their configured heights in the context —
+    // OSM's data for new towers is often stale (podium-only levels).
+    const exclude = new Set<number>();
+    const overrides = new Map<number, number>();
+    for (const b of allBuildings) {
+      const f = findFeature(b, skyline);
+      if (!f) continue;
+      if (b.id === building.id) exclude.add(f.properties.osmId);
+      else overrides.set(f.properties.osmId, configuredHeight(b));
+    }
+    contextGeometry = buildContextGeometry(skyline, exclude, overrides);
     if (!ring) {
       const projector = makeProjector(skyline.meta.origin);
       const [x, y] = projector.toLocal(building.lon, building.lat);
       ring = makeBoxRing(x, y, g.fallbackWidthM, g.fallbackDepthM);
-      trackedGeometry = extrudeRing(ring, 0, buildingHeight);
     }
   } else {
     ring = makeBoxRing(0, 0, g.fallbackWidthM, g.fallbackDepthM);
-    trackedGeometry = extrudeRing(ring, 0, buildingHeight);
   }
+
+  // Extrude the tracked building to its CONFIGURED height (floors-derived),
+  // which the floor math uses — OSM height may disagree.
+  const trackedGeometry = extrudeRing(ring, 0, buildingHeight);
 
   return {
     ring,
     center: ringCentroid(ring),
     buildingHeight,
     contextGeometry,
-    trackedGeometry: trackedGeometry!,
-    fromOsm: skyline !== null && skyline.features.some((f) => f.properties.trackedId === building.id),
+    trackedGeometry,
+    fromOsm,
   };
 }
 
@@ -284,8 +309,10 @@ function SceneContent({
 
 export default function Scene3D({
   building,
+  allBuildings,
 }: {
   building: BuildingConfig;
+  allBuildings: BuildingConfig[];
   history: BuildingHistory;
 }) {
   const [skyline, setSkyline] = useState<SkylineCollection | null | undefined>(undefined);
@@ -299,8 +326,8 @@ export default function Scene3D({
   }, []);
 
   const model = useMemo(
-    () => (skyline === undefined ? null : buildModel(building, skyline)),
-    [building, skyline],
+    () => (skyline === undefined ? null : buildModel(building, allBuildings, skyline)),
+    [building, allBuildings, skyline],
   );
 
   const placement = useMemo(

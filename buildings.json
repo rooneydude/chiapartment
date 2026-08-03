@@ -14,11 +14,12 @@
       "lat": 41.90455,
       "lon": -87.6346,
       "url": "https://1225oldtown.com/",
-      "adapter": "generic",
+      "adapter": "playwright-generic",
       "geometry": {
         "floors": 16,
         "floorHeightM": 3.2,
-        "groundFloorOffsetM": 6
+        "groundFloorOffsetM": 6,
+        "osmWayId": 210717478
       },
       "unitMapping": {
         "scheme": "floor-prefix",
@@ -83,12 +84,13 @@
       "lat": 41.9031,
       "lon": -87.6344,
       "url": "https://oldtownpark.com/",
-      "adapter": "generic",
+      "adapter": "oldtownpark",
       "group": "old-town-park",
       "geometry": {
         "floors": 32,
         "floorHeightM": 3.1,
-        "groundFloorOffsetM": 5
+        "groundFloorOffsetM": 5,
+        "osmWayId": 405410178
       },
       "unitMapping": {
         "scheme": "floor-prefix",
@@ -144,6 +146,9 @@
           }
         },
         "defaultFacing": "E"
+      },
+      "adapterOptions": {
+        "towerPath": "availability-tower-1"
       }
     },
     {
@@ -153,12 +158,13 @@
       "lat": 41.9034,
       "lon": -87.6355,
       "url": "https://oldtownpark.com/",
-      "adapter": "generic",
+      "adapter": "oldtownpark",
       "group": "old-town-park",
       "geometry": {
         "floors": 40,
         "floorHeightM": 3.1,
-        "groundFloorOffsetM": 5
+        "groundFloorOffsetM": 5,
+        "osmWayId": 590824742
       },
       "unitMapping": {
         "scheme": "floor-prefix",
@@ -214,6 +220,9 @@
           }
         },
         "defaultFacing": "E"
+      },
+      "adapterOptions": {
+        "towerPath": "availability-tower-2"
       }
     },
     {
@@ -223,12 +232,13 @@
       "lat": 41.9027,
       "lon": -87.6357,
       "url": "https://oldtownpark.com/",
-      "adapter": "generic",
+      "adapter": "oldtownpark",
       "group": "old-town-park",
       "geometry": {
         "floors": 41,
         "floorHeightM": 3.1,
-        "groundFloorOffsetM": 5
+        "groundFloorOffsetM": 5,
+        "osmWayId": 718976937
       },
       "unitMapping": {
         "scheme": "floor-prefix",
@@ -284,6 +294,9 @@
           }
         },
         "defaultFacing": "E"
+      },
+      "adapterOptions": {
+        "towerPath": "availability-tower-3"
       }
     },
     {
@@ -293,11 +306,12 @@
       "lat": 41.8961,
       "lon": -87.6341,
       "url": "https://leochicago.com/",
-      "adapter": "generic",
+      "adapter": "playwright-generic",
       "geometry": {
         "floors": 21,
         "floorHeightM": 3.1,
-        "groundFloorOffsetM": 4
+        "groundFloorOffsetM": 4,
+        "osmWayId": 210680449
       },
       "unitMapping": {
         "scheme": "floor-prefix",
@@ -362,11 +376,12 @@
       "lat": 41.8857,
       "lon": -87.6606,
       "url": "https://stead220.com/",
-      "adapter": "generic",
+      "adapter": "stead220",
       "geometry": {
         "floors": 29,
         "floorHeightM": 3.1,
-        "groundFloorOffsetM": 5
+        "groundFloorOffsetM": 5,
+        "osmWayId": 210269979
       },
       "unitMapping": {
         "scheme": "floor-prefix",

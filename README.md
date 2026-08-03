@@ -58,10 +58,15 @@ Node 22+. `npm install` once at the repo root (npm workspaces).
 
 ## Data status
 
-⚠️ **Current snapshots are sample data** generated from hand-written fixtures
-so the dashboard and 3D scene work end-to-end. They are replaced by real
-scrapes as per-site adapters land (see below). The stack→facade maps in
-`buildings.json` are placeholder quadrant guesses until refined per building.
+| Building | Adapter | Status |
+|---|---|---|
+| Old Town Park I–III | `oldtownpark` | ✅ real per-unit prices from per-tower availability pages |
+| Stead 220 | `stead220` | ✅ real floorplan/stack prices (plans are stacks; PH plans are single units) |
+| 1225 Old Town | `playwright-generic` | ⚠️ site blocks datacenter IPs (Imunify360); works from a residential IP via `npm run refresh -- --buildings=1225-old-town --commit` |
+| The Leo | `playwright-generic` | ⚠️ same Imunify360 block; same local-run workaround |
+
+The stack→facade maps in `buildings.json` are placeholder quadrant guesses
+until refined per building (`unitMapping.stacks`).
 
 ## Adding/fixing a site adapter
 

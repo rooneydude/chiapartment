@@ -23,10 +23,14 @@ function ringToShape(ring: Vec2[]): THREE.Shape {
   return shape;
 }
 
-export function extrudeFeature(feature: SkylineFeature): THREE.BufferGeometry | null {
+export function extrudeFeature(
+  feature: SkylineFeature,
+  heightOverride?: number,
+): THREE.BufferGeometry | null {
   const ring = feature.geometry.coordinates[0];
   if (!ring || ring.length < 3) return null;
-  const { height, minHeight } = feature.properties;
+  const { minHeight } = feature.properties;
+  const height = heightOverride ?? feature.properties.height;
   const depth = Math.max(height - minHeight, 1);
   const geo = new THREE.ExtrudeGeometry(ringToShape(ring as Vec2[]), {
     depth,
@@ -48,15 +52,20 @@ export function extrudeRing(ring: Vec2[], zMin: number, zMax: number): THREE.Buf
   return geo;
 }
 
-/** One merged geometry for all non-highlighted skyline buildings: 1 draw call. */
+/**
+ * One merged geometry for all non-highlighted skyline buildings: 1 draw call.
+ * `heightOverrides` (osmId → meters) corrects OSM's stale heights for other
+ * tracked towers so they don't render squat in each other's scenes.
+ */
 export function buildContextGeometry(
   skyline: SkylineCollection,
-  excludeTrackedId: string,
+  excludeOsmIds: Set<number>,
+  heightOverrides: Map<number, number>,
 ): THREE.BufferGeometry | null {
   const parts: THREE.BufferGeometry[] = [];
   for (const f of skyline.features) {
-    if (f.properties.trackedId === excludeTrackedId) continue;
-    const geo = extrudeFeature(f);
+    if (excludeOsmIds.has(f.properties.osmId)) continue;
+    const geo = extrudeFeature(f, heightOverrides.get(f.properties.osmId));
     if (geo) parts.push(geo);
   }
   if (parts.length === 0) return null;
