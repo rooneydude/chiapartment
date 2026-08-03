@@ -1,7 +1,17 @@
 [
   {
     "match": "https://stead220.com/",
-    "file": "availability.json",
-    "contentType": "application/json"
+    "file": "00-root.html",
+    "contentType": "text/html; charset=utf-8"
+  },
+  {
+    "match": "https://stead220.com/apartments",
+    "file": "01-apartments.html",
+    "contentType": "text/html; charset=utf-8"
+  },
+  {
+    "match": "https://stead220.com/floorplans",
+    "file": "02-floorplans.html",
+    "contentType": "text/html; charset=utf-8"
   }
 ]

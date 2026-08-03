@@ -1,7 +1,7 @@
 [
   {
     "match": "https://leochicago.com/",
-    "file": "availability.json",
-    "contentType": "application/json"
+    "file": "00-root.html",
+    "contentType": "text/html; charset=utf-8"
   }
 ]
