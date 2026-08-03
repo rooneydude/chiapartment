@@ -1,12 +1,7 @@
 [
   {
-    "match": "https://oldtownpark.com/",
-    "file": "00-root.html",
-    "contentType": "text/html; charset=UTF-8"
-  },
-  {
     "match": "https://oldtownpark.com/availability-tower-1",
-    "file": "01-availability-tower-1.html",
-    "contentType": "text/html; charset=UTF-8"
+    "file": "00-availability-tower-1.html",
+    "contentType": "text/html"
   }
 ]

@@ -1,17 +1,72 @@
 [
   {
-    "match": "https://stead220.com/",
-    "file": "00-root.html",
-    "contentType": "text/html; charset=utf-8"
-  },
-  {
-    "match": "https://stead220.com/apartments",
-    "file": "01-apartments.html",
-    "contentType": "text/html; charset=utf-8"
-  },
-  {
     "match": "https://stead220.com/floorplans",
-    "file": "02-floorplans.html",
-    "contentType": "text/html; charset=utf-8"
+    "file": "00-floorplans.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/1",
+    "file": "01-floorplans-1.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/2",
+    "file": "02-floorplans-2.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/3",
+    "file": "03-floorplans-3.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/4",
+    "file": "04-floorplans-4.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/5",
+    "file": "05-floorplans-5.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/6",
+    "file": "06-floorplans-6.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/7",
+    "file": "07-floorplans-7.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/8",
+    "file": "08-floorplans-8.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/9",
+    "file": "09-floorplans-9.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/10",
+    "file": "10-floorplans-10.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/11",
+    "file": "11-floorplans-11.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/12",
+    "file": "12-floorplans-12.html",
+    "contentType": "text/html"
+  },
+  {
+    "match": "https://stead220.com/floorplans/13",
+    "file": "13-floorplans-13.html",
+    "contentType": "text/html"
   }
 ]
