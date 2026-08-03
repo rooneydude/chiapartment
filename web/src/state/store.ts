@@ -5,6 +5,8 @@ export type CameraMode = "orbit" | "unit-view";
 
 interface AppState {
   selectedUnit: string | null;
+  /** Selected floorplan-as-stack (buildings where plans map to risers). */
+  selectedPlan: string | null;
   hoveredUnit: string | null;
   chartMode: ChartMode;
   cameraMode: CameraMode;
@@ -12,6 +14,7 @@ interface AppState {
   floorMin: number | null;
   floorMax: number | null;
   selectUnit(unit: string | null): void;
+  selectPlan(plan: string | null): void;
   hoverUnit(unit: string | null): void;
   setChartMode(mode: ChartMode): void;
   setCameraMode(mode: CameraMode): void;
@@ -22,6 +25,7 @@ interface AppState {
 
 export const useStore = create<AppState>((set) => ({
   selectedUnit: null,
+  selectedPlan: null,
   hoveredUnit: null,
   chartMode: "floorplans",
   cameraMode: "orbit",
@@ -31,9 +35,12 @@ export const useStore = create<AppState>((set) => ({
   selectUnit: (unit) =>
     set((s) => ({
       selectedUnit: unit,
+      selectedPlan: null,
       chartMode: unit ? "units" : s.chartMode,
       cameraMode: unit ? s.cameraMode : "orbit",
     })),
+  selectPlan: (plan) =>
+    set({ selectedPlan: plan, selectedUnit: null, cameraMode: "orbit" }),
   hoverUnit: (unit) => set({ hoveredUnit: unit }),
   setChartMode: (chartMode) => set({ chartMode }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
@@ -49,6 +56,7 @@ export const useStore = create<AppState>((set) => ({
   resetForBuilding: () =>
     set({
       selectedUnit: null,
+      selectedPlan: null,
       hoveredUnit: null,
       cameraMode: "orbit",
       bedsFilter: null,

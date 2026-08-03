@@ -5,7 +5,7 @@ import type {
   UnitListing,
   UnitMapping,
 } from "../../../shared/src/types";
-import { parseUnitNumber } from "../../../shared/src/parse";
+import { parseUnitNumber, stackFromPlan } from "../../../shared/src/parse";
 import { UnitMappingSchema } from "../../../shared/src/types";
 import { bedsLabel, daysSince, money, shortDate } from "../lib/format";
 import { useStore } from "../state/store";
@@ -26,7 +26,9 @@ export default function AvailabilityTable({
   meta: BuildingHistory["perUnitMeta"];
 }) {
   const selectedUnit = useStore((s) => s.selectedUnit);
+  const selectedPlan = useStore((s) => s.selectedPlan);
   const selectUnit = useStore((s) => s.selectUnit);
+  const selectPlan = useStore((s) => s.selectPlan);
   const hoverUnit = useStore((s) => s.hoverUnit);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
@@ -113,14 +115,22 @@ export default function AvailabilityTable({
               const key = u.unitNumber ?? `fp-${i}`;
               const change = u.unitNumber ? changeByUnit.get(u.unitNumber) : undefined;
               const floor = parseUnitNumber(u.unitNumber, m).floor;
+              const planStack = !u.unitNumber ? stackFromPlan(u.floorplanName, m) : null;
+              const isSelected =
+                u.unitNumber !== null
+                  ? selectedUnit === u.unitNumber
+                  : planStack !== null && selectedPlan === u.floorplanName;
               return (
                 <tr
                   key={key}
-                  className={selectedUnit === u.unitNumber ? "sel" : undefined}
-                  onClick={() =>
-                    u.unitNumber &&
-                    selectUnit(selectedUnit === u.unitNumber ? null : u.unitNumber)
-                  }
+                  className={isSelected ? "sel" : undefined}
+                  onClick={() => {
+                    if (u.unitNumber) {
+                      selectUnit(selectedUnit === u.unitNumber ? null : u.unitNumber);
+                    } else if (planStack) {
+                      selectPlan(selectedPlan === u.floorplanName ? null : u.floorplanName);
+                    }
+                  }}
                   onMouseEnter={() => hoverUnit(u.unitNumber)}
                   onMouseLeave={() => hoverUnit(null)}
                 >

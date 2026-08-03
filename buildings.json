@@ -439,7 +439,8 @@
             "u": 0.5
           }
         },
-        "defaultFacing": "E"
+        "defaultFacing": "E",
+        "stackFromPlanRegex": "Unit\\s*0?(\\d{1,2})\\b"
       }
     }
   ]

@@ -1,12 +1,17 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useLocation } from "react-router-dom";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { makeProjector } from "../../../shared/src/geo";
+import { parseUnitNumber, stackFromPlan } from "../../../shared/src/parse";
 import {
+  facadeParam,
   makeBoxRing,
   normalizeRing,
+  orientedBoxRing,
+  placeStackBand,
   placeUnit,
   ringCentroid,
   type UnitPlacement,
@@ -16,9 +21,12 @@ import { isBuildingFeature } from "../../../shared/src/types";
 import type {
   BuildingConfig,
   BuildingHistory,
+  Facing,
   SkylineCollection,
   UnitMapSidecar,
 } from "../../../shared/src/types";
+import CompassHud from "../components/CompassHud";
+import TuneOverlay, { type TuneClick } from "../components/TuneOverlay";
 import { loadSkyline, loadUnitMap } from "../lib/data";
 import { useStore } from "../state/store";
 import {
@@ -31,6 +39,17 @@ import {
   type SceneTheme,
 } from "./geometry";
 import Landmarks from "./Landmarks";
+
+/** Writes camera azimuth into the compass disc's transform — no React state. */
+function AzimuthBridge({ discRef }: { discRef: MutableRefObject<HTMLDivElement | null> }) {
+  const dir = useRef(new THREE.Vector3());
+  useFrame(({ camera }) => {
+    camera.getWorldDirection(dir.current);
+    const az = (Math.atan2(dir.current.x, -dir.current.z) * 180) / Math.PI;
+    if (discRef.current) discRef.current.style.transform = `rotate(${-az}deg)`;
+  });
+  return null;
+}
 
 function useTheme(): SceneTheme {
   const [dark, setDark] = useState(
@@ -148,13 +167,14 @@ function CameraRig({
   const controls = useRef<OrbitControlsImpl>(null);
   const goal = useRef<{ pos: THREE.Vector3; target: THREE.Vector3; t: number } | null>(null);
 
-  const homePos = useMemo(
-    () =>
-      new THREE.Vector3(
-        ...planToThree(center[0] + buildingHeight * 1.6, center[1] - buildingHeight * 1.9, buildingHeight * 0.9),
-      ),
-    [center, buildingHeight],
-  );
+  const homePos = useMemo(() => {
+    // Short buildings still need enough distance and altitude to clear
+    // taller neighbors.
+    const d = Math.max(buildingHeight, 110);
+    return new THREE.Vector3(
+      ...planToThree(center[0] + d * 1.5, center[1] - d * 1.7, d * 1.35),
+    );
+  }, [center, buildingHeight]);
   const homeTarget = useMemo(
     () => new THREE.Vector3(...planToThree(center[0], center[1], buildingHeight * 0.45)),
     [center, buildingHeight],
@@ -210,13 +230,16 @@ function SceneContent({
   model,
   theme,
   exactFor,
+  onTuneClick,
 }: {
   building: BuildingConfig;
   model: SceneModel;
   theme: SceneTheme;
   exactFor: (unit: string | null) => { x: number; y: number } | undefined;
+  onTuneClick?: (c: TuneClick) => void;
 }) {
   const selectedUnit = useStore((s) => s.selectedUnit);
+  const selectedPlan = useStore((s) => s.selectedPlan);
   const setFloorRange = useStore((s) => s.setFloorRange);
   const floorMin = useStore((s) => s.floorMin);
   const floorMax = useStore((s) => s.floorMax);
@@ -230,11 +253,33 @@ function SceneContent({
     [selectedUnit, building, g, model.ring, exactFor],
   );
 
-  // Clicking the tower at some height filters the table to that floor.
+  // Full-height band when a floorplan-as-stack is selected (Stead 220).
+  const bandGeometry = useMemo(() => {
+    if (!selectedPlan || !building.unitMapping) return null;
+    const stack = stackFromPlan(selectedPlan, building.unitMapping);
+    if (!stack) return null;
+    const band = placeStackBand(stack, building.unitMapping, g, model.ring);
+    if (!band) return null;
+    return extrudeRing(orientedBoxRing(band.point, band.normal, 9, 5), band.zMin, band.zMax);
+  }, [selectedPlan, building, g, model.ring]);
+
+  // Clicking the tower: tune mode emits a stacks-config snippet; otherwise
+  // filter the table to the clicked floor.
   const onBuildingClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     const z = e.point.y; // three y == height
     const floor = Math.floor((z - g.groundFloorOffsetM) / g.floorHeightM) + 1;
+    if (onTuneClick) {
+      const fp = facadeParam(model.ring, [e.point.x, -e.point.z]);
+      if (fp) {
+        onTuneClick({
+          facing: fp.facing,
+          u: fp.u,
+          floor: floor >= 1 && floor <= g.floors ? floor : null,
+        });
+      }
+      return;
+    }
     if (floor >= 1 && floor <= g.floors) {
       if (floorMin === floor && floorMax === floor) setFloorRange(null, null);
       else setFloorRange(floor, floor);
@@ -329,6 +374,13 @@ function SceneContent({
         </mesh>
       )}
 
+      {/* floorplan-as-stack band (ground to roof) */}
+      {bandGeometry && (
+        <mesh geometry={bandGeometry}>
+          <meshBasicMaterial color={theme.slab} transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+      )}
+
       {/* unit marker beacon */}
       {placement?.marker && (
         <group position={planToThree(...placement.marker)}>
@@ -362,10 +414,16 @@ export default function Scene3D({
 }) {
   const [skyline, setSkyline] = useState<SkylineCollection | null | undefined>(undefined);
   const [unitMap, setUnitMap] = useState<UnitMapSidecar | null>(null);
+  const [tuneClick, setTuneClick] = useState<TuneClick | null>(null);
+  const discRef = useRef<HTMLDivElement | null>(null);
   const theme = useTheme();
   const selectedUnit = useStore((s) => s.selectedUnit);
+  const selectedPlan = useStore((s) => s.selectedPlan);
   const cameraMode = useStore((s) => s.cameraMode);
   const setCameraMode = useStore((s) => s.setCameraMode);
+  // HashRouter reconciles this component across /b/:id routes — the query
+  // must come from the router so ?tune=1 applies without a full reload.
+  const tuneMode = new URLSearchParams(useLocation().search).has("tune");
 
   useEffect(() => {
     void loadSkyline().then(setSkyline);
@@ -411,6 +469,28 @@ export default function Scene3D({
     if (cameraMode === "unit-view" && !placement?.viewCamera) setCameraMode("orbit");
   }, [cameraMode, placement, setCameraMode]);
 
+  // Which way does the selection face? Sidecar beats stack map; never guess.
+  const mapping = building.unitMapping;
+  const facing: Facing | null = useMemo(() => {
+    if (selectedUnit) {
+      const sidecarFacing = unitMap?.units[selectedUnit]?.facing;
+      if (sidecarFacing) return sidecarFacing;
+      const { stack } = parseUnitNumber(selectedUnit, mapping ?? { scheme: "floor-prefix", stackDigits: 2, floorOffset: 0, stacks: {} });
+      return (stack && mapping?.stacks[stack]?.facing) || null;
+    }
+    if (selectedPlan && mapping) {
+      const stack = stackFromPlan(selectedPlan, mapping);
+      return (stack && mapping.stacks[stack]?.facing) || null;
+    }
+    return null;
+  }, [selectedUnit, selectedPlan, unitMap, mapping]);
+
+  const selectedStack: string | null = useMemo(() => {
+    if (selectedUnit && mapping) return parseUnitNumber(selectedUnit, mapping).stack;
+    if (selectedPlan && mapping) return stackFromPlan(selectedPlan, mapping);
+    return null;
+  }, [selectedUnit, selectedPlan, mapping]);
+
   if (!model) {
     return (
       <div className="scene-wrap">
@@ -420,7 +500,9 @@ export default function Scene3D({
   }
 
   const note = !selectedUnit
-    ? "click a unit, or click the tower to filter a floor"
+    ? selectedPlan
+      ? `plan "${selectedPlan}" — stack band, all floors`
+      : "click a unit, or click the tower to filter a floor"
     : placement?.confidence === "exact"
       ? `unit ${selectedUnit} — exact position (floorplate)`
       : placement?.confidence === "stack"
@@ -436,8 +518,19 @@ export default function Scene3D({
         camera={{ fov: 45, near: 1, far: 8000 }}
         style={{ background: theme.background }}
       >
-        <SceneContent building={building} model={model} theme={theme} exactFor={exactFor} />
+        <SceneContent
+          building={building}
+          model={model}
+          theme={theme}
+          exactFor={exactFor}
+          {...(tuneMode ? { onTuneClick: setTuneClick } : {})}
+        />
+        <AzimuthBridge discRef={discRef} />
       </Canvas>
+      <CompassHud building={building} facing={facing} discRef={discRef} />
+      {tuneMode && (
+        <TuneOverlay mapping={mapping} lastClick={tuneClick} selectedStack={selectedStack} />
+      )}
       <div className="scene-overlay">
         {placement?.viewCamera && (
           <button
