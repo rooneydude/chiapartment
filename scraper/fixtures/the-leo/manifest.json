@@ -1,32 +1,7 @@
 [
   {
-    "match": "https://api.hubapi.com/hs-script-loader-public/v2/config/pixels-and-events/json?portalId=2939252",
-    "file": "00-hs-script-loader-public-v2-config-pixels-and-events-json.json",
-    "contentType": "application/json"
-  },
-  {
-    "match": "https://api.hubspot.com/livechat-public/v1/message/public?portalId=2939252&conversations-embed=static-1.27681&mobile=false&messagesUtk=a457d57407ff41dab995885fecc159ad&traceId=a457d57407ff41dab995885fecc159ad",
-    "file": "01-livechat-public-v1-message-public.json",
-    "contentType": "application/json"
-  },
-  {
-    "match": "https://leochicago.com/",
-    "file": "02-root.html",
-    "contentType": "text/html"
-  },
-  {
-    "match": "https://api.hubapi.com/hs-script-loader-public/v2/config/pixels-and-events/json?portalId=2939252",
-    "file": "03-hs-script-loader-public-v2-config-pixels-and-events-json.json",
-    "contentType": "application/json"
-  },
-  {
-    "match": "https://api.hubspot.com/livechat-public/v1/message/public?portalId=2939252&conversations-embed=static-1.27681&mobile=false&messagesUtk=38d93c48cae642059f1a9a99aab65a59&traceId=38d93c48cae642059f1a9a99aab65a59&hubspotUtk=0ae4f68bb0f37d2b04b058d73a02a773&__hstc=24243365.0ae4f68bb0f37d2b04b058d73a02a773.1785770729990.1785770729990.1785770729990.1&__hssc=24243365.1.1785770729990",
-    "file": "04-livechat-public-v1-message-public.json",
-    "contentType": "application/json"
-  },
-  {
     "match": "https://leochicago.com/floorplans",
-    "file": "05-floorplans.html",
+    "file": "00-floorplans.html",
     "contentType": "text/html"
   }
 ]
