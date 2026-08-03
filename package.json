@@ -9,6 +9,7 @@
   "scripts": {
     "refresh": "tsx scraper/src/cli.ts refresh",
     "skyline": "tsx scraper/src/cli.ts skyline",
+    "unitmap": "tsx scraper/src/cli.ts unitmap",
     "build:data": "tsx scraper/src/cli.ts build-data",
     "dev": "npm run build:data && npm run -w web dev",
     "build": "npm run build:data && npm run -w web build",

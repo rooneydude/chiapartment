@@ -71,11 +71,15 @@ jobs:
           if [ "${{ steps.flags.outputs.capture }}" = "true" ]; then FLAGS="$FLAGS --capture"; fi
           npm run refresh -- $FLAGS
 
+      - name: Update unit-position maps
+        continue-on-error: true # positional data is a bonus, never a blocker
+        run: npm run unitmap
+
       - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots data/skyline.geojson scraper/fixtures 2>/dev/null || git add data/snapshots
+          git add data/snapshots data/skyline.geojson data/unitmaps scraper/fixtures 2>/dev/null || git add data/snapshots
           if git diff --cached --quiet; then
             echo "Nothing changed."
           else

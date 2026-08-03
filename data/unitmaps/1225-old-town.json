@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "buildingId": "1225-old-town",
+  "source": {
+    "sightmapId": "87594",
+    "assetUrl": "https://cdn.sightmap.com/assets/jl/w0/jlw03719w2y/72/7d/727d67713d611a5803dce818ec8abeda.umap",
+    "capturedAt": "2026-08-03T21:08:32.080Z"
+  },
+  "fit": {
+    "metersPerPixel": 0.0842,
+    "bearingDeg": 89.00000000000001,
+    "scaleSource": "footprint-fit",
+    "translationCorrectionM": [
+      4.5,
+      1.7
+    ],
+    "residualM": 6.3
+  },
+  "units": {
+    "1014": {
+      "lon": -87.6340911,
+      "lat": 41.9055604,
+      "facing": "N",
+      "levelIndex": 7
+    },
+    "1015": {
+      "lon": -87.6341965,
+      "lat": 41.9055234,
+      "facing": "N",
+      "levelIndex": 7
+    },
+    "1023": {
+      "lon": -87.6341538,
+      "lat": 41.9049586,
+      "facing": "SW",
+      "levelIndex": 7
+    },
+    "1024": {
+      "lon": -87.6341531,
+      "lat": 41.9049004,
+      "facing": "SW",
+      "levelIndex": 7
+    },
+    "1308": {
+      "lon": -87.6340842,
+      "lat": 41.9052049,
+      "facing": "N",
+      "levelIndex": 10
+    },
+    "1410": {
+      "lon": -87.6341667,
+      "lat": 41.9049734,
+      "facing": "SW",
+      "levelIndex": 11
+    },
+    "1509": {
+      "lon": -87.63417,
+      "lat": 41.9050879,
+      "facing": "NW",
+      "levelIndex": 12
+    },
+    "1602": {
+      "lon": -87.6340638,
+      "lat": 41.9045743,
+      "facing": "S",
+      "levelIndex": 13
+    },
+    "1605": {
+      "lon": -87.6340842,
+      "lat": 41.9052049,
+      "facing": "N",
+      "levelIndex": 13
+    },
+    "0424": {
+      "lon": -87.6341531,
+      "lat": 41.9049004,
+      "facing": "SW",
+      "levelIndex": 1
+    },
+    "0401": {
+      "lon": -87.6341769,
+      "lat": 41.9046037,
+      "facing": "S",
+      "levelIndex": 1
+    },
+    "0519": {
+      "lon": -87.6341687,
+      "lat": 41.9052383,
+      "facing": "N",
+      "levelIndex": 2
+    },
+    "0501": {
+      "lon": -87.6341769,
+      "lat": 41.9046037,
+      "facing": "S",
+      "levelIndex": 2
+    },
+    "0624": {
+      "lon": -87.6341531,
+      "lat": 41.9049004,
+      "facing": "SW",
+      "levelIndex": 3
+    },
+    "0607": {
+      "lon": -87.6339676,
+      "lat": 41.9050209,
+      "facing": "E",
+      "levelIndex": 3
+    },
+    "0724": {
+      "lon": -87.6341531,
+      "lat": 41.9049004,
+      "facing": "SW",
+      "levelIndex": 4
+    },
+    "0720": {
+      "lon": -87.6341675,
+      "lat": 41.9051809,
+      "facing": "N",
+      "levelIndex": 4
+    },
+    "0715": {
+      "lon": -87.6341965,
+      "lat": 41.9055234,
+      "facing": "N",
+      "levelIndex": 4
+    },
+    "0711": {
+      "lon": -87.6339941,
+      "lat": 41.9053697,
+      "facing": "N",
+      "levelIndex": 4
+    },
+    "0824": {
+      "lon": -87.6341531,
+      "lat": 41.9049004,
+      "facing": "SW",
+      "levelIndex": 5
+    },
+    "0817": {
+      "lon": -87.6341719,
+      "lat": 41.9053782,
+      "facing": "N",
+      "levelIndex": 5
+    },
+    "0812": {
+      "lon": -87.6339767,
+      "lat": 41.9054275,
+      "facing": "N",
+      "levelIndex": 5
+    },
+    "0921": {
+      "lon": -87.6341804,
+      "lat": 41.905113,
+      "facing": "NW",
+      "levelIndex": 6
+    },
+    "0918": {
+      "lon": -87.6341841,
+      "lat": 41.9053062,
+      "facing": "N",
+      "levelIndex": 6
+    },
+    "0917": {
+      "lon": -87.6341719,
+      "lat": 41.9053782,
+      "facing": "N",
+      "levelIndex": 6
+    },
+    "0906": {
+      "lon": -87.6339727,
+      "lat": 41.9049335,
+      "facing": "SE",
+      "levelIndex": 6
+    }
+  }
+}

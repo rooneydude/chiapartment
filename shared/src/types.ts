@@ -268,11 +268,12 @@ export interface UnitMapSidecar {
   fit: {
     metersPerPixel: number;
     bearingDeg: number;
+    /** Where the pixel scale came from — SightMap's zoom is not always honest. */
+    scaleSource: "georeference" | "footprint-fit";
     /** Translation snap applied to align with the OSM footprint (meters E/N). */
     translationCorrectionM: [number, number];
     /** Worst distance of any unit centroid outside the footprint ring. */
     residualM: number;
-    anchor: "center" | "top-left";
   };
   /** unitNumber → position. Accumulates across runs (merge, never overwrite). */
   units: Record<string, UnitPositionEntry>;

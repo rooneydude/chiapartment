@@ -39,9 +39,21 @@ try {
       await generateSkyline(root);
       break;
     }
+    case "unitmap": {
+      const { generateUnitmaps } = await import("./unitmap");
+      const buildingsFlag = flags.get("buildings");
+      await generateUnitmaps(root, {
+        fixtures: flags.get("fixtures") === true,
+        buildings:
+          typeof buildingsFlag === "string" && buildingsFlag.length > 0
+            ? buildingsFlag.split(",").map((s) => s.trim())
+            : null,
+      });
+      break;
+    }
     default:
       console.error(
-        `Usage: tsx scraper/src/cli.ts <refresh|build-data|skyline> [--fixtures] [--capture] [--commit] [--buildings=a,b]`,
+        `Usage: tsx scraper/src/cli.ts <refresh|build-data|skyline|unitmap> [--fixtures] [--capture] [--commit] [--buildings=a,b]`,
       );
       process.exit(2);
   }

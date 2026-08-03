@@ -2,6 +2,7 @@ import type {
   BuildingHistory,
   BuildingsConfig,
   SkylineCollection,
+  UnitMapSidecar,
 } from "../../../shared/src/types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -29,5 +30,13 @@ export async function loadSkyline(): Promise<SkylineCollection | null> {
     return await fetchJson<SkylineCollection>("skyline.geojson");
   } catch {
     return null; // not generated yet — 3D falls back to boxes
+  }
+}
+
+export async function loadUnitMap(buildingId: string): Promise<UnitMapSidecar | null> {
+  try {
+    return await fetchJson<UnitMapSidecar>(`unitmaps/${buildingId}.json`);
+  } catch {
+    return null; // no floorplate sidecar for this building
   }
 }

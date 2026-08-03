@@ -160,6 +160,14 @@ export function buildData(root: string): void {
     copyFileSync(skylineSrc, join(outDir, "skyline.geojson"));
   }
 
+  const unitmapsDir = join(root, "data", "unitmaps");
+  if (existsSync(unitmapsDir)) {
+    mkdirSync(join(outDir, "unitmaps"), { recursive: true });
+    for (const f of readdirSync(unitmapsDir)) {
+      if (f.endsWith(".json")) copyFileSync(join(unitmapsDir, f), join(outDir, "unitmaps", f));
+    }
+  }
+
   console.log(
     `Compiled ${snapshots.length} snapshot(s) for ${config.buildings.length} building(s) → web/public/data/`,
   );

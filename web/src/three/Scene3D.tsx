@@ -17,8 +17,9 @@ import type {
   BuildingConfig,
   BuildingHistory,
   SkylineCollection,
+  UnitMapSidecar,
 } from "../../../shared/src/types";
-import { loadSkyline } from "../lib/data";
+import { loadSkyline, loadUnitMap } from "../lib/data";
 import { useStore } from "../state/store";
 import {
   buildContextGeometry,
@@ -192,10 +193,12 @@ function SceneContent({
   building,
   model,
   theme,
+  exactFor,
 }: {
   building: BuildingConfig;
   model: SceneModel;
   theme: SceneTheme;
+  exactFor: (unit: string | null) => { x: number; y: number } | undefined;
 }) {
   const selectedUnit = useStore((s) => s.selectedUnit);
   const setFloorRange = useStore((s) => s.setFloorRange);
@@ -204,8 +207,11 @@ function SceneContent({
   const g = building.geometry;
 
   const placement = useMemo(
-    () => (selectedUnit ? placeUnit(selectedUnit, building.unitMapping, g, model.ring) : null),
-    [selectedUnit, building, g, model.ring],
+    () =>
+      selectedUnit
+        ? placeUnit(selectedUnit, building.unitMapping, g, model.ring, exactFor(selectedUnit))
+        : null,
+    [selectedUnit, building, g, model.ring, exactFor],
   );
 
   // Clicking the tower at some height filters the table to that floor.
@@ -317,6 +323,7 @@ export default function Scene3D({
   history: BuildingHistory;
 }) {
   const [skyline, setSkyline] = useState<SkylineCollection | null | undefined>(undefined);
+  const [unitMap, setUnitMap] = useState<UnitMapSidecar | null>(null);
   const theme = useTheme();
   const selectedUnit = useStore((s) => s.selectedUnit);
   const cameraMode = useStore((s) => s.cameraMode);
@@ -325,18 +332,40 @@ export default function Scene3D({
   useEffect(() => {
     void loadSkyline().then(setSkyline);
   }, []);
+  useEffect(() => {
+    setUnitMap(null);
+    void loadUnitMap(building.id).then(setUnitMap);
+  }, [building.id]);
 
   const model = useMemo(
     () => (skyline === undefined ? null : buildModel(building, allBuildings, skyline)),
     [building, allBuildings, skyline],
   );
 
+  // Exact sidecar position (projected into scene-local meters) for a unit.
+  const exactFor = useMemo(() => {
+    if (!unitMap || !skyline) return () => undefined;
+    const projector = makeProjector(skyline.meta.origin);
+    return (unit: string | null): { x: number; y: number } | undefined => {
+      const entry = unit ? unitMap.units[unit] : undefined;
+      if (!entry) return undefined;
+      const [x, y] = projector.toLocal(entry.lon, entry.lat);
+      return { x, y };
+    };
+  }, [unitMap, skyline]);
+
   const placement = useMemo(
     () =>
       model && selectedUnit
-        ? placeUnit(selectedUnit, building.unitMapping, building.geometry, model.ring)
+        ? placeUnit(
+            selectedUnit,
+            building.unitMapping,
+            building.geometry,
+            model.ring,
+            exactFor(selectedUnit),
+          )
         : null,
-    [model, selectedUnit, building],
+    [model, selectedUnit, building, exactFor],
   );
 
   useEffect(() => {
@@ -354,11 +383,13 @@ export default function Scene3D({
 
   const note = !selectedUnit
     ? "click a unit, or click the tower to filter a floor"
-    : placement?.confidence === "stack"
-      ? `unit ${selectedUnit} — approximate position`
-      : placement?.confidence === "floor-only"
-        ? `unit ${selectedUnit} — floor shown; exact position unknown`
-        : `unit ${selectedUnit} — can't infer floor from unit number`;
+    : placement?.confidence === "exact"
+      ? `unit ${selectedUnit} — exact position (floorplate)`
+      : placement?.confidence === "stack"
+        ? `unit ${selectedUnit} — approximate position`
+        : placement?.confidence === "floor-only"
+          ? `unit ${selectedUnit} — floor shown; exact position unknown`
+          : `unit ${selectedUnit} — can't infer floor from unit number`;
 
   return (
     <div className="scene-wrap">
@@ -367,7 +398,7 @@ export default function Scene3D({
         camera={{ fov: 45, near: 1, far: 8000 }}
         style={{ background: theme.background }}
       >
-        <SceneContent building={building} model={model} theme={theme} />
+        <SceneContent building={building} model={model} theme={theme} exactFor={exactFor} />
       </Canvas>
       <div className="scene-overlay">
         {placement?.viewCamera && (
