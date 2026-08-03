@@ -60,10 +60,10 @@ Node 22+. `npm install` once at the repo root (npm workspaces).
 
 | Building | Adapter | Status |
 |---|---|---|
-| Old Town Park I–III | `oldtownpark` | ✅ real per-unit prices from per-tower availability pages |
+| Old Town Park I–III | `oldtownpark` | ✅ real per-unit prices + ranges from per-tower availability pages |
 | Stead 220 | `stead220` | ✅ real floorplan/stack prices (plans are stacks; PH plans are single units) |
-| 1225 Old Town | `playwright-generic` | ⚠️ site blocks datacenter IPs (Imunify360); works from a residential IP via `npm run refresh -- --buildings=1225-old-town --commit` |
-| The Leo | `playwright-generic` | ⚠️ same Imunify360 block; same local-run workaround |
+| 1225 Old Town | `playwright-generic` | ✅ real prices/sqft, unit numbers on some rows (rendered-page heuristics; site's plain-HTTP endpoints sit behind Imunify360, but the full browser gets through) |
+| The Leo | `playwright-generic` | ✅ real floorplan-level prices/sqft (no unit numbers exposed) |
 
 The stack→facade maps in `buildings.json` are placeholder quadrant guesses
 until refined per building (`unitMapping.stacks`).
