@@ -1,0 +1,7 @@
+[
+  {
+    "match": "https://oldtownpark.com/",
+    "file": "availability.json",
+    "contentType": "application/json"
+  }
+]

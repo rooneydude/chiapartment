@@ -1,0 +1,140 @@
+{
+  "property": "stead-220",
+  "units": [
+    {
+      "UnitNumber": "203",
+      "FloorplanName": "S2",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 556,
+      "MinRent": 2435,
+      "AvailableDate": "2026-08-24"
+    },
+    {
+      "UnitNumber": "402",
+      "FloorplanName": "A1",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 787,
+      "MinRent": 3305,
+      "AvailableDate": "2026-09-17"
+    },
+    {
+      "UnitNumber": "405",
+      "FloorplanName": "S2",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 529,
+      "MinRent": 2425,
+      "AvailableDate": "2026-08-17"
+    },
+    {
+      "UnitNumber": "505",
+      "FloorplanName": "B2",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1158,
+      "MinRent": 4730,
+      "AvailableDate": "2026-09-12"
+    },
+    {
+      "UnitNumber": "704",
+      "FloorplanName": "B2",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1139,
+      "MinRent": 4585,
+      "AvailableDate": "2026-08-06"
+    },
+    {
+      "UnitNumber": "810",
+      "FloorplanName": "B2",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1215,
+      "MinRent": 4725,
+      "AvailableDate": "2026-08-05"
+    },
+    {
+      "UnitNumber": "912",
+      "FloorplanName": "S2",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 484,
+      "MinRent": 2540,
+      "AvailableDate": "2026-09-20"
+    },
+    {
+      "UnitNumber": "1010",
+      "FloorplanName": "A3",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 777,
+      "MinRent": 3220,
+      "AvailableDate": "2026-09-25"
+    },
+    {
+      "UnitNumber": "1709",
+      "FloorplanName": "B1",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1065,
+      "MinRent": 4715,
+      "AvailableDate": "2026-08-06"
+    },
+    {
+      "UnitNumber": "1912",
+      "FloorplanName": "S1",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 538,
+      "MinRent": 2545,
+      "AvailableDate": "2026-09-19"
+    },
+    {
+      "UnitNumber": "2004",
+      "FloorplanName": "A1",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 698,
+      "MinRent": 3495,
+      "AvailableDate": "2026-08-05"
+    },
+    {
+      "UnitNumber": "2110",
+      "FloorplanName": "A3",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 725,
+      "MinRent": 3400,
+      "AvailableDate": "2026-09-16"
+    },
+    {
+      "UnitNumber": "2304",
+      "FloorplanName": "C1",
+      "Beds": 3,
+      "Baths": 2,
+      "SQFT": 1678,
+      "MinRent": 7560,
+      "AvailableDate": "2026-09-22"
+    },
+    {
+      "UnitNumber": "2312",
+      "FloorplanName": "A3",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 771,
+      "MinRent": 3380,
+      "AvailableDate": "2026-09-13"
+    },
+    {
+      "UnitNumber": "2612",
+      "FloorplanName": "A2",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 792,
+      "MinRent": 3460,
+      "AvailableDate": "2026-08-19"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+[
+  {
+    "match": "https://leochicago.com/",
+    "file": "availability.json",
+    "contentType": "application/json"
+  }
+]

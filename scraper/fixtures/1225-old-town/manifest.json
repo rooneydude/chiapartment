@@ -1,0 +1,7 @@
+[
+  {
+    "match": "https://1225oldtown.com/",
+    "file": "availability.json",
+    "contentType": "application/json"
+  }
+]

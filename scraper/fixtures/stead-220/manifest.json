@@ -1,0 +1,7 @@
+[
+  {
+    "match": "https://stead220.com/",
+    "file": "availability.json",
+    "contentType": "application/json"
+  }
+]

@@ -1,0 +1,113 @@
+{
+  "property": "old-town-park-3",
+  "units": [
+    {
+      "UnitNumber": "404",
+      "FloorplanName": "A3",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 676,
+      "MinRent": 3375,
+      "AvailableDate": "2026-09-02"
+    },
+    {
+      "UnitNumber": "406",
+      "FloorplanName": "A1",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 735,
+      "MinRent": 3340,
+      "AvailableDate": "2026-08-29"
+    },
+    {
+      "UnitNumber": "1408",
+      "FloorplanName": "A1",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 750,
+      "MinRent": 3395,
+      "AvailableDate": "2026-10-01"
+    },
+    {
+      "UnitNumber": "1501",
+      "FloorplanName": "S2",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 514,
+      "MinRent": 2705,
+      "AvailableDate": "2026-09-14"
+    },
+    {
+      "UnitNumber": "1504",
+      "FloorplanName": "A1",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 712,
+      "MinRent": 3480,
+      "AvailableDate": "2026-08-15"
+    },
+    {
+      "UnitNumber": "1701",
+      "FloorplanName": "A3",
+      "Beds": 1,
+      "Baths": 1,
+      "SQFT": 676,
+      "MinRent": 3405,
+      "AvailableDate": "2026-09-19"
+    },
+    {
+      "UnitNumber": "2407",
+      "FloorplanName": "S1",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 512,
+      "MinRent": 2880,
+      "AvailableDate": "2026-09-09"
+    },
+    {
+      "UnitNumber": "2505",
+      "FloorplanName": "B2",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1163,
+      "MinRent": 5395,
+      "AvailableDate": "2026-08-23"
+    },
+    {
+      "UnitNumber": "3306",
+      "FloorplanName": "S2",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 537,
+      "MinRent": 2900,
+      "AvailableDate": "2026-08-23"
+    },
+    {
+      "UnitNumber": "3403",
+      "FloorplanName": "B2",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1064,
+      "MinRent": 5525,
+      "AvailableDate": "2026-09-17"
+    },
+    {
+      "UnitNumber": "3409",
+      "FloorplanName": "S2",
+      "Beds": 0,
+      "Baths": 1,
+      "SQFT": 516,
+      "MinRent": 2880,
+      "AvailableDate": "2026-08-07"
+    },
+    {
+      "UnitNumber": "3504",
+      "FloorplanName": "B1",
+      "Beds": 2,
+      "Baths": 2,
+      "SQFT": 1145,
+      "MinRent": 5440,
+      "AvailableDate": "2026-09-29"
+    }
+  ]
+}
