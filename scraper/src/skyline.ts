@@ -7,7 +7,6 @@ import type {
   SkylineCollection,
   SkylineFeature,
 } from "../../shared/src/types";
-import { httpFetch } from "./http";
 import { loadConfig } from "./run";
 
 /**
@@ -19,8 +18,16 @@ import { loadConfig } from "./run";
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
+/** Overpass policy: identify honestly, don't imitate a browser (406 otherwise). */
+const OVERPASS_HEADERS = {
+  "User-Agent": "chiapartment-skyline/0.1 (+https://github.com/rooneydude/chiapartment)",
+  Accept: "application/json",
+  "content-type": "application/x-www-form-urlencoded",
+};
+const OVERPASS_TIMEOUT_MS = 180_000;
 const METERS_PER_LEVEL = 3.2;
 const DEFAULT_HEIGHT_M = 10;
 const SIMPLIFY_TOLERANCE_M = 0.75;
@@ -55,22 +62,29 @@ out tags geom;`;
   }
 
   let lastErr: unknown;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      console.log(`  querying ${endpoint} ...`);
-      const res = await httpFetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { elements: OverpassElement[] };
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(cacheFile, JSON.stringify(data));
-      return data;
-    } catch (err) {
-      lastErr = err;
-      console.warn(`  ${endpoint} failed: ${err instanceof Error ? err.message : err}`);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        console.log(`  querying ${endpoint} ...`);
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: OVERPASS_HEADERS,
+          body: `data=${encodeURIComponent(query)}`,
+          signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { elements: OverpassElement[] };
+        mkdirSync(cacheDir, { recursive: true });
+        writeFileSync(cacheFile, JSON.stringify(data));
+        return data;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`  ${endpoint} failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    if (attempt === 0) {
+      console.log("  all endpoints failed; waiting 15s before one more pass");
+      await new Promise((r) => setTimeout(r, 15_000));
     }
   }
   throw new Error(`All Overpass endpoints failed: ${lastErr instanceof Error ? lastErr.message : lastErr}`);

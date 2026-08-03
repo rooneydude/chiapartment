@@ -61,6 +61,7 @@ jobs:
 
       - name: Generate skyline (when missing or requested)
         if: steps.flags.outputs.skyline == 'true' || hashFiles('data/skyline.geojson') == ''
+        continue-on-error: true # a bad Overpass day must not block price scraping
         run: npm run skyline
 
       - name: Scrape
