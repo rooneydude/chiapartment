@@ -29,10 +29,12 @@ export default function BuildingPage() {
   const floorMax = useStore((s) => s.floorMax);
 
   useEffect(() => {
-    resetForBuilding();
     if (!id) return;
     Promise.all([loadConfig(), loadHistory(id)])
       .then(([c, h]) => {
+        // Map focus beds into filter buckets (3 = "3+").
+        const focus = c.focus?.beds.map((b) => Math.min(b, 3)) ?? null;
+        resetForBuilding(focus);
         setConfig(c);
         setHistory(h);
       })

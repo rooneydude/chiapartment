@@ -70,6 +70,10 @@ export type BuildingConfig = z.infer<typeof BuildingConfigSchema>;
 
 export const BuildingsConfigSchema = z.object({
   schemaVersion: z.literal(1),
+  /** Bed counts the user actually shops for — the UI leads with these. */
+  focus: z
+    .object({ beds: z.array(z.number().int().min(0).max(6)).min(1) })
+    .optional(),
   skyline: z
     .object({
       /** Radius around each building cluster to include in the skyline. */

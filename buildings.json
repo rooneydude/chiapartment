@@ -1,5 +1,11 @@
 {
   "schemaVersion": 1,
+  "focus": {
+    "beds": [
+      0,
+      2
+    ]
+  },
   "skyline": {
     "clusterRadiusM": 1000,
     "nearRadiusM": 250,

@@ -20,7 +20,7 @@ interface AppState {
   setCameraMode(mode: CameraMode): void;
   toggleBeds(beds: number): void;
   setFloorRange(min: number | null, max: number | null): void;
-  resetForBuilding(): void;
+  resetForBuilding(focusBeds?: number[] | null): void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -53,13 +53,14 @@ export const useStore = create<AppState>((set) => ({
       return { bedsFilter: next.length === 0 ? null : next };
     }),
   setFloorRange: (floorMin, floorMax) => set({ floorMin, floorMax }),
-  resetForBuilding: () =>
+  resetForBuilding: (focusBeds) =>
     set({
       selectedUnit: null,
       selectedPlan: null,
       hoveredUnit: null,
       cameraMode: "orbit",
-      bedsFilter: null,
+      // Buildings open pre-filtered to the beds the user shops for.
+      bedsFilter: focusBeds && focusBeds.length > 0 ? focusBeds : null,
       floorMin: null,
       floorMax: null,
     }),

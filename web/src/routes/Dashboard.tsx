@@ -12,18 +12,20 @@ interface Row {
 
 export default function Dashboard() {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [focus, setFocus] = useState<number[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig()
-      .then((config) =>
-        Promise.all(
+      .then((config) => {
+        setFocus(config.focus?.beds ?? null);
+        return Promise.all(
           config.buildings.map(async (building) => ({
             building,
             history: await loadHistory(building.id),
           })),
-        ),
-      )
+        );
+      })
       .then(setRows)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
@@ -46,6 +48,8 @@ export default function Dashboard() {
     );
   }
 
+  const inFocus = (beds: number) => focus === null || focus.includes(beds);
+
   // Portfolio stats across every building's latest snapshot.
   const cheapest = (beds: number) => {
     let best: { price: number; name: string; id: string; unit: string | null } | null = null;
@@ -59,18 +63,34 @@ export default function Dashboard() {
     }
     return best;
   };
-  const s0 = cheapest(0);
-  const s1 = cheapest(1);
+  const statBeds = focus ?? [0, 1];
+  const statTiles = statBeds.map((b) => ({ beds: b, best: cheapest(b) }));
+
+  // Biggest drop among focus-bed units (join price changes to beds via the
+  // latest snapshot's unit list).
   let drop: { amount: number; name: string; id: string; unit: string } | null = null;
   for (const { building, history } of rows) {
+    const bedsByUnit = new Map(
+      (history.latest?.units ?? [])
+        .filter((u) => u.unitNumber)
+        .map((u) => [u.unitNumber!, u.beds]),
+    );
     for (const c of history.delta?.priceChanges ?? []) {
+      const beds = bedsByUnit.get(c.unitNumber);
+      if (beds === undefined || !inFocus(beds)) continue;
       const amount = c.from - c.to;
       if (amount > 0 && (!drop || amount > drop.amount)) {
         drop = { amount, name: building.name, id: building.id, unit: c.unitNumber };
       }
     }
   }
-  const totalUnits = rows.reduce((s, r) => s + (r.history.latest?.units.length ?? 0), 0);
+
+  const totalUnits = rows.reduce(
+    (s, r) => s + (r.history.latest?.units.filter((u) => inFocus(u.beds)).length ?? 0),
+    0,
+  );
+  const focusLabel =
+    focus === null ? "Units on market" : `${focus.map(bedsLabel).join(" + ")} on market`;
   const lastUpdated = rows
     .map((r) => r.history.latest?.timestamp)
     .filter((t): t is string => !!t)
@@ -80,19 +100,18 @@ export default function Dashboard() {
   return (
     <>
       <div className="stat-strip">
-        {s0 && (
-          <Link className="stat-tile" to={`/b/${s0.id}`}>
-            <span className="stat-label">Cheapest studio</span>
-            <span className="stat-value">{money(s0.price)}</span>
-            <span className="stat-sub">{s0.name}</span>
-          </Link>
-        )}
-        {s1 && (
-          <Link className="stat-tile" to={`/b/${s1.id}`}>
-            <span className="stat-label">Cheapest 1 BR</span>
-            <span className="stat-value">{money(s1.price)}</span>
-            <span className="stat-sub">{s1.name}</span>
-          </Link>
+        {statTiles.map(
+          ({ beds, best }) =>
+            best && (
+              <Link className="stat-tile" key={beds} to={`/b/${best.id}`}>
+                <span className="stat-label">Cheapest {bedsLabel(beds)}</span>
+                <span className="stat-value">{money(best.price)}</span>
+                <span className="stat-sub">
+                  {best.name}
+                  {beds === 2 ? ` · ${money(Math.round(best.price / 2))}/person split` : ""}
+                </span>
+              </Link>
+            ),
         )}
         {drop && (
           <Link className="stat-tile" to={`/b/${drop.id}`}>
@@ -104,7 +123,7 @@ export default function Dashboard() {
           </Link>
         )}
         <div className="stat-tile">
-          <span className="stat-label">Units on market</span>
+          <span className="stat-label">{focusLabel}</span>
           <span className="stat-value">{totalUnits}</span>
           <span className="stat-sub">
             {lastUpdated ? `as of ${longDate(lastUpdated)}` : "across 6 buildings"}
@@ -113,8 +132,13 @@ export default function Dashboard() {
       </div>
       <div className="cards">
       {rows.map(({ building, history }) => {
-        const units = history.latest?.units ?? [];
-        // Min price per bedroom count.
+        const allUnits = history.latest?.units ?? [];
+        const units = allUnits.filter((u) => inFocus(u.beds));
+        const bedsByUnit = new Map(
+          allUnits.filter((u) => u.unitNumber).map((u) => [u.unitNumber!, u.beds]),
+        );
+
+        // Min price per focus bedroom count.
         const minByBeds = new Map<number, number>();
         for (const u of units) {
           const cur = minByBeds.get(u.beds);
@@ -122,18 +146,29 @@ export default function Dashboard() {
         }
         const bedsSorted = [...minByBeds.keys()].sort((a, b) => a - b);
 
-        // Sparkline: min listed price across all units per run.
+        // Sparkline: min price per run among units currently known to be
+        // focus-beds (past-only units have unknown beds and are skipped).
+        const focusUnitNumbers = new Set(
+          units.map((u) => u.unitNumber).filter((u): u is string => u !== null),
+        );
         const minPerRun = history.runs.map((t) => {
           let min = Infinity;
-          for (const series of Object.values(history.perUnit)) {
+          for (const [unitNumber, series] of Object.entries(history.perUnit)) {
+            if (focus !== null && !focusUnitNumbers.has(unitNumber)) continue;
             for (const p of series) if (p.t === t && p.price < min) min = p.price;
           }
           return min;
         });
 
         const d = history.delta;
-        const drops = d?.priceChanges.filter((c) => c.to < c.from).length ?? 0;
-        const hikes = d?.priceChanges.filter((c) => c.to > c.from).length ?? 0;
+        const newCount = d?.newUnits.filter((u) => inFocus(u.beds)).length ?? 0;
+        const goneCount = d?.removedUnits.filter((u) => inFocus(u.beds)).length ?? 0;
+        const focusChanges = (d?.priceChanges ?? []).filter((c) => {
+          const beds = bedsByUnit.get(c.unitNumber);
+          return beds !== undefined && inFocus(beds);
+        });
+        const drops = focusChanges.filter((c) => c.to < c.from).length;
+        const hikes = focusChanges.filter((c) => c.to > c.from).length;
 
         return (
           <Link className="card" key={building.id} to={`/b/${building.id}`}>
@@ -147,7 +182,13 @@ export default function Dashboard() {
               {building.neighborhood && <span className="hood">{building.neighborhood}</span>}
             </div>
             <div className="prices">
-              {bedsSorted.length === 0 && <span>No listings in last snapshot</span>}
+              {bedsSorted.length === 0 && (
+                <span>
+                  {focus === null
+                    ? "No listings in last snapshot"
+                    : `No ${focus.map(bedsLabel).join(" or ")} listed right now`}
+                </span>
+              )}
               {bedsSorted.map((b) => (
                 <span key={b}>
                   {bedsLabel(b)} <strong>{money(minByBeds.get(b)!)}</strong>
@@ -161,14 +202,10 @@ export default function Dashboard() {
                 </span>
               )}
               {units.length > 0 && <span className="badge">{units.length} available</span>}
-              {(d?.newUnits.length ?? 0) > 0 && (
-                <span className="badge new">{d!.newUnits.length} new</span>
-              )}
+              {newCount > 0 && <span className="badge new">{newCount} new</span>}
               {drops > 0 && <span className="badge good">▼ {drops} price drops</span>}
               {hikes > 0 && <span className="badge bad">▲ {hikes} increases</span>}
-              {(d?.removedUnits.length ?? 0) > 0 && (
-                <span className="badge">{d!.removedUnits.length} gone</span>
-              )}
+              {goneCount > 0 && <span className="badge">{goneCount} gone</span>}
             </div>
             <div className="card-foot">
               <span>
