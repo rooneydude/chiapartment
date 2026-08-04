@@ -23,11 +23,14 @@ export default function Sparkline({
     )
     .join(" ");
   const last = points[points.length - 1]!;
+  const lastX = pad + (points.length - 1) * step;
   const lastY = height - pad - ((last - min) / span) * (height - pad * 2);
+  const area = `${d} L${lastX.toFixed(1)},${height - 1} L${pad},${height - 1} Z`;
   return (
     <svg width={width} height={height} aria-hidden="true">
+      <path d={area} fill="var(--accent-soft)" stroke="none" />
       <path d={d} fill="none" stroke="var(--series-1)" strokeWidth={2} strokeLinecap="round" />
-      <circle cx={pad + (points.length - 1) * step} cy={lastY} r={2.5} fill="var(--series-1)" />
+      <circle cx={lastX} cy={lastY} r={2.5} fill="var(--series-1)" />
     </svg>
   );
 }

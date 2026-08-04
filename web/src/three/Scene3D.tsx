@@ -26,6 +26,7 @@ import type {
   UnitMapSidecar,
 } from "../../../shared/src/types";
 import { sunPosition } from "../../../shared/src/sun";
+import { isDarkActive } from "../lib/theme";
 import CompassHud from "../components/CompassHud";
 import TuneOverlay, { type TuneClick } from "../components/TuneOverlay";
 import { loadSkyline, loadUnitMap } from "../lib/data";
@@ -55,14 +56,16 @@ function AzimuthBridge({ discRef }: { discRef: MutableRefObject<HTMLDivElement |
 }
 
 function useTheme(): SceneTheme {
-  const [dark, setDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
+  const [dark, setDark] = useState(isDarkActive);
   useEffect(() => {
+    const update = () => setDark(isDarkActive());
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const fn = (e: MediaQueryListEvent) => setDark(e.matches);
-    mq.addEventListener("change", fn);
-    return () => mq.removeEventListener("change", fn);
+    mq.addEventListener("change", update);
+    window.addEventListener("themechange", update);
+    return () => {
+      mq.removeEventListener("change", update);
+      window.removeEventListener("themechange", update);
+    };
   }, []);
   return dark ? DARK_THEME : LIGHT_THEME;
 }

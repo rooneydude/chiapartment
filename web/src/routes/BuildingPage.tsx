@@ -65,7 +65,17 @@ export default function BuildingPage() {
   );
 
   if (error) return <div className="error-box">Failed to load: {error}</div>;
-  if (!config || !history || !building) return <div className="loading">Loading…</div>;
+  if (!config || !history || !building) {
+    return (
+      <>
+        <div className="skeleton" style={{ height: 34, maxWidth: 460, marginBottom: 14 }} />
+        <div className="bldg-grid">
+          <div className="skeleton" style={{ height: 480 }} />
+          <div className="skeleton" style={{ height: 480 }} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

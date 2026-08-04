@@ -144,9 +144,14 @@ export default function AvailabilityTable({
                   <td>{u.floorplanName}</td>
                   <td>{bedsLabel(u.beds)}</td>
                   <td className="num">{u.sqft?.toLocaleString() ?? "—"}</td>
-                  <td className="num">
+                  <td className="num price-cell">
                     {money(u.price)}
                     {u.priceMax ? `+` : ""}
+                    {u.specials && (
+                      <span title={u.specials} style={{ marginLeft: 4, cursor: "help" }}>
+                        ✨
+                      </span>
+                    )}
                   </td>
                   <td className="num">
                     {change && (
