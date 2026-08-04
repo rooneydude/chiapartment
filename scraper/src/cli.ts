@@ -39,6 +39,14 @@ try {
       await generateSkyline(root);
       break;
     }
+    case "alerts": {
+      const { runAlerts } = await import("./alerts");
+      const outFlag = flags.get("out");
+      const hasAlerts = runAlerts(root, typeof outFlag === "string" ? outFlag : root);
+      // Exit 0 either way; the workflow checks for the body file.
+      if (!hasAlerts) process.exit(0);
+      break;
+    }
     case "unitmap": {
       const { generateUnitmaps } = await import("./unitmap");
       const buildingsFlag = flags.get("buildings");

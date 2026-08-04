@@ -19,11 +19,15 @@ on:
     # Alternative trigger: commit a change to this file (its words become
     # flags: "capture", "skyline", "buildings=a,b").
     paths: [".github/refresh-trigger"]
+  schedule:
+    # Monday mornings, Chicago time (14:00 UTC ≈ 8/9am depending on DST).
+    - cron: "0 14 * * 1"
 
 permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write # price alerts
 
 concurrency:
   group: refresh
@@ -74,6 +78,19 @@ jobs:
       - name: Update unit-position maps
         continue-on-error: true # positional data is a bonus, never a blocker
         run: npm run unitmap
+
+      - name: Price alerts (GitHub issue → phone push via the GitHub app)
+        continue-on-error: true # alerting must never fail the scrape
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm run alerts -- --out="$RUNNER_TEMP"
+          if [ -f "$RUNNER_TEMP/alert-body.md" ]; then
+            gh issue create \
+              --title "$(cat "$RUNNER_TEMP/alert-title.txt")" \
+              --body-file "$RUNNER_TEMP/alert-body.md" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
 
       - name: Commit results
         run: |

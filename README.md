@@ -30,10 +30,16 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
 
 - **No database, no servers.** Price history is a folder of committed JSON
   snapshots; the dashboard is a static site reading compiled versions of them.
-- **Manual refresh.** Run the **Refresh prices** workflow from the Actions tab
-  (or `npm run refresh` locally, `-- --commit` to also commit). Each run
-  appends one snapshot; deltas (new / removed / price changes) are computed
-  between consecutive snapshots at build time.
+- **Refresh.** Runs automatically every Monday morning (Chicago time), or on
+  demand via the **Refresh prices** workflow in the Actions tab (or
+  `npm run refresh` locally, `-- --commit` to also commit). Each run appends
+  one snapshot; deltas (new / removed / price changes) are computed between
+  consecutive snapshots at build time.
+- **Price alerts.** When a refresh finds a price drop or a new listing among
+  the focus bed counts (`focus.beds` in buildings.json), the workflow opens a
+  GitHub issue summarizing it. **To get these as phone notifications:**
+  install the GitHub mobile app and Watch this repository (Custom → Issues,
+  or All Activity).
 - **3D.** Building footprints come from OpenStreetMap (`npm run skyline`),
   extruded to their tagged heights. A unit's floor is parsed from its unit
   number; its position on the floorplate comes from the per-building
