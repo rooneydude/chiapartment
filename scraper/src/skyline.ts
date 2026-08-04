@@ -5,6 +5,7 @@ import { makeProjector, type LonLat, type Projector } from "../../shared/src/geo
 import type {
   AnySkylineFeature,
   BuildingConfig,
+  SkylineAreaFeature,
   SkylineCollection,
   SkylineFeature,
   SkylineLineFeature,
@@ -60,6 +61,17 @@ function buildingsQuery(bbox: [number, number, number, number]): string {
 (
   way["building"](${s},${w},${n},${e});
   relation["building"](${s},${w},${n},${e});
+);
+out tags geom;`;
+}
+
+function areasQuery(bbox: [number, number, number, number]): string {
+  const [s, w, n, e] = bbox;
+  return `[out:json][timeout:120];
+(
+  way["natural"="water"](${s},${w},${n},${e});
+  relation["natural"="water"](${s},${w},${n},${e});
+  way["leisure"="park"](${s},${w},${n},${e});
 );
 out tags geom;`;
 }
@@ -274,6 +286,54 @@ export function roadFeaturesFromElements(
   return out;
 }
 
+const AREA_SIMPLIFY_TOLERANCE_M = 2;
+const MIN_AREA_M2 = 400;
+
+function ringArea(ring: Pt[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    sum += a[0] * b[1] - b[0] * a[1];
+  }
+  return Math.abs(sum / 2);
+}
+
+/** Pure transform: Overpass water/park elements → flat area features. */
+export function areaFeaturesFromElements(
+  elements: OverpassElement[],
+  projector: Projector,
+): SkylineAreaFeature[] {
+  const out: SkylineAreaFeature[] = [];
+  for (const el of elements) {
+    const tags = el.tags ?? {};
+    const kind = tags["natural"] === "water" ? "water" : tags["leisure"] === "park" ? "park" : null;
+    if (!kind) continue;
+
+    const rings: { lat: number; lon: number }[][] = [];
+    if (el.type === "way" && el.geometry && el.geometry.length >= 4) rings.push(el.geometry);
+    else if (el.type === "relation" && el.members) {
+      for (const m of el.members) {
+        if (m.role === "outer" && m.geometry && m.geometry.length >= 4) rings.push(m.geometry);
+      }
+    }
+    for (const rawRing of rings) {
+      const local: Pt[] = rawRing.slice(0, -1).map((p) => projector.toLocal(p.lon, p.lat) as Pt);
+      if (ringArea(local) < MIN_AREA_M2) continue;
+      const simplified = simplifyRing(local, AREA_SIMPLIFY_TOLERANCE_M).map(
+        (p): Pt => [round1(p[0]), round1(p[1])],
+      );
+      if (simplified.length < 3) continue;
+      out.push({
+        type: "Feature",
+        properties: { kind, ...(tags["name"] ? { name: tags["name"] } : {}) },
+        geometry: { type: "Polygon", coordinates: [simplified] },
+      });
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -427,14 +487,29 @@ export async function generateSkyline(root: string): Promise<void> {
     }
   }
 
-  let allFeatures: AnySkylineFeature[] = [...features, ...transport];
+  // v2: water and park areas.
+  const areas: SkylineAreaFeature[] = [];
+  const seenAreaKeys = new Set<string>();
+  for (const bbox of bboxes) {
+    console.log(`Fetching OSM water/parks for bbox ${bbox.map((v) => v.toFixed(4)).join(", ")}`);
+    const data = await overpassQuery(areasQuery(bbox), cacheDir);
+    console.log(`  ${data.elements.length} elements`);
+    for (const f of areaFeaturesFromElements(data.elements, projector)) {
+      const key = JSON.stringify(f.geometry.coordinates[0]![0]) + f.properties.kind;
+      if (seenAreaKeys.has(key)) continue;
+      seenAreaKeys.add(key);
+      areas.push(f);
+    }
+  }
+
+  let allFeatures: AnySkylineFeature[] = [...features, ...areas, ...transport];
   let bytes = Buffer.byteLength(JSON.stringify(allFeatures));
   if (bytes > SIZE_TRUNCATE_BYTES) {
-    console.warn(`Transport layer pushes file to ${bytes} bytes — dropping minor roads`);
+    console.warn(`Extra layers push file to ${bytes} bytes — dropping minor roads`);
     transport = transport.filter(
       (f) => f.geometry.type === "Point" || !MINOR_ROAD_CLASSES.has((f.properties as { class?: string }).class ?? ""),
     );
-    allFeatures = [...features, ...transport];
+    allFeatures = [...features, ...areas, ...transport];
     bytes = Buffer.byteLength(JSON.stringify(allFeatures));
   } else if (bytes > SIZE_WARN_BYTES) {
     console.warn(`skyline.geojson is getting large (${bytes} bytes)`);
@@ -451,6 +526,6 @@ export async function generateSkyline(root: string): Promise<void> {
   const kb = Math.round(Buffer.byteLength(JSON.stringify(collection)) / 1024);
   const stations = transport.filter((f) => f.geometry.type === "Point").length;
   console.log(
-    `\nWrote ${features.length} footprints, ${transport.length - stations} road/rail lines, ${stations} stations (${kb} kB) → ${outPath}`,
+    `\nWrote ${features.length} footprints, ${areas.length} water/park areas, ${transport.length - stations} road/rail lines, ${stations} stations (${kb} kB) → ${outPath}`,
   );
 }

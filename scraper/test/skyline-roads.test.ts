@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeProjector } from "../../shared/src/geo";
-import { roadFeaturesFromElements } from "../src/skyline";
+import { areaFeaturesFromElements, roadFeaturesFromElements } from "../src/skyline";
+import { isAreaFeature, isBuildingFeature } from "../../shared/src/types";
 
 const projector = makeProjector({ lat: 41.9, lon: -87.635 });
 
@@ -64,5 +65,30 @@ describe("roadFeaturesFromElements", () => {
     const [f] = roadFeaturesFromElements([way(1, { highway: "primary" }, zigzag)], projector);
     expect(f!.geometry.type).toBe("LineString");
     expect((f!.geometry.coordinates as [number, number][]).length).toBeLessThan(10);
+  });
+});
+
+describe("areaFeaturesFromElements", () => {
+  const rect = (w: number, h: number): [number, number][] => [
+    [0, 0], [w, 0], [w, h], [0, h], [0, 0],
+  ];
+
+  it("classifies water and parks, drops tiny areas", () => {
+    const features = areaFeaturesFromElements(
+      [
+        way(1, { natural: "water", name: "Chicago River" }, rect(60, 40)), // 2400 m² ✓
+        way(2, { leisure: "park", name: "Seward Park" }, rect(100, 50)),
+        way(3, { natural: "water" }, rect(10, 10)), // 100 m² — dropped
+        way(4, { building: "yes" }, rect(50, 50)), // not an area feature
+      ],
+      projector,
+    );
+    expect(features).toHaveLength(2);
+    expect(features.map((f) => f.properties.kind).sort()).toEqual(["park", "water"]);
+    // These Polygons must NOT be mistaken for buildings by the web guards.
+    for (const f of features) {
+      expect(isAreaFeature(f)).toBe(true);
+      expect(isBuildingFeature(f)).toBe(false);
+    }
   });
 });

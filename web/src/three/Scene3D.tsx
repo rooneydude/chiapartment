@@ -1,4 +1,4 @@
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, Sky } from "@react-three/drei";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useLocation } from "react-router-dom";
@@ -25,13 +25,16 @@ import type {
   SkylineCollection,
   UnitMapSidecar,
 } from "../../../shared/src/types";
+import { sunPosition } from "../../../shared/src/sun";
 import CompassHud from "../components/CompassHud";
 import TuneOverlay, { type TuneClick } from "../components/TuneOverlay";
 import { loadSkyline, loadUnitMap } from "../lib/data";
 import { useStore } from "../state/store";
 import {
+  buildAreaGeometry,
   buildContextGeometry,
   buildLineGeometry,
+  buildRoadRibbonGeometry,
   DARK_THEME,
   extrudeRing,
   LIGHT_THEME,
@@ -71,7 +74,10 @@ interface SceneModel {
   buildingHeight: number;
   contextGeometry: THREE.BufferGeometry | null;
   roadGeometry: THREE.BufferGeometry | null;
+  roadRibbonGeometry: THREE.BufferGeometry | null;
   railGeometry: THREE.BufferGeometry | null;
+  waterGeometry: THREE.BufferGeometry | null;
+  parkGeometry: THREE.BufferGeometry | null;
   trackedGeometry: THREE.BufferGeometry;
   skyline: SkylineCollection | null;
   trackedOsmIds: Set<number>;
@@ -95,6 +101,7 @@ function buildModel(
   building: BuildingConfig,
   allBuildings: BuildingConfig[],
   skyline: SkylineCollection | null,
+  contextColor: string,
 ): SceneModel {
   const g = building.geometry;
   const buildingHeight = configuredHeight(building);
@@ -102,7 +109,10 @@ function buildModel(
   let ring: Vec2[] | null = null;
   let contextGeometry: THREE.BufferGeometry | null = null;
   let roadGeometry: THREE.BufferGeometry | null = null;
+  let roadRibbonGeometry: THREE.BufferGeometry | null = null;
   let railGeometry: THREE.BufferGeometry | null = null;
+  let waterGeometry: THREE.BufferGeometry | null = null;
+  let parkGeometry: THREE.BufferGeometry | null = null;
   const trackedOsmIds = new Set<number>();
   let fromOsm = false;
 
@@ -123,9 +133,12 @@ function buildModel(
       if (b.id === building.id) exclude.add(f.properties.osmId);
       else overrides.set(f.properties.osmId, configuredHeight(b));
     }
-    contextGeometry = buildContextGeometry(skyline, exclude, overrides);
+    contextGeometry = buildContextGeometry(skyline, exclude, overrides, contextColor);
     roadGeometry = buildLineGeometry(skyline, "road");
+    roadRibbonGeometry = buildRoadRibbonGeometry(skyline);
     railGeometry = buildLineGeometry(skyline, "rail");
+    waterGeometry = buildAreaGeometry(skyline, "water");
+    parkGeometry = buildAreaGeometry(skyline, "park");
     if (!ring) {
       const projector = makeProjector(skyline.meta.origin);
       const [x, y] = projector.toLocal(building.lon, building.lat);
@@ -145,12 +158,26 @@ function buildModel(
     buildingHeight,
     contextGeometry,
     roadGeometry,
+    roadRibbonGeometry,
     railGeometry,
+    waterGeometry,
+    parkGeometry,
     trackedGeometry,
     skyline,
     trackedOsmIds,
     fromOsm,
   };
+}
+
+/** Sun direction in three-space from real solar position (clamped to dusk). */
+function sunVector(building: BuildingConfig): [number, number, number] {
+  const { azimuthDeg, altitudeDeg } = sunPosition(new Date(), building.lat, building.lon);
+  const alt = Math.max(altitudeDeg, 12) * (Math.PI / 180); // never fully horizontal
+  const az = azimuthDeg * (Math.PI / 180);
+  const east = Math.sin(az) * Math.cos(alt);
+  const north = Math.cos(az) * Math.cos(alt);
+  const up = Math.sin(alt);
+  return planToThree(east * 900, north * 900, up * 900);
 }
 
 /** Animates the camera between orbit mode and the unit's window viewpoint. */
@@ -314,26 +341,53 @@ function SceneContent({
     );
   }, [floorMin, floorMax, placement, model, g]);
 
+  const sunPos = useMemo(() => sunVector(building), [building]);
+  const outlineGeometry = useMemo(
+    () => new THREE.EdgesGeometry(model.trackedGeometry, 25),
+    [model.trackedGeometry],
+  );
+
   return (
     <>
-      <ambientLight intensity={0.85} />
-      <directionalLight position={[420, 600, 280]} intensity={1.5} />
-      <directionalLight position={[-300, 200, -400]} intensity={0.35} />
+      <fog attach="fog" args={[theme.fog, 700, 3600]} />
+      {theme.sky && (
+        <Sky sunPosition={sunPos} turbidity={6} rayleigh={1.2} distance={45000} />
+      )}
+      <ambientLight intensity={theme.sky ? 0.75 : 0.9} />
+      <directionalLight position={sunPos} intensity={theme.sky ? 1.6 : 1.1} color="#fff4e0" />
+      <directionalLight position={[-300, 200, -400]} intensity={0.3} />
 
       {/* ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]}>
-        <circleGeometry args={[3400, 48]} />
+        <circleGeometry args={[3800, 48]} />
         <meshLambertMaterial color={theme.ground} />
       </mesh>
 
-      {/* merged skyline context */}
-      {model.contextGeometry && (
-        <mesh geometry={model.contextGeometry}>
-          <meshLambertMaterial color={theme.context} flatShading />
+      {/* water + parks */}
+      {model.waterGeometry && (
+        <mesh geometry={model.waterGeometry}>
+          <meshLambertMaterial color={theme.water} />
+        </mesh>
+      )}
+      {model.parkGeometry && (
+        <mesh geometry={model.parkGeometry}>
+          <meshLambertMaterial color={theme.park} />
         </mesh>
       )}
 
-      {/* streets + rail (2 draw calls) */}
+      {/* merged skyline context (per-building vertex colors) */}
+      {model.contextGeometry && (
+        <mesh geometry={model.contextGeometry}>
+          <meshLambertMaterial vertexColors flatShading />
+        </mesh>
+      )}
+
+      {/* streets + rail */}
+      {model.roadRibbonGeometry && (
+        <mesh geometry={model.roadRibbonGeometry}>
+          <meshBasicMaterial color={theme.roadRibbon} />
+        </mesh>
+      )}
       {model.roadGeometry && (
         <lineSegments geometry={model.roadGeometry}>
           <lineBasicMaterial color={theme.road} />
@@ -359,6 +413,9 @@ function SceneContent({
       <mesh geometry={model.trackedGeometry} onClick={onBuildingClick}>
         <meshLambertMaterial color={theme.accent} transparent opacity={0.55} flatShading />
       </mesh>
+      <lineSegments geometry={outlineGeometry}>
+        <lineBasicMaterial color={theme.outline} transparent opacity={0.5} />
+      </lineSegments>
 
       {/* selected unit floor slab */}
       {slabGeometry && (
@@ -434,8 +491,9 @@ export default function Scene3D({
   }, [building.id]);
 
   const model = useMemo(
-    () => (skyline === undefined ? null : buildModel(building, allBuildings, skyline)),
-    [building, allBuildings, skyline],
+    () =>
+      skyline === undefined ? null : buildModel(building, allBuildings, skyline, theme.context),
+    [building, allBuildings, skyline, theme.context],
   );
 
   // Exact sidecar position (projected into scene-local meters) for a unit.

@@ -72,19 +72,26 @@ export default function Landmarks({
     <>
       {stations.map((s) => (
         <group key={`st-${s.name}-${s.pos[0]}`} position={planToThree(s.pos[0], s.pos[1], 0)}>
-          <mesh position={[0, 4, 0]}>
-            <cylinderGeometry args={[2.2, 2.2, 8, 12]} />
+          <mesh position={[0, 5, 0]}>
+            <cylinderGeometry args={[1.4, 1.4, 10, 10]} />
             <meshBasicMaterial color={theme.station} />
           </mesh>
+          <mesh position={[0, 10.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[2.4, 3.6, 20]} />
+            <meshBasicMaterial color={theme.station} side={2} />
+          </mesh>
           <Html
-            position={[0, 14, 0]}
+            position={[0, 17, 0]}
             center
             style={{
               color: theme.label,
+              background: theme.labelBg,
+              border: "1px solid rgba(128,128,128,0.25)",
+              borderRadius: 999,
+              padding: "1px 8px",
               fontSize: 11,
               whiteSpace: "nowrap",
               pointerEvents: "none",
-              textShadow: "0 0 4px rgba(0,0,0,0.15)",
             }}
           >
             ⊙ {s.name}
@@ -94,12 +101,15 @@ export default function Landmarks({
       {landmarks.map((l) => (
         <Html
           key={`lm-${l.name}-${l.pos[0]}`}
-          position={planToThree(l.pos[0], l.pos[1], l.h + 16)}
+          position={planToThree(l.pos[0], l.pos[1], l.h + 18)}
           center
           style={{
             color: theme.label,
+            background: theme.labelBg,
+            borderRadius: 999,
+            padding: "1px 8px",
             fontSize: 11,
-            opacity: 0.85,
+            opacity: 0.9,
             whiteSpace: "nowrap",
             pointerEvents: "none",
           }}

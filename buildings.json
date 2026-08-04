@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "skyline": {
-    "clusterRadiusM": 800,
+    "clusterRadiusM": 1000,
     "nearRadiusM": 250,
     "minHeightNearM": 4,
     "minHeightFarM": 20
@@ -78,7 +78,8 @@
       },
       "adapterOptions": {
         "sightmapApiUrl": "https://sightmap.com/app/api/v1/60p7xoklv7n/sightmaps/87594"
-      }
+      },
+      "neighborhood": "Old Town"
     },
     {
       "id": "old-town-park-1",
@@ -152,7 +153,8 @@
       },
       "adapterOptions": {
         "towerPath": "availability-tower-1"
-      }
+      },
+      "neighborhood": "Old Town"
     },
     {
       "id": "old-town-park-2",
@@ -226,7 +228,8 @@
       },
       "adapterOptions": {
         "towerPath": "availability-tower-2"
-      }
+      },
+      "neighborhood": "Old Town"
     },
     {
       "id": "old-town-park-3",
@@ -300,7 +303,8 @@
       },
       "adapterOptions": {
         "towerPath": "availability-tower-3"
-      }
+      },
+      "neighborhood": "Old Town"
     },
     {
       "id": "the-leo",
@@ -370,7 +374,8 @@
           }
         },
         "defaultFacing": "E"
-      }
+      },
+      "neighborhood": "River North"
     },
     {
       "id": "stead-220",
@@ -441,7 +446,8 @@
         },
         "defaultFacing": "E",
         "stackFromPlanRegex": "Unit\\s*0?(\\d{1,2})\\b"
-      }
+      },
+      "neighborhood": "Fulton Market"
     }
   ]
 }

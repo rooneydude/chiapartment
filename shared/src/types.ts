@@ -61,6 +61,8 @@ export const BuildingConfigSchema = z.object({
   adapterOptions: z.record(z.unknown()).optional(),
   /** Towers of one complex share a group (and one leasing source). */
   group: z.string().optional(),
+  /** Display-only neighborhood tag (e.g. "Old Town"). */
+  neighborhood: z.string().optional(),
   geometry: BuildingGeometrySchema,
   unitMapping: UnitMappingSchema.optional(),
 });
@@ -207,6 +209,13 @@ export interface SkylineFeature {
   };
 }
 
+/** v2: flat ground areas — water bodies and parks (local meters). */
+export interface SkylineAreaFeature {
+  type: "Feature";
+  properties: { kind: "water" | "park"; name?: string };
+  geometry: { type: "Polygon"; coordinates: [number, number][][] };
+}
+
 /** v2: streets and rail lines (local meters). */
 export interface SkylineLineFeature {
   type: "Feature";
@@ -221,10 +230,19 @@ export interface SkylinePointFeature {
   geometry: { type: "Point"; coordinates: [number, number] };
 }
 
-export type AnySkylineFeature = SkylineFeature | SkylineLineFeature | SkylinePointFeature;
+export type AnySkylineFeature =
+  | SkylineFeature
+  | SkylineAreaFeature
+  | SkylineLineFeature
+  | SkylinePointFeature;
 
 export function isBuildingFeature(f: AnySkylineFeature): f is SkylineFeature {
-  return f.geometry.type === "Polygon";
+  // Water/park areas are Polygons too — buildings are the ones with a height.
+  return f.geometry.type === "Polygon" && "height" in f.properties;
+}
+
+export function isAreaFeature(f: AnySkylineFeature): f is SkylineAreaFeature {
+  return f.geometry.type === "Polygon" && !("height" in f.properties);
 }
 
 export function isLineFeature(f: AnySkylineFeature): f is SkylineLineFeature {
