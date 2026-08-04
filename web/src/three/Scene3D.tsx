@@ -39,9 +39,11 @@ import {
   DARK_THEME,
   extrudeRing,
   LIGHT_THEME,
+  makeGroundTexture,
   planToThree,
   type SceneTheme,
 } from "./geometry";
+import { makeFacadeMaterial } from "./facade";
 import Landmarks from "./Landmarks";
 
 /** Writes camera azimuth into the compass disc's transform — no React state. */
@@ -349,6 +351,25 @@ function SceneContent({
     () => new THREE.EdgesGeometry(model.trackedGeometry, 25),
     [model.trackedGeometry],
   );
+  const facadeMaterial = useMemo(
+    () => makeFacadeMaterial({ night: !theme.sky, vertexColors: true }),
+    [theme.sky],
+  );
+  const groundTexture = useMemo(
+    () => makeGroundTexture(theme.ground, theme.groundEdge),
+    [theme.ground, theme.groundEdge],
+  );
+
+  // The sun shadow camera must track the building (scenes sit far from the
+  // world origin — Stead is ~2.5 km from the Wells corridor).
+  const sunRef = useRef<THREE.DirectionalLight>(null);
+  const [cx, cy] = model.center;
+  useEffect(() => {
+    const light = sunRef.current;
+    if (!light) return;
+    light.target.position.set(...planToThree(cx, cy, 0));
+    light.target.updateMatrixWorld();
+  }, [cx, cy]);
 
   return (
     <>
@@ -356,39 +377,51 @@ function SceneContent({
       {theme.sky && (
         <Sky sunPosition={sunPos} turbidity={6} rayleigh={1.2} distance={45000} />
       )}
-      <ambientLight intensity={theme.sky ? 0.75 : 0.9} />
-      <directionalLight position={sunPos} intensity={theme.sky ? 1.6 : 1.1} color="#fff4e0" />
+      <ambientLight intensity={theme.sky ? 0.7 : 0.85} />
+      <directionalLight
+        ref={sunRef}
+        position={[sunPos[0] + cx, sunPos[1], sunPos[2] - cy]}
+        intensity={theme.sky ? 1.7 : 1.0}
+        color="#fff4e0"
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-900}
+        shadow-camera-right={900}
+        shadow-camera-top={900}
+        shadow-camera-bottom={-900}
+        shadow-camera-near={10}
+        shadow-camera-far={2600}
+        shadow-bias={-0.0004}
+      />
       <directionalLight position={[-300, 200, -400]} intensity={0.3} />
 
       {/* ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
         <circleGeometry args={[3800, 48]} />
-        <meshLambertMaterial color={theme.ground} />
+        <meshLambertMaterial map={groundTexture} />
       </mesh>
 
       {/* water + parks */}
       {model.waterGeometry && (
-        <mesh geometry={model.waterGeometry}>
-          <meshLambertMaterial color={theme.water} />
+        <mesh geometry={model.waterGeometry} receiveShadow>
+          <meshPhongMaterial color={theme.water} shininess={90} specular="#ffffff" />
         </mesh>
       )}
       {model.parkGeometry && (
-        <mesh geometry={model.parkGeometry}>
+        <mesh geometry={model.parkGeometry} receiveShadow>
           <meshLambertMaterial color={theme.park} />
         </mesh>
       )}
 
-      {/* merged skyline context (per-building vertex colors) */}
+      {/* merged skyline context (vertex colors + procedural windows) */}
       {model.contextGeometry && (
-        <mesh geometry={model.contextGeometry}>
-          <meshLambertMaterial vertexColors flatShading />
-        </mesh>
+        <mesh geometry={model.contextGeometry} material={facadeMaterial} castShadow receiveShadow />
       )}
 
       {/* streets + rail */}
       {model.roadRibbonGeometry && (
-        <mesh geometry={model.roadRibbonGeometry}>
-          <meshBasicMaterial color={theme.roadRibbon} />
+        <mesh geometry={model.roadRibbonGeometry} receiveShadow>
+          <meshLambertMaterial color={theme.roadRibbon} />
         </mesh>
       )}
       {model.roadGeometry && (
@@ -412,9 +445,16 @@ function SceneContent({
         />
       )}
 
-      {/* the tracked building */}
-      <mesh geometry={model.trackedGeometry} onClick={onBuildingClick}>
-        <meshLambertMaterial color={theme.accent} transparent opacity={0.55} flatShading />
+      {/* the tracked building — glassy hero material */}
+      <mesh geometry={model.trackedGeometry} onClick={onBuildingClick} castShadow>
+        <meshPhongMaterial
+          color={theme.accent}
+          transparent
+          opacity={0.58}
+          shininess={70}
+          specular="#dfeeff"
+          flatShading
+        />
       </mesh>
       <lineSegments geometry={outlineGeometry}>
         <lineBasicMaterial color={theme.outline} transparent opacity={0.5} />
@@ -576,6 +616,7 @@ export default function Scene3D({
     <div className="scene-wrap">
       <Canvas
         dpr={[1, 2]}
+        shadows
         camera={{ fov: 45, near: 1, far: 8000 }}
         style={{ background: theme.background }}
       >

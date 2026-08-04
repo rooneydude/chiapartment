@@ -88,12 +88,15 @@ export function buildContextGeometry(
       hsl.s + tall * 0.04,
       Math.min(Math.max(hsl.l + jitter * 0.07 - tall * 0.03, 0), 1),
     );
-    const count = geo.getAttribute("position").count;
-    const colors = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
+    const pos = geo.getAttribute("position");
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      // Fake ambient occlusion: darken toward street level so buildings
+      // visually seat into the ground.
+      const ao = 0.72 + 0.28 * Math.min(Math.max(pos.getY(i) / 9, 0), 1);
+      colors[i * 3] = c.r * ao;
+      colors[i * 3 + 1] = c.g * ao;
+      colors[i * 3 + 2] = c.b * ao;
     }
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     parts.push(geo);
@@ -199,10 +202,28 @@ export function buildLineGeometry(
   return geo;
 }
 
+/** Soft radial gradient for the ground disc (center → horizon). */
+export function makeGroundTexture(inner: string, outer: string): THREE.CanvasTexture {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(1, outer);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export interface SceneTheme {
   background: string;
   fog: string;
   ground: string;
+  groundEdge: string;
   context: string;
   contextTracked: string;
   accent: string;
@@ -225,6 +246,7 @@ export const LIGHT_THEME: SceneTheme = {
   background: "#dfe8f0",
   fog: "#dfe8f0",
   ground: "#e9e7e1",
+  groundEdge: "#d5d2c8",
   context: "#d3d2ca",
   contextTracked: "#a8b6c8",
   accent: "#2a78d6",
@@ -246,6 +268,7 @@ export const DARK_THEME: SceneTheme = {
   background: "#0e1116",
   fog: "#12151b",
   ground: "#181a18",
+  groundEdge: "#0e100e",
   context: "#2e2f2c",
   contextTracked: "#3d4b5c",
   accent: "#3987e5",
