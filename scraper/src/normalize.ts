@@ -80,8 +80,8 @@ const DATE_KEYS = [
 ];
 const URL_KEYS = ["availabilityurl", "applyurl", "applyonlineurl", "url", "link", "permalink"];
 
-const MIN_SANE_RENT = 400;
-const MAX_SANE_RENT = 25000;
+export const MIN_SANE_RENT = 400;
+export const MAX_SANE_RENT = 25000;
 
 function looksLikeUnitNumber(v: unknown): string | null {
   if (typeof v === "number" && Number.isInteger(v) && v > 0 && v < 100000) return String(v);

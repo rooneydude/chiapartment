@@ -1,6 +1,12 @@
 import * as cheerio from "cheerio";
 import type { UnitListing } from "../../../shared/src/types";
-import { coerceBeds, dedupeListings, parseHtmlListings } from "../normalize";
+import {
+  coerceBeds,
+  dedupeListings,
+  MAX_SANE_RENT,
+  MIN_SANE_RENT,
+  parseHtmlListings,
+} from "../normalize";
 import type { Adapter, AdapterContext } from "./types";
 
 /**
@@ -53,6 +59,8 @@ export const stead220: Adapter = {
       const price = Number.parseInt(priceText.replace(/[^0-9]/g, ""), 10);
       const beds = coerceBeds(name);
       if (!name || !Number.isFinite(price) || beds === null) return;
+      // "$0" / placeholder pricing means unpriceable — skip the card.
+      if (price < MIN_SANE_RENT || price > MAX_SANE_RENT) return;
 
       const bathsM = /(\d+(?:\.\d+)?)\s*BATH/i.exec(meta);
       const unitTagM = /UNIT\s*(\d+)/i.exec(meta);

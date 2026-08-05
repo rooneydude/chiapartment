@@ -42,6 +42,27 @@ describe("oldtownpark adapter (real captured page)", () => {
   });
 });
 
+describe("oldtownpark adapter (placeholder pricing)", () => {
+  it("skips $0 call-for-pricing rows instead of failing the whole run", async () => {
+    const html = `
+      <div class="js-plan-group" data-plan-slug="s1" data-cat="Convertible">
+        <div class="yard__unit" data-unit="1501" data-rent-min="3200" data-rent-max="3400">
+          Available Now Total SQFT: 565
+        </div>
+        <div class="yard__unit" data-unit="1502" data-rent-min="0" data-rent-max="0">
+          Available Now Total SQFT: 565
+        </div>
+      </div>`;
+    const ctx: AdapterContext = {
+      fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+      log: () => {},
+    };
+    const listings = await oldtownpark.scrape(buildingById("old-town-park-3"), ctx);
+    expect(listings.map((l) => l.unitNumber)).toEqual(["1501"]);
+    for (const l of listings) UnitListingSchema.parse(l);
+  });
+});
+
 describe("sightmap adapter (real captured payload)", () => {
   it("maps every available unit with dates, sqft, and clean plan names", async () => {
     const listings = await sightmap.scrape(buildingById("1225-old-town"), ctxFor("1225-old-town"));

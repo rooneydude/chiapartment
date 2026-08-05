@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { parseAvailableDate } from "../../../shared/src/parse";
 import type { UnitListing } from "../../../shared/src/types";
-import { dedupeListings } from "../normalize";
+import { dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
 import type { Adapter } from "./types";
 
 /**
@@ -50,7 +50,10 @@ export const oldtownpark: Adapter = {
           const rentMin = Number.parseInt($(el).attr("data-rent-min") ?? "", 10);
           const rentMax = Number.parseInt($(el).attr("data-rent-max") ?? "", 10);
           const beds = catToBeds($(el).attr("data-cat") ?? groupCat);
+          // Rows with rent 0 (or absurd values) are "call for pricing"
+          // placeholders — unpriceable inventory, skip the row not the run.
           if (!unitNumber || !Number.isFinite(rentMin) || beds === null) return;
+          if (rentMin < MIN_SANE_RENT || rentMin > MAX_SANE_RENT) return;
 
           const cardText = $(el).text().replace(/\s+/g, " ");
           const availM = /available\s*(?:now|[a-z]{3,9}\.?\s*\d{1,2}(?:,?\s*\d{4})?)?/i.exec(cardText);
@@ -67,7 +70,9 @@ export const oldtownpark: Adapter = {
             baths: null,
             sqft: sqft !== null && sqft >= 150 && sqft <= 6000 ? sqft : null,
             price: rentMin,
-            ...(Number.isFinite(rentMax) && rentMax > rentMin ? { priceMax: rentMax } : {}),
+            ...(Number.isFinite(rentMax) && rentMax > rentMin && rentMax <= MAX_SANE_RENT
+              ? { priceMax: rentMax }
+              : {}),
             availableDate: availM ? parseAvailableDate(availM[0], new Date()) : null,
             url,
           });

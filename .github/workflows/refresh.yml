@@ -53,8 +53,12 @@ jobs:
       - name: Resolve flags (inputs or trigger file)
         id: flags
         run: |
+          # The trigger file's words are flags for the push run that committed
+          # it — manual and scheduled runs must not inherit stale flags from it.
           TRIG=""
-          [ -f .github/refresh-trigger ] && TRIG=$(cat .github/refresh-trigger)
+          if [ "${{ github.event_name }}" = "push" ] && [ -f .github/refresh-trigger ]; then
+            TRIG=$(cat .github/refresh-trigger)
+          fi
           CAPTURE=false; SKYLINE=false; BUILDINGS="${{ inputs.buildings }}"
           if [ "${{ inputs.capture }}" = "true" ] || echo "$TRIG" | grep -qw capture; then CAPTURE=true; fi
           if [ "${{ inputs.skyline }}" = "true" ] || echo "$TRIG" | grep -qw skyline; then SKYLINE=true; fi
