@@ -30,7 +30,7 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
 
 - **No database, no servers.** Price history is a folder of committed JSON
   snapshots; the dashboard is a static site reading compiled versions of them.
-- **Refresh.** Runs automatically every Monday morning (Chicago time), or on
+- **Refresh.** Runs automatically every morning (Chicago time), or on
   demand via the **Refresh prices** workflow in the Actions tab (or
   `npm run refresh` locally, `-- --commit` to also commit). Each run appends
   one snapshot; deltas (new / removed / price changes) are computed between

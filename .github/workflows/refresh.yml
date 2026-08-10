@@ -20,8 +20,8 @@ on:
     # flags: "capture", "skyline", "buildings=a,b").
     paths: [".github/refresh-trigger"]
   schedule:
-    # Monday mornings, Chicago time (14:00 UTC ≈ 8/9am depending on DST).
-    - cron: "0 14 * * 1"
+    # Every morning, Chicago time (14:00 UTC ≈ 8/9am depending on DST).
+    - cron: "0 14 * * *"
 
 permissions:
   contents: write
