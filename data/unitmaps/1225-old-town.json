@@ -4,7 +4,7 @@
   "source": {
     "sightmapId": "87594",
     "assetUrl": "https://cdn.sightmap.com/assets/jl/w0/jlw03719w2y/72/7d/727d67713d611a5803dce818ec8abeda.umap",
-    "capturedAt": "2026-08-12T15:04:00.996Z"
+    "capturedAt": "2026-08-13T13:41:25.244Z"
   },
   "fit": {
     "metersPerPixel": 0.0842,
@@ -52,6 +52,12 @@
       "lat": 41.9049734,
       "facing": "SW",
       "levelIndex": 11
+    },
+    "1503": {
+      "lon": -87.6339579,
+      "lat": 41.9046129,
+      "facing": "S",
+      "levelIndex": 12
     },
     "1509": {
       "lon": -87.63417,
@@ -190,6 +196,12 @@
       "lat": 41.9047329,
       "facing": "S",
       "levelIndex": 2
+    },
+    "0717": {
+      "lon": -87.6341719,
+      "lat": 41.9053782,
+      "facing": "N",
+      "levelIndex": 4
     }
   }
 }
