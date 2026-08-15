@@ -64,11 +64,14 @@ export const leo: Adapter = {
       ctx.log(`plain fetch failed (${err instanceof Error ? err.message : err}); rendering`);
     }
 
-    const html = await fetchRenderedHtml(url, ctx);
-    const listings = parseLeoCards(html, building.url);
-    if (listings.length === 0) {
-      throw new Error(`no floorplan cards parsed from ${url} — page structure may have changed`);
+    // Rendered fetch, twice: the first attempt occasionally lands on a WAF
+    // interstitial or catches the page mid-navigation.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const html = await fetchRenderedHtml(url, ctx, { waitForSelector: CARD_SELECTOR });
+      const listings = parseLeoCards(html, building.url);
+      if (listings.length > 0) return listings;
+      ctx.log(`attempt ${attempt}: no floorplan cards in rendered page${attempt < 2 ? "; retrying" : ""}`);
     }
-    return listings;
+    throw new Error(`no floorplan cards parsed from ${url} — page structure may have changed`);
   },
 };
