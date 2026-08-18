@@ -90,3 +90,15 @@ export function stackFromPlan(floorplanName: string, mapping: UnitMapping): stri
   if (!m?.[1]) return null;
   return m[1].padStart(mapping.stackDigits, "0");
 }
+
+/**
+ * Lease-term label → months: "14 Months", "12-month", "Lease term: 13 mo".
+ * Null when no believable term (1–36 months) is present.
+ */
+export function parseLeaseTermMonths(label: string | null | undefined): number | null {
+  if (!label) return null;
+  const m = /(\d{1,2})\s*[- ]?\s*mo(?:nth)?s?\b/i.exec(label);
+  if (!m) return null;
+  const months = Number.parseInt(m[1]!, 10);
+  return months >= 1 && months <= 36 ? months : null;
+}

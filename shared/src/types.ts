@@ -72,7 +72,11 @@ export const BuildingsConfigSchema = z.object({
   schemaVersion: z.literal(1),
   /** Bed counts the user actually shops for — the UI leads with these. */
   focus: z
-    .object({ beds: z.array(z.number().int().min(0).max(6)).min(1) })
+    .object({
+      beds: z.array(z.number().int().min(0).max(6)).min(1),
+      /** Never quote a price that requires a lease longer than this. */
+      maxLeaseTermMonths: z.number().int().positive().optional(),
+    })
     .optional(),
   skyline: z
     .object({
@@ -103,6 +107,12 @@ export const UnitListingSchema = z.object({
   /** Monthly USD; lowest advertised. */
   price: z.number().positive(),
   priceMax: z.number().positive().optional(),
+  /**
+   * Lease term (months) the advertised price applies to, when the site says.
+   * Sites tease sub-market rates on long leases; focus.maxLeaseTermMonths
+   * caps which terms adapters may quote.
+   */
+  leaseTermMonths: z.number().int().positive().nullable().optional(),
   availableDate: z.string().nullable(),
   /** Concession text, e.g. "1 month free on 13-month leases". */
   specials: z.string().optional(),

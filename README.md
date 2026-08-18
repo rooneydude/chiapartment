@@ -35,6 +35,13 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   `npm run refresh` locally, `-- --commit` to also commit). Each run appends
   one snapshot; deltas (new / removed / price changes) are computed between
   consecutive snapshots at build time.
+- **Lease-term cap.** `focus.maxLeaseTermMonths` (14) keeps quoted prices
+  honest: where a site tags prices with lease terms (1225 Old Town's
+  SightMap), a price that requires a longer lease is replaced by the
+  cheapest price at a term within the cap, pulled from the unit's leasing
+  calendar API. Term shows next to the price in the availability table.
+  The other sites publish a single untagged price; their portals don't
+  expose term matrices publicly.
 - **Price alerts.** When a refresh finds a price drop or a new listing among
   the focus bed counts (`focus.beds` in buildings.json), the workflow opens a
   GitHub issue summarizing it. **To get these as phone notifications:**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAvailableDate, parseUnitNumber, stackFromPlan } from "../src/parse";
+import { parseAvailableDate, parseLeaseTermMonths, parseUnitNumber, stackFromPlan } from "../src/parse";
 import { UnitMappingSchema } from "../src/types";
 
 const floorPrefix = UnitMappingSchema.parse({ scheme: "floor-prefix" });
@@ -92,5 +92,20 @@ describe("parseUnitNumber (regex)", () => {
   it("returns nulls when the pattern misses", () => {
     const m = UnitMappingSchema.parse({ scheme: "regex", regex: "(?<floor>\\d+)-X" });
     expect(parseUnitNumber("1204", m)).toEqual({ floor: null, stack: null });
+  });
+});
+
+describe("parseLeaseTermMonths", () => {
+  it("parses common term labels", () => {
+    expect(parseLeaseTermMonths("14 Months")).toBe(14);
+    expect(parseLeaseTermMonths("12-month lease")).toBe(12);
+    expect(parseLeaseTermMonths("Lease term: 13 mo")).toBe(13);
+    expect(parseLeaseTermMonths("16 Months ")).toBe(16);
+  });
+  it("rejects junk", () => {
+    expect(parseLeaseTermMonths(null)).toBeNull();
+    expect(parseLeaseTermMonths("")).toBeNull();
+    expect(parseLeaseTermMonths("Available Aug 15")).toBeNull();
+    expect(parseLeaseTermMonths("99 months")).toBeNull();
   });
 });

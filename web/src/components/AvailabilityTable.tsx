@@ -147,6 +147,14 @@ export default function AvailabilityTable({
                   <td className="num price-cell">
                     {money(u.price)}
                     {u.priceMax ? `+` : ""}
+                    {u.leaseTermMonths != null && (
+                      <span
+                        title={`price applies to a ${u.leaseTermMonths}-month lease`}
+                        style={{ marginLeft: 4, fontSize: "0.72em", opacity: 0.65 }}
+                      >
+                        {u.leaseTermMonths}mo
+                      </span>
+                    )}
                     {u.specials && (
                       <span title={u.specials} style={{ marginLeft: 4, cursor: "help" }}>
                         ✨

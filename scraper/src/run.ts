@@ -37,6 +37,7 @@ async function scrapeOne(
   root: string,
   building: BuildingConfig,
   opts: RefreshOptions,
+  maxLeaseTermMonths?: number,
 ): Promise<ScrapeResult> {
   const adapter = resolveAdapter(building.adapter);
   const fixtureDir = join(root, "scraper", "fixtures", building.id);
@@ -45,6 +46,7 @@ async function scrapeOne(
     fetch: opts.fixtures ? makeFixtureFetch(fixtureDir) : httpFetch,
     log: (msg) => console.log(`  [${building.id}] ${msg}`),
     ...(recorder ? { record: recorder.record } : {}),
+    ...(maxLeaseTermMonths ? { maxLeaseTermMonths } : {}),
   };
   console.log(`Scraping ${building.name} (${adapter.id})...`);
   try {
@@ -93,7 +95,7 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
         : null;
     let result = cacheKey ? groupCache.get(cacheKey) : undefined;
     if (!result) {
-      result = await scrapeOne(root, building, opts);
+      result = await scrapeOne(root, building, opts, config.focus?.maxLeaseTermMonths);
       if (cacheKey) groupCache.set(cacheKey, result);
       if (!opts.fixtures && building !== targets[targets.length - 1]) {
         await sleep(POLITE_DELAY_MS);

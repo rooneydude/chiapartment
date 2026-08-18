@@ -6,6 +6,11 @@ export interface AdapterContext {
   log: (msg: string) => void;
   /** Present in --capture mode: persist a raw payload as a fixture. */
   record?: (url: string, body: string, contentType: string) => void;
+  /**
+   * From config focus.maxLeaseTermMonths: adapters that can see lease-term
+   * pricing must not quote prices requiring a longer lease than this.
+   */
+  maxLeaseTermMonths?: number;
 }
 
 export interface Adapter {

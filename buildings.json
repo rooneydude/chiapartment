@@ -4,7 +4,8 @@
     "beds": [
       0,
       2
-    ]
+    ],
+    "maxLeaseTermMonths": 14
   },
   "skyline": {
     "clusterRadiusM": 1000,

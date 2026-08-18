@@ -110,3 +110,80 @@ describe("stead220 adapter (real captured page)", () => {
     expect(studio!.price).toBeGreaterThanOrEqual(2000);
   });
 });
+
+describe("sightmap lease-term cap", () => {
+  it("extracts term→price pairs from unknown matrix shapes", async () => {
+    const { extractTermPrices } = await import("../src/adapters/sightmap");
+    const m1 = extractTermPrices({
+      data: { prices: [
+        { lease_term: 12, price: 2500 },
+        { lease_term: 16, price: 2300 },
+        { lease_term: 12, price: 2450 },
+      ]},
+    });
+    expect(m1.get(12)).toBe(2450); // cheapest per term wins
+    expect(m1.get(16)).toBe(2300);
+    const m2 = extractTermPrices({
+      terms: [{ months: "14 Months", rent: "$2,395" }, { months: "15 Months", rent: "$2,295" }],
+    });
+    expect(m2.get(14)).toBe(2395);
+    expect(m2.get(15)).toBe(2295);
+    expect(extractTermPrices({ nothing: true }).size).toBe(0);
+  });
+
+  it("re-prices over-cap advertised prices from the leasing matrix", async () => {
+    const payload = {
+      data: {
+        floors: [],
+        floor_plans: [{ id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1 }],
+        units: [
+          {
+            id: "u1", unit_number: "0901", floor_id: "f", floor_plan_id: "p1",
+            price: 2200, area: 500, available_on: null,
+            display_lease_term: "16 Months",
+            leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1",
+          },
+          {
+            id: "u2", unit_number: "0902", floor_id: "f", floor_plan_id: "p1",
+            price: 2400, area: 500, available_on: null,
+            display_lease_term: "12 Months",
+            leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u2",
+          },
+        ],
+      },
+    };
+    const matrix = {
+      data: { prices: [
+        { lease_term: 12, price: 2450 },
+        { lease_term: 14, price: 2380 },
+        { lease_term: 16, price: 2200 },
+      ]},
+    };
+    const ctx = {
+      fetch: (async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/leasing/")) return new Response(JSON.stringify(matrix));
+        return new Response(JSON.stringify(payload));
+      }) as typeof fetch,
+      log: () => {},
+      maxLeaseTermMonths: 14,
+    };
+    const building = { ...buildingById("1225-old-town") };
+    const listings = await sightmap.scrape(building, ctx);
+    const over = listings.find((l) => l.unitNumber === "0901")!;
+    // 16-month teaser replaced by the cheapest ≤14-month price.
+    expect(over.price).toBe(2380);
+    expect(over.leaseTermMonths).toBe(14);
+    const within = listings.find((l) => l.unitNumber === "0902")!;
+    // Already within cap: advertised price kept, no matrix fetch needed.
+    expect(within.price).toBe(2400);
+    expect(within.leaseTermMonths).toBe(12);
+  });
+
+  it("keeps real-fixture listings term-tagged and within the 14-month cap", async () => {
+    const listings = await sightmap.scrape(buildingById("1225-old-town"), ctxFor("1225-old-town"));
+    const tagged = listings.filter((l) => l.leaseTermMonths != null);
+    expect(tagged.length).toBe(listings.length); // every 1225 unit carries a term
+    expect(tagged.every((l) => l.leaseTermMonths! <= 14)).toBe(true);
+  });
+});
