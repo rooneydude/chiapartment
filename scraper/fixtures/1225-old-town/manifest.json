@@ -3,5 +3,90 @@
     "match": "https://sightmap.com/app/api/v1/60p7xoklv7n/sightmaps/87594",
     "file": "00-app-api-v1-60p7xoklv7n-sightmaps-87594.json",
     "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028715?sightmap_id=87594&currency_code=USD",
+    "file": "01-app-api-v1-leasing-8ywko5k4vlx-unit-10028715.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028725?sightmap_id=87594&currency_code=USD",
+    "file": "02-app-api-v1-leasing-8ywko5k4vlx-unit-10028725.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028756?sightmap_id=87594&currency_code=USD",
+    "file": "03-app-api-v1-leasing-8ywko5k4vlx-unit-10028756.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028769?sightmap_id=87594&currency_code=USD",
+    "file": "04-app-api-v1-leasing-8ywko5k4vlx-unit-10028769.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028775?sightmap_id=87594&currency_code=USD",
+    "file": "05-app-api-v1-leasing-8ywko5k4vlx-unit-10028775.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028782?sightmap_id=87594&currency_code=USD",
+    "file": "06-app-api-v1-leasing-8ywko5k4vlx-unit-10028782.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028796?sightmap_id=87594&currency_code=USD",
+    "file": "07-app-api-v1-leasing-8ywko5k4vlx-unit-10028796.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028801?sightmap_id=87594&currency_code=USD",
+    "file": "08-app-api-v1-leasing-8ywko5k4vlx-unit-10028801.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028808?sightmap_id=87594&currency_code=USD",
+    "file": "09-app-api-v1-leasing-8ywko5k4vlx-unit-10028808.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028827?sightmap_id=87594&currency_code=USD",
+    "file": "10-app-api-v1-leasing-8ywko5k4vlx-unit-10028827.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028859?sightmap_id=87594&currency_code=USD",
+    "file": "11-app-api-v1-leasing-8ywko5k4vlx-unit-10028859.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028860?sightmap_id=87594&currency_code=USD",
+    "file": "12-app-api-v1-leasing-8ywko5k4vlx-unit-10028860.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028890?sightmap_id=87594&currency_code=USD",
+    "file": "13-app-api-v1-leasing-8ywko5k4vlx-unit-10028890.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028905?sightmap_id=87594&currency_code=USD",
+    "file": "14-app-api-v1-leasing-8ywko5k4vlx-unit-10028905.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028911?sightmap_id=87594&currency_code=USD",
+    "file": "15-app-api-v1-leasing-8ywko5k4vlx-unit-10028911.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028923?sightmap_id=87594&currency_code=USD",
+    "file": "16-app-api-v1-leasing-8ywko5k4vlx-unit-10028923.json",
+    "contentType": "application/json"
+  },
+  {
+    "match": "https://sightmap.com/app/api/v1/leasing/8ywko5k4vlx/unit/10028926?sightmap_id=87594&currency_code=USD",
+    "file": "17-app-api-v1-leasing-8ywko5k4vlx-unit-10028926.json",
+    "contentType": "application/json"
   }
 ]

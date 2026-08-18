@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-08-18T15:16:51Z",
+  "buildings": [
+    {
+      "buildingId": "1225-old-town",
+      "status": "ok",
+      "source": {
+        "adapter": "sightmap",
+        "fetchedUrl": "https://1225oldtown.com/"
+      },
+      "units": [
+        {
+          "unitNumber": "0509",
+          "floorplanName": "bhra14.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 941,
+          "price": 3851,
+          "leaseTermMonths": 14,
+          "availableDate": "2026-09-01",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0519",
+          "floorplanName": "bhre6.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 579,
+          "price": 2457,
+          "leaseTermMonths": 13,
+          "availableDate": "2026-08-18",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0607",
+          "floorplanName": "bhra4.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 776,
+          "price": 3289,
+          "leaseTermMonths": 12,
+          "availableDate": "2026-09-18",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0624",
+          "floorplanName": "bhre4.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 546,
+          "price": 2397,
+          "leaseTermMonths": 13,
+          "availableDate": "2026-08-18",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0711",
+          "floorplanName": "bhre5.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 573,
+          "price": 2368,
+          "leaseTermMonths": 17,
+          "availableDate": "2026-09-15",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0717",
+          "floorplanName": "bhre8.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 595,
+          "price": 2395,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-10-16",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0724",
+          "floorplanName": "bhre4.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 546,
+          "price": 2328,
+          "leaseTermMonths": 17,
+          "availableDate": "2026-09-16",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0812",
+          "floorplanName": "bhre3.1 Studio",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 543,
+          "price": 2380,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-09-24",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0817",
+          "floorplanName": "bhre8.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 595,
+          "price": 2435,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-10-22",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0824",
+          "floorplanName": "bhre4.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 546,
+          "price": 2319,
+          "leaseTermMonths": 17,
+          "availableDate": "2026-09-23",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0906",
+          "floorplanName": "bhra3.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 703,
+          "price": 3314,
+          "leaseTermMonths": 12,
+          "availableDate": "2026-09-18",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0917",
+          "floorplanName": "bhre8.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 595,
+          "price": 2515,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-10-24",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0918",
+          "floorplanName": "bhra12.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 864,
+          "price": 3800,
+          "leaseTermMonths": 12,
+          "availableDate": "2026-09-09",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1023",
+          "floorplanName": "bhre2.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 536,
+          "price": 2346,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-08-29",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1024",
+          "floorplanName": "bhre4.1 Convertible",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 546,
+          "price": 2350,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-10-05",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1308",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 6441,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-09-06",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1410",
+          "floorplanName": "bhra8.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 802,
+          "price": 3570,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-10-15",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1503",
+          "floorplanName": "bhrb6.2 2 BR, 2 BTH,",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1201,
+          "price": 4630,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-09-16",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1602",
+          "floorplanName": "bhra1.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 664,
+          "price": 3124,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-10-23",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1605",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 6391,
+          "leaseTermMonths": 18,
+          "availableDate": "2026-09-14",
+          "url": "https://1225oldtown.com/"
+        }
+      ]
+    }
+  ]
+}
