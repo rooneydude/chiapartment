@@ -39,9 +39,11 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   honest: where a site tags prices with lease terms (1225 Old Town's
   SightMap), a price that requires a longer lease is replaced by the
   cheapest price at a term within the cap, pulled from the unit's leasing
-  calendar API. Term shows next to the price in the availability table.
-  The other sites publish a single untagged price; their portals don't
-  expose term matrices publicly.
+  calendar API — or the unit is omitted when no in-cap price exists.
+  Applied **at scrape time only**; past snapshots are never rewritten.
+  Term shows next to the price in the availability table. The other sites
+  publish a single untagged price; their portals don't expose term
+  matrices publicly.
 - **Price alerts.** When a refresh finds a price drop or a new listing among
   the focus bed counts (`focus.beds` in buildings.json), the workflow opens a
   GitHub issue summarizing it. **To get these as phone notifications:**
@@ -75,11 +77,16 @@ Node 22+. `npm install` once at the repo root (npm workspaces).
 |---|---|---|
 | Old Town Park I–III | `oldtownpark` | ✅ real per-unit prices + ranges from per-tower availability pages |
 | Stead 220 | `stead220` | ✅ real floorplan/stack prices (plans are stacks; PH plans are single units) |
-| 1225 Old Town | `playwright-generic` | ✅ real prices/sqft, unit numbers on some rows (rendered-page heuristics; site's plain-HTTP endpoints sit behind Imunify360, but the full browser gets through) |
-| The Leo | `playwright-generic` | ✅ real floorplan-level prices/sqft (no unit numbers exposed) |
+| 1225 Old Town | `sightmap` | ✅ per-unit prices/sqft/dates; lease-term cap (14 mo) at scrape time |
+| The Leo | `leo` | ✅ per-unit cards from Jonah SSR JSON; Playwright fallback (Imunify360 on GH IPs) |
 
 The stack→facade maps in `buildings.json` are placeholder quadrant guesses
-until refined per building (`unitMapping.stacks`).
+until refined per building (`unitMapping.stacks`), except 1225 which also
+has a SightMap-derived `data/unitmaps/` sidecar.
+
+**Price history is sacred.** `data/snapshots/` is append-only. Never delete,
+rewrite, squash, or rebase those files away. Failed scrapes are recorded as
+`status: "error"` so the dashboard can show last-good data. See [`AUDIT.md`](AUDIT.md).
 
 ## Adding/fixing a site adapter
 
@@ -89,8 +96,8 @@ until refined per building (`unitMapping.stacks`).
 2. Write an adapter in `scraper/src/adapters/` against those fixtures
    (`npm run refresh -- --fixtures` + tests to iterate offline), register it
    in `adapters/index.ts`, and point the building's `"adapter"` field at it.
-3. Delete the sample snapshot files in `data/snapshots/` in the same commit
-   that lands the first real snapshot.
+3. Leave existing `data/snapshots/` files untouched. A new adapter only
+   affects snapshots written after it ships.
 
 The bundled `generic` adapter (JSON-LD → discovered JSON endpoints → DOM
 heuristics) and `playwright-generic` (rendered pages + XHR capture) cover many
@@ -103,9 +110,13 @@ sites without custom code.
   tools.
 - The deploy workflow targets the active development branch
   (`claude/repo-reset-4my0gv`); if the default branch changes (e.g. to
-  `main`), update the branch list in `.github/workflows/deploy.yml`.
-  Recommended cleanup: make this branch (or `main` cut from it) the repo
-  default and delete the stale pre-reset branch.
+  `main`), update the branch list in `.github/workflows/deploy.yml` **before**
+  switching the repo default, or Pages stops updating. The pre-reset branch
+  `claude/chicago-apartment-3d-models-xs68so` is a different (SQLite-era)
+  tree — do not point Pages at it.
 - Snapshots of buildings whose scrape failed are recorded with
   `status: "error"` — history stays honest, and the dashboard simply shows
   the last good run.
+- PRs run `.github/workflows/test.yml` (`typecheck` + `vitest`), including a
+  parse of every committed snapshot so schema changes cannot silently drop
+  history at compile time.
