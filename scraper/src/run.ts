@@ -7,6 +7,7 @@ import {
   type BuildingConfig,
   type BuildingsConfig,
   type BuildingSnapshot,
+  type OmittedListing,
   type Snapshot,
 } from "../../shared/src/types";
 import { resolveAdapter } from "./adapters/index";
@@ -42,20 +43,25 @@ async function scrapeOne(
   const adapter = resolveAdapter(building.adapter);
   const fixtureDir = join(root, "scraper", "fixtures", building.id);
   const recorder = opts.capture ? makeRecorder(fixtureDir) : null;
+  const omitted: OmittedListing[] = [];
   const ctx: AdapterContext = {
     fetch: opts.fixtures ? makeFixtureFetch(fixtureDir) : httpFetch,
     log: (msg) => console.log(`  [${building.id}] ${msg}`),
     ...(recorder ? { record: recorder.record } : {}),
     ...(maxLeaseTermMonths ? { maxLeaseTermMonths } : {}),
+    reportOmitted: (row) => omitted.push(row),
   };
   console.log(`Scraping ${building.name} (${adapter.id})...`);
   try {
     const units = await adapter.scrape(building, ctx);
-    console.log(`  → ${units.length} listings`);
+    console.log(
+      `  → ${units.length} listings${omitted.length ? ` (${omitted.length} omitted over-cap)` : ""}`,
+    );
     return {
       status: "ok",
       source: { adapter: adapter.id, fetchedUrl: building.url },
       units,
+      ...(omitted.length > 0 ? { omitted } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

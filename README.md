@@ -33,22 +33,32 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
 - **Refresh.** Runs automatically every morning (Chicago time), or on
   demand via the **Refresh prices** workflow in the Actions tab (or
   `npm run refresh` locally, `-- --commit` to also commit). Each run appends
-  one snapshot; deltas (new / removed / price changes) are computed between
-  consecutive snapshots at build time.
+  one snapshot. Run-over-run deltas (new / removed / price changes) compare
+  the last two **successful** scrapes per building; the weekday brief
+  compares Chicago calendar days.
+- **Weekday brief.** Compiled at build time as
+  [`brief.json`](https://rooneydude.github.io/chiapartment/data/brief.json)
+  (also `focusDelta` on each `data/buildings/<id>.json`). Studios + 2-beds
+  only: new / removed / price drops since the last successful scrape on a
+  **prior Chicago calendar day**. Same-day extra refreshes do not reset
+  “since yesterday.” The existing Grok bot can keep reading live building
+  JSON; `delta` is unchanged in shape (additive `beds` on price changes,
+  plus floorplan identity for Stead stacks).
 - **Lease-term cap.** `focus.maxLeaseTermMonths` (14) keeps quoted prices
   honest: where a site tags prices with lease terms (1225 Old Town's
   SightMap), a price that requires a longer lease is replaced by the
   cheapest price at a term within the cap, pulled from the unit's leasing
   calendar API — or the unit is omitted when no in-cap price exists.
-  Applied **at scrape time only**; past snapshots are never rewritten.
-  Term shows next to the price in the availability table. The other sites
-  publish a single untagged price; their portals don't expose term
-  matrices publicly.
-- **Price alerts.** When a refresh finds a price drop or a new listing among
-  the focus bed counts (`focus.beds` in buildings.json), the workflow opens a
-  GitHub issue summarizing it. **To get these as phone notifications:**
-  install the GitHub mobile app and Watch this repository (Custom → Issues,
-  or All Activity).
+  Future scrapes record those skips as optional `omitted[]` (unit, term,
+  advertised price) so a count-drop is explainable. Applied **at scrape
+  time only**; past snapshots are never rewritten.
+- **Price alerts.** When a refresh finds a focus-bed price drop or new
+  listing (including Stead floorplan/stack identity), the workflow opens a
+  GitHub issue. Alerts compare the last two **ok** scrapes per building, so
+  a failed Leo run does not look like every unit vanished. Prefer
+  `brief.json` for the morning digest — GitHub issues are a phone-push
+  fallback. **To get issues as phone notifications:** install the GitHub
+  mobile app and Watch this repository (Custom → Issues, or All Activity).
 - **3D.** Building footprints come from OpenStreetMap (`npm run skyline`),
   extruded to their tagged heights. A unit's floor is parsed from its unit
   number; its position on the floorplate comes from the per-building
@@ -76,7 +86,7 @@ Node 22+. `npm install` once at the repo root (npm workspaces).
 | Building | Adapter | Status |
 |---|---|---|
 | Old Town Park I–III | `oldtownpark` | ✅ real per-unit prices + ranges from per-tower availability pages |
-| Stead 220 | `stead220` | ✅ real floorplan/stack prices (plans are stacks; PH plans are single units) |
+| Stead 220 | `stead220` | ✅ floorplan/stack prices (plans are stacks; PH plans are real units). Deltas/alerts key stacks by floorplan name + beds. |
 | 1225 Old Town | `sightmap` | ✅ per-unit prices/sqft/dates; lease-term cap (14 mo) at scrape time |
 | The Leo | `leo` | ✅ per-unit cards from Jonah SSR JSON; Playwright fallback (Imunify360 on GH IPs) |
 

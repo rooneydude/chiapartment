@@ -54,4 +54,13 @@ describe("committed snapshot history", () => {
     const snap = SnapshotSchema.parse(JSON.parse(readFileSync(join(SNAP_DIR, full!), "utf8")));
     expect(snap.buildings.map((b) => b.buildingId).sort()).toEqual([...BUILDINGS].sort());
   });
+
+  it("does not require omitted[] on historical files (no back-fill)", () => {
+    const sep7 = files.find((f) => f.startsWith("2026-09-07"));
+    expect(sep7).toBeDefined();
+    const snap = SnapshotSchema.parse(JSON.parse(readFileSync(join(SNAP_DIR, sep7!), "utf8")));
+    const ot = snap.buildings.find((b) => b.buildingId === "1225-old-town");
+    expect(ot?.omitted).toBeUndefined();
+    expect(ot?.units.length).toBeGreaterThan(6);
+  });
 });

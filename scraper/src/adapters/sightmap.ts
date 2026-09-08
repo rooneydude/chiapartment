@@ -209,6 +209,16 @@ export const sightmap: Adapter = {
           ctx.log(
             `unit ${u.unit_number}: advertised price needs a ${term}-month lease and no ≤${maxMonths}-month price found — skipping`,
           );
+          ctx.reportOmitted?.({
+            unitNumber: u.unit_number,
+            floorplanName: cleanPlanName(plan),
+            beds: plan.bedroom_count,
+            baths: plan.bathroom_count || null,
+            sqft: u.area && u.area > 100 ? Math.round(u.area) : null,
+            advertisedPrice: u.price,
+            leaseTermMonths: term,
+            reason: "over-cap",
+          });
           continue;
         }
       }

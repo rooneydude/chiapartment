@@ -736,6 +736,16 @@ table.units tbody tr.sel {
   gap: 3px;
 }
 
+.info-banner {
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
 .loading,
 .error-box {
   padding: 60px 0;

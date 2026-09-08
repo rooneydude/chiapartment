@@ -5,6 +5,7 @@ import type {
   UnitListing,
   UnitMapping,
 } from "../../../shared/src/types";
+import { listingKey, listingLabel } from "../../../shared/src/delta";
 import { parseUnitNumber, stackFromPlan } from "../../../shared/src/parse";
 import { UnitMappingSchema } from "../../../shared/src/types";
 import { bedsLabel, daysSince, money, shortDate } from "../lib/format";
@@ -35,12 +36,18 @@ export default function AvailabilityTable({
 
   const m = mapping ?? FALLBACK_MAPPING;
   const newSet = useMemo(
-    () => new Set(delta?.newUnits.map((u) => u.unitNumber ?? "")),
+    () => new Set(delta?.newUnits.map(listingKey)),
     [delta],
   );
-  const changeByUnit = useMemo(() => {
+  const changeByKey = useMemo(() => {
     const map = new Map<string, { from: number; to: number }>();
-    for (const c of delta?.priceChanges ?? []) map.set(c.unitNumber, c);
+    for (const c of delta?.priceChanges ?? []) {
+      const key =
+        c.unitNumber === c.floorplanName
+          ? listingKey({ unitNumber: null, floorplanName: c.floorplanName, beds: c.beds })
+          : listingKey({ unitNumber: c.unitNumber, floorplanName: c.floorplanName, beds: c.beds });
+      map.set(key, c);
+    }
     return map;
   }, [delta]);
 
@@ -112,8 +119,8 @@ export default function AvailabilityTable({
           </thead>
           <tbody>
             {sorted.map((u, i) => {
-              const key = u.unitNumber ?? `fp-${i}`;
-              const change = u.unitNumber ? changeByUnit.get(u.unitNumber) : undefined;
+              const key = listingKey(u) || `fp-${i}`;
+              const change = changeByKey.get(listingKey(u));
               const floor = parseUnitNumber(u.unitNumber, m).floor;
               const planStack = !u.unitNumber ? stackFromPlan(u.floorplanName, m) : null;
               const isSelected =
@@ -136,9 +143,7 @@ export default function AvailabilityTable({
                 >
                   <td>
                     {u.unitNumber ?? "—"}{" "}
-                    {u.unitNumber && newSet.has(u.unitNumber) && (
-                      <span className="badge new">NEW</span>
-                    )}
+                    {newSet.has(listingKey(u)) && <span className="badge new">NEW</span>}
                   </td>
                   <td className="num">{floor ?? "—"}</td>
                   <td>{u.floorplanName}</td>
@@ -205,10 +210,10 @@ export default function AvailabilityTable({
         <div className="removed-block">
           No longer listed:{" "}
           {delta.removedUnits.map((u, i) => (
-            <span key={u.unitNumber ?? i}>
+            <span key={listingKey(u) || i}>
               {i > 0 && ", "}
               <s>
-                {u.unitNumber} ({money(u.price)})
+                {listingLabel(u)} ({money(u.price)})
               </s>
             </span>
           ))}

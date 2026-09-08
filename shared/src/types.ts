@@ -120,12 +120,31 @@ export const UnitListingSchema = z.object({
 });
 export type UnitListing = z.infer<typeof UnitListingSchema>;
 
+/**
+ * A unit the scraper saw but did not quote — typically an over-cap lease
+ * teaser with no in-cap price. Optional and future-only; never back-fill
+ * historical snapshots.
+ */
+export const OmittedListingSchema = z.object({
+  unitNumber: z.string().nullable(),
+  floorplanName: z.string(),
+  beds: z.number().int().min(0),
+  baths: z.number().nullable().optional(),
+  sqft: z.number().nullable().optional(),
+  advertisedPrice: z.number().positive(),
+  leaseTermMonths: z.number().int().positive(),
+  reason: z.literal("over-cap").default("over-cap"),
+});
+export type OmittedListing = z.infer<typeof OmittedListingSchema>;
+
 export const BuildingSnapshotSchema = z.object({
   buildingId: z.string(),
   status: z.enum(["ok", "error"]),
   error: z.string().optional(),
   source: z.object({ adapter: z.string(), fetchedUrl: z.string() }),
   units: z.array(UnitListingSchema),
+  /** Present on future scrapes when units were seen but not quoted. */
+  omitted: z.array(OmittedListingSchema).optional(),
 });
 export type BuildingSnapshot = z.infer<typeof BuildingSnapshotSchema>;
 
@@ -154,10 +173,15 @@ export interface FloorplanPoint {
 }
 
 export interface PriceChange {
+  /**
+   * Display identity: real unit number, or the floorplan name for stack /
+   * starting-at listings that have no unit number (Stead 220).
+   */
   unitNumber: string;
   floorplanName: string;
   from: number;
   to: number;
+  beds: number;
 }
 
 export interface SnapshotDelta {
@@ -166,6 +190,76 @@ export interface SnapshotDelta {
   newUnits: UnitListing[];
   removedUnits: UnitListing[];
   priceChanges: PriceChange[];
+}
+
+/** Calendar-day, focus-bed slice of a delta — weekday-brief input. */
+export interface FocusDelta extends SnapshotDelta {
+  chicagoFrom: string | null;
+  chicagoTo: string;
+  focusBeds: number[];
+}
+
+export interface BriefListing {
+  label: string;
+  unitNumber: string | null;
+  floorplanName: string;
+  beds: number;
+  price: number;
+  availableDate: string | null;
+  leaseTermMonths?: number | null;
+}
+
+export interface BriefDrop {
+  label: string;
+  unitNumber: string | null;
+  floorplanName: string;
+  beds: number;
+  from: number;
+  to: number;
+}
+
+export interface BriefOmitted {
+  label: string;
+  unitNumber: string | null;
+  floorplanName: string;
+  beds: number;
+  advertisedPrice: number;
+  leaseTermMonths: number;
+  reason: "over-cap";
+}
+
+export interface WeekdayBriefBuilding {
+  id: string;
+  name: string;
+  status: "ok" | "error" | "missing";
+  error?: string;
+  from: string | null;
+  to: string | null;
+  chicagoFrom: string | null;
+  chicagoTo: string | null;
+  focusAvailable: number;
+  new: BriefListing[];
+  removed: BriefListing[];
+  drops: BriefDrop[];
+  omitted: BriefOmitted[];
+  warnings: DataWarning[];
+}
+
+export interface WeekdayBrief {
+  schemaVersion: 1;
+  timezone: "America/Chicago";
+  generated: string;
+  focusBeds: number[];
+  chicagoFrom: string | null;
+  chicagoTo: string | null;
+  summary: {
+    drops: number;
+    newListings: number;
+    removed: number;
+    scrapeErrors: number;
+    omittedOverCap: number;
+  };
+  buildings: WeekdayBriefBuilding[];
 }
 
 export interface DataWarning {
@@ -193,6 +287,13 @@ export interface BuildingHistory {
     status: "ok" | "error";
     error?: string;
   } | null;
+  /**
+   * Calendar-day diff on focus.beds (Chicago timezone). Additive field for
+   * the weekday Grok brief; `delta` remains last-two-ok-runs unfiltered.
+   */
+  focusDelta: FocusDelta | null;
+  /** Over-cap units skipped on the latest ok scrape. Empty when none / historical. */
+  omitted: OmittedListing[];
 }
 
 /** Shape of the compiled config.json (buildings.json + build-time health). */
