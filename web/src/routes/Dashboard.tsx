@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { BuildingConfig, BuildingHistory } from "../../../shared/src/types";
 import Sparkline from "../components/Sparkline";
 import { loadConfig, loadHistory } from "../lib/data";
-import { bedsLabel, longDate, money } from "../lib/format";
+import { ageLabel, bedsLabel, longDate, money } from "../lib/format";
 
 interface Row {
   building: BuildingConfig;
@@ -97,8 +97,24 @@ export default function Dashboard() {
     .sort()
     .pop();
 
+  const scrapeFails = rows.filter((r) => r.history.lastAttempt?.status === "error");
+
   return (
     <>
+      {scrapeFails.length > 0 && (
+        <div className="warning-banner" role="status">
+          {scrapeFails.map(({ building, history }) => {
+            const attempt = history.lastAttempt!;
+            const lastGood = history.latest?.timestamp;
+            return (
+              <div key={building.id}>
+                ⚠ <strong>{building.name}</strong> scrape failed {ageLabel(attempt.timestamp)}
+                {lastGood ? ` · showing last good data from ${longDate(lastGood)}` : ""}
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="stat-strip">
         {statTiles.map(
           ({ beds, best }) =>
@@ -157,6 +173,14 @@ export default function Dashboard() {
             if (focus !== null && !focusUnitNumbers.has(unitNumber)) continue;
             for (const p of series) if (p.t === t && p.price < min) min = p.price;
           }
+          // Floorplan-only buildings (Stead 220) have no unit numbers in perUnit.
+          if (!Number.isFinite(min)) {
+            const focusPlans = new Set(units.map((u) => u.floorplanName));
+            for (const [plan, series] of Object.entries(history.perFloorplan)) {
+              if (focus !== null && !focusPlans.has(plan)) continue;
+              for (const p of series) if (p.t === t && p.minPrice < min) min = p.minPrice;
+            }
+          }
           return min;
         });
 
@@ -198,7 +222,7 @@ export default function Dashboard() {
             <div className="badges">
               {history.warnings?.length > 0 && (
                 <span className="badge bad" title={history.warnings.map((w) => w.message).join("\n")}>
-                  ⚠ data
+                  {history.lastAttempt?.status === "error" ? "⚠ scrape failed" : "⚠ data"}
                 </span>
               )}
               {units.length > 0 && <span className="badge">{units.length} available</span>}
@@ -209,7 +233,13 @@ export default function Dashboard() {
             </div>
             <div className="card-foot">
               <span>
-                {history.latest ? `updated ${longDate(history.latest.timestamp)}` : "no data yet"}
+                {history.lastAttempt?.status === "error"
+                  ? `scrape failed ${longDate(history.lastAttempt.timestamp)}${
+                      history.latest ? ` · last good ${longDate(history.latest.timestamp)}` : ""
+                    }`
+                  : history.latest
+                    ? `updated ${longDate(history.latest.timestamp)}`
+                    : "no data yet"}
               </span>
               <Sparkline points={minPerRun.filter((v) => Number.isFinite(v))} />
             </div>
