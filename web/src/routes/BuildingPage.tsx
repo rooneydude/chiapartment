@@ -88,7 +88,13 @@ export default function BuildingPage() {
         <h2>{building.name}</h2>
         <span className="meta">
           {building.address} · {building.geometry.floors} floors
-          {history.latest ? ` · updated ${longDate(history.latest.timestamp)}` : ""}
+          {history.lastAttempt?.status === "error"
+            ? ` · scrape failed ${longDate(history.lastAttempt.timestamp)}${
+                history.latest ? ` · last good ${longDate(history.latest.timestamp)}` : ""
+              }`
+            : history.latest
+              ? ` · updated ${longDate(history.latest.timestamp)}`
+              : ""}
         </span>
       </div>
       {(history.warnings?.length ?? 0) > 0 && (

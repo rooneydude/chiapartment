@@ -106,6 +106,24 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
     snapshot.buildings.push({ buildingId: building.id, ...result });
   }
 
+  // One retry pass for buildings that failed (Leo's WAF is flaky from GH
+  // Actions IPs). Skip in fixture mode — fixtures are deterministic.
+  if (!opts.fixtures) {
+    const failed = snapshot.buildings.filter((b) => b.status === "error");
+    if (failed.length > 0) {
+      console.log(`Retrying ${failed.length} failed building(s) after a pause...`);
+      await sleep(8_000);
+      for (const [i, fail] of failed.entries()) {
+        const building = targets.find((b) => b.id === fail.buildingId);
+        if (!building) continue;
+        const result = await scrapeOne(root, building, opts, config.focus?.maxLeaseTermMonths);
+        const idx = snapshot.buildings.findIndex((b) => b.buildingId === fail.buildingId);
+        if (idx >= 0) snapshot.buildings[idx] = { buildingId: building.id, ...result };
+        if (i < failed.length - 1) await sleep(POLITE_DELAY_MS);
+      }
+    }
+  }
+
   SnapshotSchema.parse(snapshot); // never write an invalid snapshot
 
   const dir = join(root, "data", "snapshots");

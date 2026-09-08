@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BuildingsConfigSchema, UnitListingSchema } from "../../shared/src/types";
-import { leo } from "../src/adapters/leo";
+import { leo, isWafPage, parseLeoPage } from "../src/adapters/leo";
 import { oldtownpark } from "../src/adapters/oldtownpark";
 import { sightmap } from "../src/adapters/sightmap";
 import { stead220 } from "../src/adapters/stead220";
@@ -66,15 +66,15 @@ describe("oldtownpark adapter (placeholder pricing)", () => {
 describe("sightmap adapter (real captured payload)", () => {
   it("maps every available unit with dates, sqft, and clean plan names", async () => {
     const listings = await sightmap.scrape(buildingById("1225-old-town"), ctxFor("1225-old-town"));
-    expect(listings.length).toBeGreaterThanOrEqual(20); // payload had 27
+    expect(listings.length).toBeGreaterThanOrEqual(4);
     for (const l of listings) UnitListingSchema.parse(l);
     expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
     expect(listings.every((l) => l.availableDate === null || /^\d{4}-\d{2}-\d{2}$/.test(l.availableDate))).toBe(true);
-    expect(listings.filter((l) => l.sqft !== null).length).toBeGreaterThanOrEqual(20);
+    expect(listings.filter((l) => l.sqft !== null).length).toBeGreaterThanOrEqual(4);
     // Plan names never leak serialized JSON.
     expect(listings.every((l) => !l.floorplanName.includes("{"))).toBe(true);
     // Structural spot-check only — prices drift between fixture captures.
-    const known = listings.find((l) => l.unitNumber === "0424");
+    const known = listings.find((l) => l.unitNumber === "0624");
     expect(known).toMatchObject({ beds: 0, sqft: 546 });
     expect(known!.price).toBeGreaterThan(1800);
     expect(known!.price).toBeLessThan(3200);
@@ -93,6 +93,29 @@ describe("leo adapter (real captured page)", () => {
     expect(studio408).toMatchObject({ beds: 0, sqft: 467, baths: 1 });
     expect(studio408!.price).toBeGreaterThan(1800);
     expect(studio408!.price).toBeLessThan(3200);
+  });
+
+  it("prefers the embedded Jonah JSON over card markup", () => {
+    const html = readFileSync(join(ROOT, "scraper", "fixtures", "the-leo", "00-floorplans.html"), "utf8");
+    const listings = parseLeoPage(html, "https://leochicago.com/");
+    expect(listings.length).toBeGreaterThanOrEqual(8);
+    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
+    // Unix available_date on the JSON blob becomes an ISO day.
+    expect(listings.every((l) => l.availableDate === null || /^\d{4}-\d{2}-\d{2}$/.test(l.availableDate))).toBe(true);
+  });
+
+  it("recognizes Imunify360 WAF bodies so we retry instead of treating them as empty inventory", () => {
+    expect(
+      isWafPage(
+        JSON.stringify({
+          message: "Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted",
+        }),
+      ),
+    ).toBe(true);
+    expect(isWafPage("<html><body>floorplans</body></html>")).toBe(false);
+    expect(parseLeoPage('{"message":"Access denied by Imunify360 bot-protection."}', "https://leochicago.com/")).toEqual(
+      [],
+    );
   });
 });
 
@@ -180,10 +203,49 @@ describe("sightmap lease-term cap", () => {
     expect(within.leaseTermMonths).toBe(12);
   });
 
+  it("omits over-cap units when the matrix has no in-cap price", async () => {
+    const payload = {
+      data: {
+        floors: [],
+        floor_plans: [{ id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1 }],
+        units: [
+          {
+            id: "u1",
+            unit_number: "0901",
+            floor_id: "f",
+            floor_plan_id: "p1",
+            price: 2200,
+            area: 500,
+            available_on: null,
+            display_lease_term: "18 Months",
+            leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1",
+          },
+        ],
+      },
+    };
+    const matrix = { data: { options: [{ lease_term: 18, price: 2200 }] } };
+    const ctx = {
+      fetch: (async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/leasing/")) return new Response(JSON.stringify(matrix));
+        return new Response(JSON.stringify(payload));
+      }) as typeof fetch,
+      log: () => {},
+      maxLeaseTermMonths: 14,
+    };
+    const listings = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    expect(listings).toEqual([]);
+  });
+
   it("keeps real-fixture listings term-tagged and within the 14-month cap", async () => {
-    const listings = await sightmap.scrape(buildingById("1225-old-town"), ctxFor("1225-old-town"));
+    const listings = await sightmap.scrape(buildingById("1225-old-town"), {
+      ...ctxFor("1225-old-town"),
+      maxLeaseTermMonths: 14,
+    });
     const tagged = listings.filter((l) => l.leaseTermMonths != null);
     expect(tagged.length).toBe(listings.length); // every 1225 unit carries a term
     expect(tagged.every((l) => l.leaseTermMonths! <= 14)).toBe(true);
+    // Over-cap teasers with no in-cap matrix price are omitted, not quoted.
+    expect(listings.find((l) => l.unitNumber === "1308")).toBeUndefined();
   });
 });

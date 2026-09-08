@@ -25,9 +25,13 @@ function computeWarnings(
 ): DataWarning[] {
   const warnings: DataWarning[] = [];
   if (lastAny?.status === "error") {
+    const lastGood = okRuns[okRuns.length - 1];
+    const lastGoodBit = lastGood
+      ? ` Showing data from ${lastGood.timestamp.slice(0, 10)}.`
+      : "";
     warnings.push({
       code: "scrape-error",
-      message: `Last scrape failed: ${lastAny.error ?? "unknown error"}. Showing older data.`,
+      message: `Last scrape failed: ${lastAny.error ?? "unknown error"}.${lastGoodBit}`,
     });
   }
   const latest = okRuns[okRuns.length - 1];
@@ -94,16 +98,26 @@ export function buildData(root: string): void {
       perUnitMeta: {},
       warnings: [],
       runs: [],
+      lastAttempt: null,
     };
 
     const okRuns: { timestamp: string; units: Snapshot["buildings"][number]["units"] }[] = [];
     let lastAny: BuildingSnapshot | null = null;
+    let lastSnapTs: string | null = null;
     for (const snap of snapshots) {
       const bs = snap.buildings.find((b) => b.buildingId === building.id);
       if (!bs) continue;
       lastAny = bs;
+      lastSnapTs = snap.timestamp;
       if (bs.status !== "ok") continue;
       okRuns.push({ timestamp: snap.timestamp, units: bs.units });
+    }
+    if (lastAny && lastSnapTs) {
+      history.lastAttempt = {
+        timestamp: lastSnapTs,
+        status: lastAny.status,
+        ...(lastAny.status === "error" && lastAny.error ? { error: lastAny.error } : {}),
+      };
     }
 
     for (const run of okRuns) {

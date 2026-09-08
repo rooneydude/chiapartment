@@ -187,6 +187,12 @@ export interface BuildingHistory {
   warnings: DataWarning[];
   /** Timestamps of every snapshot run that included this building (ok only). */
   runs: string[];
+  /** Most recent scrape attempt, including failures. Null if never scraped. */
+  lastAttempt: {
+    timestamp: string;
+    status: "ok" | "error";
+    error?: string;
+  } | null;
 }
 
 /** Shape of the compiled config.json (buildings.json + build-time health). */

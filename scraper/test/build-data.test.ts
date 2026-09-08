@@ -79,6 +79,7 @@ describe("buildData metrics and warnings", () => {
     expect(h.perUnitMeta["101"]).toEqual({ firstSeen: "2026-07-01T12:00:00Z", firstPrice: 2000 });
     expect(h.perUnitMeta["202"]).toEqual({ firstSeen: "2026-07-08T12:00:00Z", firstPrice: 2500 });
     expect(h.warnings).toEqual([]);
+    expect(h.lastAttempt).toEqual({ timestamp: "2026-07-08T12:00:00Z", status: "ok" });
   });
 
   it("flags a failed latest scrape", () => {
@@ -89,6 +90,12 @@ describe("buildData metrics and warnings", () => {
     const h = readHistory();
     expect(h.warnings.map((w) => w.code)).toContain("scrape-error");
     expect(h.warnings[0]!.message).toContain("HTTP 503");
+    expect(h.warnings[0]!.message).toContain("2026-07-01");
+    expect(h.lastAttempt).toEqual({
+      timestamp: "2026-07-08T12:00:00Z",
+      status: "error",
+      error: "HTTP 503",
+    });
     // Latest good data still served.
     expect(h.latest?.units).toHaveLength(1);
   });

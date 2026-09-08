@@ -207,8 +207,9 @@ export const sightmap: Adapter = {
           term = capped.term;
         } else {
           ctx.log(
-            `unit ${u.unit_number}: advertised price needs a ${term}-month lease and no ≤${maxMonths}-month price found — keeping it, term recorded`,
+            `unit ${u.unit_number}: advertised price needs a ${term}-month lease and no ≤${maxMonths}-month price found — skipping`,
           );
+          continue;
         }
       }
 

@@ -20,3 +20,14 @@ export const bedsLabel = (beds: number): string => (beds === 0 ? "Studio" : `${b
 
 export const daysSince = (iso: string): number =>
   Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400e3));
+
+export const hoursSince = (iso: string): number =>
+  Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 3600e3));
+
+/** Compact age for scrape status, e.g. "3h ago" / "2d ago". */
+export const ageLabel = (iso: string): string => {
+  const hours = hoursSince(iso);
+  if (hours < 1) return "just now";
+  if (hours < 48) return `${hours}h ago`;
+  return `${daysSince(iso)}d ago`;
+};
