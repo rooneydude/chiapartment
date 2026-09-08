@@ -1,0 +1,22 @@
+name: Test
+
+# PRs had no test job — only Refresh prices + Pages deploy. Fixture tests and
+# SnapshotSchema.parse over committed history are the guardrail against
+# silently dropping old prices at build-data time.
+on:
+  pull_request:
+  push:
+    branches: [claude/repo-reset-4my0gv, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
