@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BuildingsConfigSchema, UnitListingSchema } from "../../shared/src/types";
+import { BuildingsConfigSchema, UnitListingSchema, type OmittedListing } from "../../shared/src/types";
 import { leo, isWafPage, parseLeoPage } from "../src/adapters/leo";
 import { oldtownpark } from "../src/adapters/oldtownpark";
 import { sightmap } from "../src/adapters/sightmap";
@@ -224,7 +224,8 @@ describe("sightmap lease-term cap", () => {
       },
     };
     const matrix = { data: { options: [{ lease_term: 18, price: 2200 }] } };
-    const ctx = {
+    const omitted: OmittedListing[] = [];
+    const ctx: AdapterContext = {
       fetch: (async (url: string | URL | Request) => {
         const u = String(url);
         if (u.includes("/leasing/")) return new Response(JSON.stringify(matrix));
@@ -232,20 +233,33 @@ describe("sightmap lease-term cap", () => {
       }) as typeof fetch,
       log: () => {},
       maxLeaseTermMonths: 14,
+      reportOmitted: (row) => omitted.push(row),
     };
     const listings = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
     expect(listings).toEqual([]);
+    expect(omitted).toHaveLength(1);
+    expect(omitted).toHaveLength(1);
+    expect(omitted[0]).toMatchObject({
+      unitNumber: "0901",
+      advertisedPrice: 2200,
+      leaseTermMonths: 18,
+      reason: "over-cap",
+      beds: 0,
+    });
   });
 
   it("keeps real-fixture listings term-tagged and within the 14-month cap", async () => {
+    const omitted: { unitNumber: string | null }[] = [];
     const listings = await sightmap.scrape(buildingById("1225-old-town"), {
       ...ctxFor("1225-old-town"),
       maxLeaseTermMonths: 14,
+      reportOmitted: (row) => omitted.push(row),
     });
     const tagged = listings.filter((l) => l.leaseTermMonths != null);
     expect(tagged.length).toBe(listings.length); // every 1225 unit carries a term
     expect(tagged.every((l) => l.leaseTermMonths! <= 14)).toBe(true);
     // Over-cap teasers with no in-cap matrix price are omitted, not quoted.
     expect(listings.find((l) => l.unitNumber === "1308")).toBeUndefined();
+    expect(omitted.some((o) => o.unitNumber === "1308")).toBe(true);
   });
 });

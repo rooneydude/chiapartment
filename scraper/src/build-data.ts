@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { assembleWeekdayBrief, focusDeltaFromRuns } from "../../shared/src/brief";
 import { computeDelta } from "../../shared/src/delta";
 import {
   SnapshotSchema,
@@ -8,6 +9,7 @@ import {
   type CompiledConfig,
   type DataWarning,
   type FloorplanPoint,
+  type OmittedListing,
   type Snapshot,
 } from "../../shared/src/types";
 import { loadConfig } from "./run";
@@ -19,9 +21,10 @@ function median(values: number[]): number {
 }
 
 /** Data-sanity alarms so a broken scrape never masquerades as market truth. */
-function computeWarnings(
+export function computeWarnings(
   lastAny: BuildingSnapshot | null,
   okRuns: { timestamp: string; units: Snapshot["buildings"][number]["units"] }[],
+  latestOmitted: OmittedListing[] = [],
 ): DataWarning[] {
   const warnings: DataWarning[] = [];
   if (lastAny?.status === "error") {
@@ -55,10 +58,17 @@ function computeWarnings(
       });
     }
     if (latest.units.length < prev.units.length * 0.5) {
-      warnings.push({
-        code: "count-drop",
-        message: `Listing count halved in one run (${prev.units.length} → ${latest.units.length}) — possible partial scrape.`,
-      });
+      const omitted = latestOmitted.length;
+      const accounted = latest.units.length + omitted;
+      if (omitted > 0 && accounted >= prev.units.length * 0.5) {
+        // Lease-cap omit explains the drop — not a partial scrape.
+      } else {
+        const omitBit = omitted > 0 ? `; ${omitted} omitted over-cap` : "";
+        warnings.push({
+          code: "count-drop",
+          message: `Listing count halved in one run (${prev.units.length} → ${latest.units.length}${omitBit}) — possible partial scrape.`,
+        });
+      }
     }
   }
   return warnings;
@@ -87,7 +97,10 @@ export function buildData(root: string): void {
   }
   snapshots.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
+  const focusBeds = config.focus?.beds ?? null;
   const warningCounts: Record<string, number> = {};
+  const briefInputs: { id: string; name: string; history: BuildingHistory }[] = [];
+
   for (const building of config.buildings) {
     const history: BuildingHistory = {
       buildingId: building.id,
@@ -99,9 +112,15 @@ export function buildData(root: string): void {
       warnings: [],
       runs: [],
       lastAttempt: null,
+      focusDelta: null,
+      omitted: [],
     };
 
-    const okRuns: { timestamp: string; units: Snapshot["buildings"][number]["units"] }[] = [];
+    const okRuns: {
+      timestamp: string;
+      units: Snapshot["buildings"][number]["units"];
+      omitted: OmittedListing[];
+    }[] = [];
     let lastAny: BuildingSnapshot | null = null;
     let lastSnapTs: string | null = null;
     for (const snap of snapshots) {
@@ -110,7 +129,7 @@ export function buildData(root: string): void {
       lastAny = bs;
       lastSnapTs = snap.timestamp;
       if (bs.status !== "ok") continue;
-      okRuns.push({ timestamp: snap.timestamp, units: bs.units });
+      okRuns.push({ timestamp: snap.timestamp, units: bs.units, omitted: bs.omitted ?? [] });
     }
     if (lastAny && lastSnapTs) {
       history.lastAttempt = {
@@ -156,18 +175,25 @@ export function buildData(root: string): void {
         prev ? prev.timestamp : null,
         latest.timestamp,
       );
+      history.omitted = latest.omitted;
+      history.focusDelta = focusDeltaFromRuns(okRuns, focusBeds);
     }
-    history.warnings = computeWarnings(lastAny, okRuns);
+    history.warnings = computeWarnings(lastAny, okRuns, latest?.omitted ?? []);
     warningCounts[building.id] = history.warnings.length;
+    briefInputs.push({ id: building.id, name: building.name, history });
 
     writeFileSync(join(outDir, "buildings", `${building.id}.json`), JSON.stringify(history));
   }
 
+  const generated = new Date().toISOString();
   const compiledConfig: CompiledConfig = {
     ...config,
-    health: { generated: new Date().toISOString(), buildings: warningCounts },
+    health: { generated, buildings: warningCounts },
   };
   writeFileSync(join(outDir, "config.json"), JSON.stringify(compiledConfig));
+
+  const brief = assembleWeekdayBrief(briefInputs, focusBeds, generated);
+  writeFileSync(join(outDir, "brief.json"), JSON.stringify(brief));
 
   const skylineSrc = join(root, "data", "skyline.geojson");
   if (existsSync(skylineSrc)) {
@@ -183,6 +209,6 @@ export function buildData(root: string): void {
   }
 
   console.log(
-    `Compiled ${snapshots.length} snapshot(s) for ${config.buildings.length} building(s) → web/public/data/`,
+    `Compiled ${snapshots.length} snapshot(s) for ${config.buildings.length} building(s) → web/public/data/ (brief ${brief.summary.drops} drops / ${brief.summary.newListings} new)`,
   );
 }

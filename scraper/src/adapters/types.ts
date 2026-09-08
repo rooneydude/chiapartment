@@ -1,4 +1,4 @@
-import type { BuildingConfig, UnitListing } from "../../../shared/src/types";
+import type { BuildingConfig, OmittedListing, UnitListing } from "../../../shared/src/types";
 
 export interface AdapterContext {
   /** HTTP client — browser-like in live mode, fixture-backed in --fixtures. */
@@ -11,6 +11,11 @@ export interface AdapterContext {
    * pricing must not quote prices requiring a longer lease than this.
    */
   maxLeaseTermMonths?: number;
+  /**
+   * Record a unit that was seen but not quoted (over-cap teaser with no
+   * in-cap price). Future scrapes only — never rewrite history.
+   */
+  reportOmitted?: (row: OmittedListing) => void;
 }
 
 export interface Adapter {

@@ -104,6 +104,19 @@ export default function BuildingPage() {
           ))}
         </div>
       )}
+      {(history.omitted?.length ?? 0) > 0 && (
+        <div className="info-banner" role="status">
+          {history.omitted.length} listing{history.omitted.length === 1 ? "" : "s"} omitted
+          (lease longer than {config.focus?.maxLeaseTermMonths ?? 14} months, no in-cap
+          price):{" "}
+          {history.omitted
+            .map(
+              (o) =>
+                `${o.unitNumber ? `#${o.unitNumber}` : o.floorplanName} $${o.advertisedPrice.toLocaleString()} @ ${o.leaseTermMonths}mo`,
+            )
+            .join(" · ")}
+        </div>
+      )}
       <DeltaSummary delta={history.delta} />
       <div style={{ height: 10 }} />
       <Filters maxFloor={building.geometry.floors} />

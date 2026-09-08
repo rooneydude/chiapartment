@@ -66,21 +66,19 @@ export default function Dashboard() {
   const statBeds = focus ?? [0, 1];
   const statTiles = statBeds.map((b) => ({ beds: b, best: cheapest(b) }));
 
-  // Biggest drop among focus-bed units (join price changes to beds via the
-  // latest snapshot's unit list).
-  let drop: { amount: number; name: string; id: string; unit: string } | null = null;
+  // Biggest drop among focus-bed units (includes Stead floorplan/stack identity).
+  let drop: { amount: number; name: string; id: string; label: string } | null = null;
   for (const { building, history } of rows) {
-    const bedsByUnit = new Map(
-      (history.latest?.units ?? [])
-        .filter((u) => u.unitNumber)
-        .map((u) => [u.unitNumber!, u.beds]),
-    );
     for (const c of history.delta?.priceChanges ?? []) {
-      const beds = bedsByUnit.get(c.unitNumber);
-      if (beds === undefined || !inFocus(beds)) continue;
+      if (!inFocus(c.beds)) continue;
       const amount = c.from - c.to;
       if (amount > 0 && (!drop || amount > drop.amount)) {
-        drop = { amount, name: building.name, id: building.id, unit: c.unitNumber };
+        drop = {
+          amount,
+          name: building.name,
+          id: building.id,
+          label: c.unitNumber === c.floorplanName ? c.floorplanName : `#${c.unitNumber}`,
+        };
       }
     }
   }
@@ -134,7 +132,7 @@ export default function Dashboard() {
             <span className="stat-label">Biggest recent drop</span>
             <span className="stat-value delta-down">▼ {money(drop.amount)}</span>
             <span className="stat-sub">
-              #{drop.unit} · {drop.name}
+              {drop.label} · {drop.name}
             </span>
           </Link>
         )}
@@ -150,9 +148,6 @@ export default function Dashboard() {
       {rows.map(({ building, history }) => {
         const allUnits = history.latest?.units ?? [];
         const units = allUnits.filter((u) => inFocus(u.beds));
-        const bedsByUnit = new Map(
-          allUnits.filter((u) => u.unitNumber).map((u) => [u.unitNumber!, u.beds]),
-        );
 
         // Min price per focus bedroom count.
         const minByBeds = new Map<number, number>();
@@ -187,12 +182,10 @@ export default function Dashboard() {
         const d = history.delta;
         const newCount = d?.newUnits.filter((u) => inFocus(u.beds)).length ?? 0;
         const goneCount = d?.removedUnits.filter((u) => inFocus(u.beds)).length ?? 0;
-        const focusChanges = (d?.priceChanges ?? []).filter((c) => {
-          const beds = bedsByUnit.get(c.unitNumber);
-          return beds !== undefined && inFocus(beds);
-        });
+        const focusChanges = (d?.priceChanges ?? []).filter((c) => inFocus(c.beds));
         const drops = focusChanges.filter((c) => c.to < c.from).length;
         const hikes = focusChanges.filter((c) => c.to > c.from).length;
+        const omittedCount = history.omitted?.length ?? 0;
 
         return (
           <Link className="card" key={building.id} to={`/b/${building.id}`}>
@@ -230,6 +223,19 @@ export default function Dashboard() {
               {drops > 0 && <span className="badge good">▼ {drops} price drops</span>}
               {hikes > 0 && <span className="badge bad">▲ {hikes} increases</span>}
               {goneCount > 0 && <span className="badge">{goneCount} gone</span>}
+              {omittedCount > 0 && (
+                <span
+                  className="badge"
+                  title={history.omitted
+                    .map(
+                      (o) =>
+                        `${o.unitNumber ? `#${o.unitNumber}` : o.floorplanName}: $${o.advertisedPrice.toLocaleString()} @ ${o.leaseTermMonths}mo (over-cap)`,
+                    )
+                    .join("\n")}
+                >
+                  {omittedCount} over-cap
+                </span>
+              )}
             </div>
             <div className="card-foot">
               <span>

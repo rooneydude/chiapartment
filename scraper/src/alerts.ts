@@ -1,13 +1,15 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { computeDelta } from "../../shared/src/delta";
+import { computeDelta, listingLabel } from "../../shared/src/delta";
 import { SnapshotSchema, type Snapshot } from "../../shared/src/types";
 import { loadConfig } from "./run";
 
 /**
- * Compare the two latest snapshots and produce a GitHub-issue-ready markdown
- * alert covering only the bed counts the user shops for (config.focus).
- * Writes nothing when there is nothing worth a notification.
+ * Compare the last two *successful* scrapes per building and produce a
+ * GitHub-issue-ready markdown alert covering only the bed counts the user
+ * shops for (config.focus). Writes nothing when there is nothing worth a
+ * notification. Floorplan-only listings (Stead stacks) participate via
+ * floorplan+beds identity.
  */
 
 export interface AlertResult {
@@ -16,6 +18,22 @@ export interface AlertResult {
   drops: number;
   newUnits: number;
   errors: number;
+}
+
+function lastTwoOk(
+  snaps: Snapshot[],
+  buildingId: string,
+): { prev: { timestamp: string; units: Snapshot["buildings"][number]["units"] }; curr: { timestamp: string; units: Snapshot["buildings"][number]["units"] } } | null {
+  const ok: { timestamp: string; units: Snapshot["buildings"][number]["units"] }[] = [];
+  for (const snap of snaps) {
+    const bs = snap.buildings.find((b) => b.buildingId === buildingId);
+    if (!bs || bs.status !== "ok") continue;
+    ok.push({ timestamp: snap.timestamp, units: bs.units });
+  }
+  if (ok.length < 2) return null;
+  const curr = ok[ok.length - 1]!;
+  const prev = ok[ok.length - 2]!;
+  return { prev, curr };
 }
 
 export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
@@ -37,37 +55,38 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
   if (snaps.length < 2) return { markdown: null, title: null, drops: 0, newUnits: 0, errors: 0 };
 
   const latest = snaps[snaps.length - 1]!;
-  const prev = snaps[snaps.length - 2]!;
 
   const dropLines: string[] = [];
   const newLines: string[] = [];
   const errorLines: string[] = [];
 
-  for (const bs of latest.buildings) {
-    const name = nameOf.get(bs.buildingId) ?? bs.buildingId;
-    if (bs.status === "error") {
-      errorLines.push(`- ⚠ **${name}** scrape failed: ${bs.error ?? "unknown error"}`);
+  for (const building of config.buildings) {
+    const name = nameOf.get(building.id) ?? building.id;
+    const latestBs = latest.buildings.find((b) => b.buildingId === building.id);
+    if (latestBs?.status === "error") {
+      errorLines.push(`- ⚠ **${name}** scrape failed: ${latestBs.error ?? "unknown error"}`);
       continue;
     }
-    const prevBs = prev.buildings.find((b) => b.buildingId === bs.buildingId);
-    if (!prevBs || prevBs.status !== "ok") continue;
 
-    const bedsByUnit = new Map(
-      bs.units.filter((u) => u.unitNumber).map((u) => [u.unitNumber!, u]),
-    );
-    const delta = computeDelta(prevBs.units, bs.units, prev.timestamp, latest.timestamp);
+    const pair = lastTwoOk(snaps, building.id);
+    if (!pair) continue;
+
+    const delta = computeDelta(pair.prev.units, pair.curr.units, pair.prev.timestamp, pair.curr.timestamp);
 
     for (const c of delta.priceChanges) {
-      const unit = bedsByUnit.get(c.unitNumber);
-      if (!unit || !inFocus(unit.beds) || c.to >= c.from) continue;
+      if (!inFocus(c.beds) || c.to >= c.from) continue;
+      const unit = pair.curr.units.find(
+        (u) => (u.unitNumber ?? u.floorplanName) === c.unitNumber,
+      );
+      const label = c.unitNumber === c.floorplanName ? c.floorplanName : `#${c.unitNumber}`;
       dropLines.push(
-        `- **${name}** #${c.unitNumber} (${unit.beds === 0 ? "studio" : `${unit.beds} BR`}${unit.sqft ? `, ${unit.sqft} sqft` : ""}): $${c.from.toLocaleString()} → **$${c.to.toLocaleString()}** (▼$${(c.from - c.to).toLocaleString()})`,
+        `- **${name}** ${label} (${c.beds === 0 ? "studio" : `${c.beds} BR`}${unit?.sqft ? `, ${unit.sqft} sqft` : ""}): $${c.from.toLocaleString()} → **$${c.to.toLocaleString()}** (▼$${(c.from - c.to).toLocaleString()})`,
       );
     }
     for (const u of delta.newUnits) {
       if (!inFocus(u.beds)) continue;
       newLines.push(
-        `- **${name}** #${u.unitNumber} (${u.beds === 0 ? "studio" : `${u.beds} BR`}${u.sqft ? `, ${u.sqft} sqft` : ""}) listed at **$${u.price.toLocaleString()}**${u.availableDate ? `, available ${u.availableDate}` : ""}`,
+        `- **${name}** ${listingLabel(u)} (${u.beds === 0 ? "studio" : `${u.beds} BR`}${u.sqft ? `, ${u.sqft} sqft` : ""}) listed at **$${u.price.toLocaleString()}**${u.availableDate ? `, available ${u.availableDate}` : ""}`,
       );
     }
   }
@@ -81,7 +100,7 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
   if (newLines.length) parts.push(`## 🆕 New listings\n${newLines.join("\n")}`);
   if (errorLines.length) parts.push(`## Scrape problems\n${errorLines.join("\n")}`);
   parts.push(
-    `\n[Open the dashboard](https://rooneydude.github.io/chiapartment/) · snapshot ${latest.timestamp}`,
+    `\n[Open the dashboard](https://rooneydude.github.io/chiapartment/) · snapshot ${latest.timestamp} · weekday brief: [brief.json](https://rooneydude.github.io/chiapartment/data/brief.json)`,
   );
 
   const titleBits: string[] = [];
