@@ -48,7 +48,14 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
+      - name: Install Playwright Chromium
+        run: |
+          # Browser zip comes from Playwright's CDN. `--with-deps` runs
+          # apt-get update, which fails the whole daily scrape when the
+          # runner's preinstalled Google Chrome repo hash-mismatches
+          # (scheduled run 34384381018, 2026-09-09). ubuntu-latest already
+          # has the OS libs Chromium needs.
+          npx playwright install chromium
 
       - name: Resolve flags (inputs or trigger file)
         id: flags
