@@ -4,7 +4,7 @@
   "source": {
     "sightmapId": "87594",
     "assetUrl": "https://cdn.sightmap.com/assets/jl/w0/jlw03719w2y/72/7d/727d67713d611a5803dce818ec8abeda.umap",
-    "capturedAt": "2026-10-06T19:21:13.229Z"
+    "capturedAt": "2026-10-07T19:48:22.949Z"
   },
   "fit": {
     "metersPerPixel": 0.0842,
@@ -225,6 +225,12 @@
       "lon": -87.6341769,
       "lat": 41.9046037,
       "facing": "S",
+      "levelIndex": 4
+    },
+    "0718": {
+      "lon": -87.6341841,
+      "lat": 41.9053062,
+      "facing": "N",
       "levelIndex": 4
     }
   }
