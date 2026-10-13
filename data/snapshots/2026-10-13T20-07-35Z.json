@@ -1,0 +1,1122 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-10-13T20:07:35Z",
+  "buildings": [
+    {
+      "buildingId": "1225-old-town",
+      "status": "ok",
+      "source": {
+        "adapter": "sightmap",
+        "fetchedUrl": "https://1225oldtown.com/"
+      },
+      "units": [
+        {
+          "unitNumber": "0509",
+          "floorplanName": "bhra14.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 941,
+          "price": 4029,
+          "leaseTermMonths": 11,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0812",
+          "floorplanName": "bhre3.1 Studio",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 543,
+          "price": 2407,
+          "leaseTermMonths": 14,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0906",
+          "floorplanName": "bhra3.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 703,
+          "price": 3456,
+          "leaseTermMonths": 11,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "0918",
+          "floorplanName": "bhra12.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 864,
+          "price": 3839,
+          "leaseTermMonths": 11,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1308",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 6002,
+          "leaseTermMonths": 9,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1503",
+          "floorplanName": "bhrb6.2 2 BR, 2 BTH,",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1201,
+          "price": 5449,
+          "leaseTermMonths": 8,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        },
+        {
+          "unitNumber": "1605",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 5997,
+          "leaseTermMonths": 9,
+          "availableDate": "2026-10-13",
+          "url": "https://1225oldtown.com/"
+        }
+      ],
+      "omitted": [
+        {
+          "unitNumber": "0701",
+          "floorplanName": "bhrb4.2 2 BR, 2 BTH",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1166,
+          "advertisedPrice": 4944,
+          "leaseTermMonths": 18,
+          "reason": "over-cap"
+        },
+        {
+          "unitNumber": "0705",
+          "floorplanName": "bhra7.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 787,
+          "advertisedPrice": 3614,
+          "leaseTermMonths": 18,
+          "reason": "over-cap"
+        },
+        {
+          "unitNumber": "1022",
+          "floorplanName": "bhra11.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 858,
+          "advertisedPrice": 3827,
+          "leaseTermMonths": 18,
+          "reason": "over-cap"
+        },
+        {
+          "unitNumber": "1412",
+          "floorplanName": "bhra6.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 786,
+          "advertisedPrice": 3584,
+          "leaseTermMonths": 18,
+          "reason": "over-cap"
+        },
+        {
+          "unitNumber": "1602",
+          "floorplanName": "bhra1.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 664,
+          "advertisedPrice": 3249,
+          "leaseTermMonths": 18,
+          "reason": "over-cap"
+        }
+      ]
+    },
+    {
+      "buildingId": "old-town-park-1",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/"
+      },
+      "units": [
+        {
+          "unitNumber": "2313",
+          "floorplanName": "S2",
+          "beds": 0,
+          "baths": null,
+          "sqft": 565,
+          "price": 2704,
+          "priceMax": 3217,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "1012",
+          "floorplanName": "S2A",
+          "beds": 0,
+          "baths": null,
+          "sqft": 560,
+          "price": 2768,
+          "priceMax": 3404,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2312",
+          "floorplanName": "S2A",
+          "beds": 0,
+          "baths": null,
+          "sqft": 560,
+          "price": 2823,
+          "priceMax": 3358,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "1411",
+          "floorplanName": "A1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 680,
+          "price": 2940,
+          "priceMax": 3542,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2011",
+          "floorplanName": "A1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 680,
+          "price": 3041,
+          "priceMax": 3754,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2511",
+          "floorplanName": "A1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 680,
+          "price": 2940,
+          "priceMax": 3542,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "1606",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 770,
+          "price": 3529,
+          "priceMax": 4317,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2306",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 770,
+          "price": 3609,
+          "priceMax": 4394,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0605",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 2991,
+          "priceMax": 3692,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "1910",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3071,
+          "priceMax": 3794,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2805",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3231,
+          "priceMax": 3893,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2810",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3286,
+          "priceMax": 3959,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0203",
+          "floorplanName": "A6",
+          "beds": 1,
+          "baths": null,
+          "sqft": 924,
+          "price": 3590,
+          "priceMax": 4332,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "2603",
+          "floorplanName": "A6",
+          "beds": 1,
+          "baths": null,
+          "sqft": 899,
+          "price": 3831,
+          "priceMax": 4624,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0622",
+          "floorplanName": "B1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 996,
+          "price": 4214,
+          "priceMax": 5085,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0708",
+          "floorplanName": "B3",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1142,
+          "price": 4620,
+          "priceMax": 5494,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0207",
+          "floorplanName": "B4",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1219,
+          "price": 4555,
+          "priceMax": 5417,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0901",
+          "floorplanName": "B5",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1300,
+          "price": 4775,
+          "priceMax": 5762,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "1715",
+          "floorplanName": "B6",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1355,
+          "price": 4785,
+          "priceMax": 5774,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0514",
+          "floorplanName": "B7",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1304,
+          "price": 4305,
+          "priceMax": 5196,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0619",
+          "floorplanName": "S3A-2",
+          "beds": 0,
+          "baths": null,
+          "sqft": 565,
+          "price": 2603,
+          "priceMax": 3245,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        },
+        {
+          "unitNumber": "0709",
+          "floorplanName": "S5",
+          "beds": 0,
+          "baths": null,
+          "sqft": 625,
+          "price": 2583,
+          "priceMax": 3176,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-1"
+        }
+      ]
+    },
+    {
+      "buildingId": "old-town-park-2",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/"
+      },
+      "units": [
+        {
+          "unitNumber": "1512",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "baths": null,
+          "sqft": 603,
+          "price": 2493,
+          "priceMax": 3108,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "3412",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "baths": null,
+          "sqft": 603,
+          "price": 2648,
+          "priceMax": 3301,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "3712",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "baths": null,
+          "sqft": 603,
+          "price": 2778,
+          "priceMax": 3305,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "2604",
+          "floorplanName": "S2-1",
+          "beds": 0,
+          "baths": null,
+          "sqft": 550,
+          "price": 2613,
+          "priceMax": 3213,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1510",
+          "floorplanName": "A1M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 704,
+          "price": 3116,
+          "priceMax": 3850,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "3510",
+          "floorplanName": "A1M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 704,
+          "price": 3296,
+          "priceMax": 4072,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1107",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 696,
+          "price": 3554,
+          "priceMax": 4289,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1807",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 696,
+          "price": 3644,
+          "priceMax": 4398,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "2107",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 696,
+          "price": 3659,
+          "priceMax": 4476,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "2607",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 696,
+          "price": 3719,
+          "priceMax": 4488,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "3307",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 696,
+          "price": 3804,
+          "priceMax": 4631,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "2203",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 801,
+          "price": 3617,
+          "priceMax": 4364,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "2803",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 801,
+          "price": 3702,
+          "priceMax": 4467,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "3503",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 801,
+          "price": 3841,
+          "priceMax": 4636,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "0406",
+          "floorplanName": "A4-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 810,
+          "price": 3590,
+          "priceMax": 4332,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "B1-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1081,
+          "price": 4420,
+          "priceMax": 5334,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1001",
+          "floorplanName": "B1-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1081,
+          "price": 4357,
+          "priceMax": 5258,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "3208",
+          "floorplanName": "B2-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1116,
+          "price": 4905,
+          "priceMax": 5919,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1311",
+          "floorplanName": "C1-1",
+          "beds": 3,
+          "baths": null,
+          "sqft": 1289,
+          "price": 5494,
+          "priceMax": 6619,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1411",
+          "floorplanName": "C1-1",
+          "beds": 3,
+          "baths": null,
+          "sqft": 1289,
+          "price": 5499,
+          "priceMax": 6624,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "1511",
+          "floorplanName": "C1-1",
+          "beds": 3,
+          "baths": null,
+          "sqft": 1289,
+          "price": 5504,
+          "priceMax": 6630,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-2"
+        },
+        {
+          "unitNumber": "2211",
+          "floorplanName": "C1-1",
+          "beds": 3,
+          "baths": null,
+          "sqft": 1289,
+          "price": 5778,
+          "priceMax": 6938,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-2"
+        }
+      ]
+    },
+    {
+      "buildingId": "old-town-park-3",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/"
+      },
+      "units": [
+        {
+          "unitNumber": "3403",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2523,
+          "priceMax": 3102,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3603",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2678,
+          "priceMax": 3293,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3703",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2623,
+          "priceMax": 3120,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3803",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2768,
+          "priceMax": 3451,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2605",
+          "floorplanName": "S3-1",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2508,
+          "priceMax": 3127,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3605",
+          "floorplanName": "S3-1",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2678,
+          "priceMax": 3186,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3104",
+          "floorplanName": "S4",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2458,
+          "priceMax": 3022,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3304",
+          "floorplanName": "S4",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2493,
+          "priceMax": 3066,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3904",
+          "floorplanName": "S4",
+          "beds": 0,
+          "baths": null,
+          "sqft": 505,
+          "price": 2733,
+          "priceMax": 3251,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3907",
+          "floorplanName": "A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 728,
+          "price": 3272,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2606",
+          "floorplanName": "A2-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 741,
+          "price": 3874,
+          "priceMax": 4675,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2513",
+          "floorplanName": "A3-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 786,
+          "price": 3251,
+          "priceMax": 4013,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3613",
+          "floorplanName": "A3-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 786,
+          "price": 3366,
+          "priceMax": 4155,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "1910",
+          "floorplanName": "B",
+          "beds": 2,
+          "baths": null,
+          "sqft": 915,
+          "price": 3716,
+          "priceMax": 4477,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2410",
+          "floorplanName": "B",
+          "beds": 2,
+          "baths": null,
+          "sqft": 915,
+          "price": 3871,
+          "priceMax": 4664,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3811",
+          "floorplanName": "B1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1060,
+          "price": 4321,
+          "priceMax": 5215,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "0808",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1061,
+          "price": 4105,
+          "priceMax": 4882,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2408",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1061,
+          "price": 4355,
+          "priceMax": 5179,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2608",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1061,
+          "price": 4370,
+          "priceMax": 5273,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "3608",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1061,
+          "price": 4456,
+          "priceMax": 5377,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1070,
+          "price": 4360,
+          "priceMax": 5239,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "0801",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1070,
+          "price": 4103,
+          "priceMax": 4951,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "0901",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1070,
+          "price": 4420,
+          "priceMax": 5256,
+          "availableDate": null,
+          "url": "https://oldtownpark.com/availability-tower-3"
+        },
+        {
+          "unitNumber": "2201",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1070,
+          "price": 4550,
+          "priceMax": 5490,
+          "availableDate": "2026-10-13",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        }
+      ]
+    },
+    {
+      "buildingId": "the-leo",
+      "status": "ok",
+      "source": {
+        "adapter": "leo",
+        "fetchedUrl": "https://leochicago.com/"
+      },
+      "units": [
+        {
+          "unitNumber": "1801",
+          "floorplanName": "1 BR",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 770,
+          "price": 3610,
+          "availableDate": "2026-08-12",
+          "url": "https://leochicago.com/floorplans/unit-4efab45edbdbc16d8ea03526f31e94fa/"
+        },
+        {
+          "unitNumber": "705",
+          "floorplanName": "1 BR",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 712,
+          "price": 3275,
+          "availableDate": "2026-09-22",
+          "url": "https://leochicago.com/floorplans/unit-e1a5c099698f1638b126d177d7799a8d/"
+        },
+        {
+          "unitNumber": "603",
+          "floorplanName": "1 BR",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 872,
+          "price": 3625,
+          "availableDate": "2026-10-15",
+          "url": "https://leochicago.com/floorplans/unit-73b0a9d0ae9a89aa5612fee1eae6b415/"
+        }
+      ]
+    },
+    {
+      "buildingId": "stead-220",
+      "status": "ok",
+      "source": {
+        "adapter": "stead220",
+        "fetchedUrl": "https://stead220.com/"
+      },
+      "units": [
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 01",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2475,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/1"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR + Den - Unit 02",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3750,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 03",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 2950,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/3"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 04",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3175,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/4"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium Studio - Unit 05",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2250,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/5"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR - Unit 06",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3665,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/6"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR - Unit 07",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3350,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/7"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 08",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2550,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/8"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 2BR - Unit 09",
+          "beds": 2,
+          "baths": 2,
+          "sqft": null,
+          "price": 4640,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/9"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 10",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 2900,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/10"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium Studio - Unit 11",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2295,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/11"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 2BR - Unit 12",
+          "beds": 2,
+          "baths": 2,
+          "sqft": null,
+          "price": 4990,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/12"
+        },
+        {
+          "unitNumber": "2802",
+          "floorplanName": "PH Medium 1BR - Unit 2802",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3785,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2802"
+        },
+        {
+          "unitNumber": "2803",
+          "floorplanName": "PH Medium 1BR - Unit 2803",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3805,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2803"
+        },
+        {
+          "unitNumber": "2809",
+          "floorplanName": "PH Medium Studio - Unit 2809",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 3410,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2809"
+        }
+      ]
+    }
+  ]
+}
