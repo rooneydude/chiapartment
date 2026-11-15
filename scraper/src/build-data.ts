@@ -203,6 +203,14 @@ export function buildData(root: string): void {
             firstPrice: u.price,
             ...(u.leaseTermMonths != null ? { firstTerm: u.leaseTermMonths } : {}),
           };
+        } else {
+          // Floorplan / stack listings (Stead 220) have no unit number; they
+          // get first-seen metadata under the identity deltas use for them.
+          history.perUnitMeta[listingKey(u)] ??= {
+            firstSeen: run.timestamp,
+            firstPrice: u.price,
+            ...(u.leaseTermMonths != null ? { firstTerm: u.leaseTermMonths } : {}),
+          };
         }
         const prices = byPlan.get(u.floorplanName) ?? [];
         prices.push(u.price);

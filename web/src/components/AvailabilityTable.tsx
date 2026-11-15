@@ -59,6 +59,12 @@ export function shownPrice(u: UnitListing, leaseTerm: number | null): ShownPrice
   };
 }
 
+/**
+ * Key of a listing in `perUnitMeta`: its unit number, or — for floorplan /
+ * stack listings that have none — the same identity deltas use.
+ */
+const metaKey = (u: UnitListing): string => u.unitNumber ?? listingKey(u);
+
 /** nulls always sort last, whatever the direction. */
 function compare(a: string | number | null, b: string | number | null, dir: 1 | -1): number {
   if (a === null && b === null) return 0;
@@ -294,7 +300,7 @@ export default function AvailabilityTable({
         case "movein":
           return moveIn(u, asOf).days;
         case "listed":
-          return u.unitNumber ? (meta[u.unitNumber]?.firstSeen ?? null) : null;
+          return meta[metaKey(u)]?.firstSeen ?? null;
         default:
           return shownPrice(u, leaseTerm).price;
       }
@@ -387,7 +393,7 @@ export default function AvailabilityTable({
                 shown.term !== compareTerm && !shown.termUnavailable
                   ? priceAtTerm(u, compareTerm)
                   : null;
-              const first = u.unitNumber ? meta[u.unitNumber] : undefined;
+              const first = meta[metaKey(u)];
               // Since-first-listing change, only when it is like for like.
               const nowAtFirstTerm =
                 first === undefined
@@ -414,11 +420,18 @@ export default function AvailabilityTable({
                     onMouseEnter={() => hoverUnit(u.unitNumber)}
                     onMouseLeave={() => hoverUnit(null)}
                   >
-                    <td>
+                    <td
+                      title={
+                        u.unitNumber === null
+                          ? "The site lists this as a floorplan / stack with a starting price, not as an individual unit"
+                          : undefined
+                      }
+                    >
                       <span className="caret" aria-hidden="true">
                         {isOpen ? "▾" : "▸"}
                       </span>
-                      {u.unitNumber ?? "—"}{" "}
+                      {/* A floorplan-level listing is identified by its plan name. */}
+                      {u.unitNumber ?? <span className="plan-as-unit">{u.floorplanName}</span>}{" "}
                       {newSet.has(listingKey(u)) && <span className="badge new">NEW</span>}
                     </td>
                     <td className="num">{floor ?? "—"}</td>
@@ -429,8 +442,13 @@ export default function AvailabilityTable({
                           : undefined
                       }
                     >
-                      {u.planType ?? bedsLabel(u.beds)}{" "}
-                      <span className="plan-name">{u.floorplanName}</span>
+                      {u.planType ?? bedsLabel(u.beds)}
+                      {u.unitNumber !== null && (
+                        <>
+                          {" "}
+                          <span className="plan-name">{u.floorplanName}</span>
+                        </>
+                      )}
                     </td>
                     <td className="num">{u.sqft?.toLocaleString() ?? "—"}</td>
                     <td className="num price-cell">

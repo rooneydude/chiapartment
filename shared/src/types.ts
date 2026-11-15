@@ -315,10 +315,16 @@ export interface BriefListing {
   unitNumber: string | null;
   floorplanName: string;
   beds: number;
+  /** The site's unit-type label when it differs from the bed count ("Jr. 2 Bed"). */
+  planType?: string;
+  /** Advertised base rent. */
   price: number;
   priceMax?: number;
+  /** Mandatory monthly charges on top of base rent, when published. */
+  monthlyFees?: { min: number; max: number };
   availableDate: string | null;
   availableNow?: boolean;
+  vacantSince?: string;
   leaseTermMonths?: number | null;
   leaseTerms?: LeaseTermPrice[];
   sqft?: number | null;
@@ -415,8 +421,10 @@ export interface BuildingHistory {
   perFloorplan: Record<string, FloorplanPoint[]>;
   /**
    * unitNumber → first time (and price at which) the unit was ever listed.
-   * `firstTerm` is the lease length that first price was quoted for, when the
-   * site said — needed to compare "since first listing" like for like.
+   * Floorplan / stack listings without a unit number are keyed by their
+   * listing key ("fp:<beds>:<floorplanName>"). `firstTerm` is the lease
+   * length that first price was quoted for, when the site said — needed to
+   * compare "since first listing" like for like.
    */
   perUnitMeta: Record<string, { firstSeen: string; firstPrice: number; firstTerm?: number }>;
   /** Data-sanity alarms for the latest state of this building. */
