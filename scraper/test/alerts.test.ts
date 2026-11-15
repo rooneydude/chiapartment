@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Snapshot, UnitListing } from "../../shared/src/types";
-import { buildAlerts } from "../src/alerts";
+import { buildAlerts, loadSnapshots, plain } from "../src/alerts";
 
 // Uses the REAL repo config (focus.beds = [0, 2]) with injected snapshots.
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -224,5 +226,144 @@ describe("buildAlerts", () => {
     // An ordinary drop on the same unit still alerts.
     const real = snap("2026-08-31T18:00:00Z", [{ ...unit("1715", 2, 4700), priceMax: 5100 }], "ok", "old-town-park-1");
     expect(buildAlerts(ROOT, [day1, real]).drops).toBe(1);
+  });
+});
+
+describe("buildAlerts: what kind of change it is", () => {
+  const building = (
+    timestamp: string,
+    entry: Partial<Snapshot["buildings"][number]>,
+    buildingId = "the-leo",
+  ): Snapshot => ({
+    schemaVersion: 1,
+    timestamp,
+    buildings: [
+      {
+        buildingId,
+        status: "ok",
+        source: { adapter: "x", fetchedUrl: "https://example.com/" },
+        units: [],
+        ...entry,
+      },
+    ],
+  });
+
+  it("files a same-ratio repricing of every unit as a concession, with what the site says", () => {
+    // The Leo, 10 → 12 Nov 2026: both units ×17/18 the day "1/2 month free" went up.
+    const prev = building("2026-11-10T18:00:00Z", { units: [unit("705", 2, 3275), unit("602", 0, 2790)] });
+    const curr = building("2026-11-12T18:00:00Z", {
+      units: [unit("705", 2, 3093), unit("602", 0, 2635)],
+      notices: ["Receive a 1/2 month free on our final availability for 2026!"],
+    });
+    const r = buildAlerts(ROOT, [prev, curr]);
+    expect(r.drops).toBe(2);
+    expect(r.markdown).not.toContain("## 📉 Price drops");
+    expect(r.markdown).toContain("## 🏷 Repriced across the board — probably a concession, not a rent cut");
+    expect(r.markdown).toContain("#602 (studio, 600 sqft): $2,790 → **$2,635**");
+    expect(r.markdown).toContain("All 2 The Leo units listed in both runs moved by the same −5.6% at once.");
+    expect(r.markdown).toContain("The site says: “Receive a 1/2 month free on our final availability for 2026!”");
+    // An ordinary drop on one unit stays an ordinary drop.
+    const plainDrop = buildAlerts(ROOT, [
+      prev,
+      building("2026-11-12T18:00:00Z", { units: [unit("705", 2, 3275), unit("602", 0, 2700)] }),
+    ]);
+    expect(plainDrop.markdown).toContain("## 📉 Price drops");
+    expect(plainDrop.markdown).not.toContain("concession");
+  });
+
+  it("announces a listing whose price comes back, against what it last cost", () => {
+    const unpriced = { unitNumber: null, floorplanName: "Medium Studio - Unit 05", beds: 0, note: "Contact for Pricing" };
+    const snaps = [
+      building("2026-10-27T18:00:00Z", { units: [unit(null, 0, 2250, "Medium Studio - Unit 05")], alsoListed: [] }, "stead-220"),
+      building("2026-10-28T18:00:00Z", { units: [], alsoListed: [unpriced] }, "stead-220"),
+      building("2026-10-29T18:00:00Z", { units: [unit(null, 0, 1950, "Medium Studio - Unit 05")], alsoListed: [] }, "stead-220"),
+    ];
+    // Withdrawing the price raises nothing…
+    expect(buildAlerts(ROOT, snaps.slice(0, 2)).markdown).toBeNull();
+    // …its return does.
+    const r = buildAlerts(ROOT, snaps);
+    expect(r.newUnits).toBe(1);
+    expect(r.markdown).toContain(
+      "**Stead 220** Medium Studio - Unit 05 (studio, 600 sqft) has a price again: **$1,950** (was $2,250 on Oct 27, 2026, ▼$300)",
+    );
+  });
+
+  it("announces a listing that appears without a price, between runs that record such rows", () => {
+    const unpriced = { unitNumber: null, floorplanName: "Large Studio - Unit 13", beds: 0, note: "Contact for Pricing" };
+    const snaps = [
+      building("2026-10-27T18:00:00Z", { units: [unit(null, 0, 2475, "Large Studio - Unit 01")], alsoListed: [] }, "stead-220"),
+      building("2026-10-28T18:00:00Z", { units: [unit(null, 0, 2475, "Large Studio - Unit 01")], alsoListed: [unpriced] }, "stead-220"),
+    ];
+    const r = buildAlerts(ROOT, snaps);
+    expect(r.markdown).toContain("**Stead 220** Large Studio - Unit 13 (studio) appeared without a price — Contact for Pricing");
+    // The earlier run did not record such rows at all (a snapshot from before 15 Nov 2026): nothing can be said.
+    const legacy = building("2026-10-27T18:00:00Z", { units: [unit(null, 0, 2475, "Large Studio - Unit 01")] }, "stead-220");
+    expect(buildAlerts(ROOT, [legacy, snaps[1]!]).markdown).toBeNull();
+  });
+
+  it("says so when a unit only now counts among the sizes being shopped for", () => {
+    const prev = building("2026-11-14T18:00:00Z", { units: [unit("602", 1, 2635)] });
+    const curr = building("2026-11-15T18:00:00Z", {
+      units: [{ ...unit("602", 0, 2635, "Jr 1 Bedroom"), planType: "Jr 1 Bedroom" }],
+    });
+    const r = buildAlerts(ROOT, [prev, curr]);
+    expect(r.markdown).toContain("**The Leo** #602 (Jr 1 Bedroom, 600 sqft) now counted as a studio: **$2,635**");
+  });
+
+  it("dates the alert by the Chicago day and words failure streaks precisely", () => {
+    // 8:30 pm in Chicago on 15 Nov is already the 16th in UTC.
+    const evening = buildAlerts(ROOT, [
+      building("2026-11-14T18:00:00Z", { units: [unit("602", 0, 2700)] }),
+      building("2026-11-16T02:30:00Z", { units: [unit("602", 0, 2600)] }),
+    ]);
+    expect(evening.title).toBe("Price alert 2026-11-15: 1 drop");
+
+    const good = building("2026-11-09T18:00:00Z", { units: [unit("602", 0, 2700)] });
+    const failed = building("2026-11-10T18:00:00Z", { status: "error", error: "HTTP 503" });
+    const refused = (ts: string) => building(ts, { status: "error", error: "refused", blocked: true });
+    // One refusal alone is routine.
+    expect(buildAlerts(ROOT, [good, refused("2026-11-10T18:00:00Z")]).markdown).toBeNull();
+    // Two refusals in a row are worth a line…
+    expect(buildAlerts(ROOT, [good, refused("2026-11-10T18:00:00Z"), refused("2026-11-11T18:00:00Z")]).markdown).toContain(
+      "the site's bot protection has refused the last 2 scrapes. Showing data from Nov 9, 2026.",
+    );
+    // …but an ordinary failure followed by a refusal is not "refused twice".
+    expect(buildAlerts(ROOT, [good, failed, refused("2026-11-11T18:00:00Z")]).markdown).toContain(
+      "the last 2 scrapes failed (the latest was refused by the site's bot protection)",
+    );
+  });
+
+  it("never lets scraped text or an error message add markup of its own", () => {
+    const r = buildAlerts(ROOT, [
+      building("2026-11-14T18:00:00Z", { units: [unit("602", 0, 2700)] }),
+      building("2026-11-15T18:00:00Z", {
+        units: [unit("602", 0, 2700), unit(null, 0, 2500, "Studio **A** [x](http://e.vil) <!--")],
+      }),
+    ]);
+    expect(r.markdown).toContain("Studio \\*\\*A\\*\\* \\[x\\](http://e.vil)");
+    expect(r.markdown).not.toContain("<!--");
+    const err = buildAlerts(ROOT, [
+      building("2026-11-14T18:00:00Z", { units: [unit("602", 0, 2700)] }),
+      building("2026-11-15T18:00:00Z", { status: "error", error: "bad page\n- injected item\n## heading" }),
+    ]);
+    expect(err.markdown).toContain("scrape failed: bad page - injected item \\#\\# heading");
+    expect(plain("a\n\n  b | c")).toBe("a b \\| c");
+  });
+});
+
+describe("loadSnapshots", () => {
+  it("skips a file that is not JSON instead of throwing", () => {
+    const root = join(tmpdir(), `chiapartment-alerts-${process.pid}`);
+    const dir = join(root, "data", "snapshots");
+    mkdirSync(dir, { recursive: true });
+    try {
+      writeFileSync(join(dir, "2026-11-14T18-00-00Z.json"), JSON.stringify(snap("2026-11-14T18:00:00Z", [unit("101", 0, 2400)])));
+      writeFileSync(join(dir, "2026-11-15T18-00-00Z.json"), '{"schemaVersion": 1, "timestamp": "2026-11-15T');
+      writeFileSync(join(dir, "2026-11-16T18-00-00Z.json"), "");
+      const loaded = loadSnapshots(root);
+      expect(loaded.map((s) => s.timestamp)).toEqual(["2026-11-14T18:00:00Z"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

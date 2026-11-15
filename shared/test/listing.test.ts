@@ -6,6 +6,7 @@ import {
   leaseTermTable,
   priceAtTerm,
   shortestTermAtAdvertisedPrice,
+  uniformReprice,
 } from "../src/listing";
 import { chicagoDate, daysBetween, isIsoDay } from "../src/time";
 import type { LeaseTermPrice } from "../src/types";
@@ -139,6 +140,50 @@ describe("comparePrices (like for like)", () => {
     });
   });
 
+  it("compares advertised rent with advertised rent when both runs carry the full lease table", () => {
+    // 1225 #0704: every lease length except 18 months gets cheaper, and the
+    // site now headlines 15 months. The 18-month price did not move — the
+    // rent the site advertises did.
+    const prev = { price: 4874, leaseTermMonths: 18, leaseTerms: table([12, 5058], [15, 4900], [18, 4874]) };
+    const curr = { price: 4690, leaseTermMonths: 15, leaseTerms: table([12, 4800], [15, 4690], [18, 4874]) };
+    expect(comparePrices(prev, curr)).toEqual({
+      from: 4874,
+      to: 4690,
+      fromTerm: 18,
+      toTerm: 15,
+      notComparable: null,
+    });
+  });
+
+  it("does not turn a shuffle of which lease length is cheapest into a rent increase", () => {
+    // 1225 #0812 (real 15 Nov table): only the 18-month price jumps, the site
+    // headlines 17 months at $5 more. That is +$5, not +$1,464.
+    const prev = { price: 2382, leaseTermMonths: 18, leaseTerms: table([12, 3846], [17, 2387], [18, 2382]) };
+    const curr = { price: 2387, leaseTermMonths: 17, leaseTerms: table([12, 3846], [17, 2387], [18, 3846]) };
+    expect(comparePrices(prev, curr)).toMatchObject({ from: 2382, to: 2387, notComparable: null });
+    // Same advertised rent at a different length is no change at all.
+    const same = { price: 2382, leaseTermMonths: 17, leaseTerms: table([17, 2382], [18, 3846]) };
+    expect(comparePrices(prev, same)).toMatchObject({ from: 2382, to: 2382, notComparable: null });
+  });
+
+  it("never lets a short-lease row stand in for the unit's price", () => {
+    // Neither headline term exists on the other side; the only shared row is
+    // the 2-month quote. With both tables present the headlines are compared.
+    const prev = { price: 3000, leaseTermMonths: 18, leaseTerms: table([2, 3139], [18, 3000]) };
+    const curr = { price: 2950, leaseTermMonths: 16, leaseTerms: table([2, 3300], [16, 2950]) };
+    expect(comparePrices(prev, curr)).toMatchObject({ from: 3000, to: 2950, fromTerm: 18, toTerm: 16 });
+  });
+
+  it("aligns on the table-less side's lease length in either direction", () => {
+    // A day the lease-table request failed: today has only the headline.
+    const prev = { price: 2382, leaseTermMonths: 17, leaseTerms: table([17, 2382], [18, 2400]) };
+    const curr = { price: 2390, leaseTermMonths: 18 };
+    expect(comparePrices(prev, curr)).toEqual({ from: 2400, to: 2390, fromTerm: 18, toTerm: 18, notComparable: null });
+    // The table has no row for that length: not comparable, and said so.
+    const short = { price: 2390, leaseTermMonths: 9 };
+    expect(comparePrices(prev, short).notComparable).toBe("lease-term");
+  });
+
   it("does not invent a term change when one side simply has no term info", () => {
     expect(comparePrices({ price: 2400 }, { price: 2300, leaseTermMonths: 12 })).toMatchObject({
       from: 2400,
@@ -164,6 +209,30 @@ describe("comparePrices (like for like)", () => {
       to: 3096,
       notComparable: null,
     });
+  });
+});
+
+describe("uniformReprice (a concession netted into every price)", () => {
+  const u = (unitNumber: string, price: number) => ({ unitNumber, floorplanName: "A", beds: 1, price });
+
+  it("recognises every unit moving by the same ratio", () => {
+    // The Leo, 10 → 12 Nov 2026: both units ×17/18.
+    const r = uniformReprice([u("705", 3275), u("602", 2790)], [u("705", 3093), u("602", 2635)]);
+    expect(r).not.toBeNull();
+    expect(r!.units).toBe(2);
+    expect(r!.ratio).toBeCloseTo(17 / 18, 3);
+  });
+
+  it("is not fooled by ordinary moves", () => {
+    // Different moves.
+    expect(uniformReprice([u("705", 3275), u("602", 2790)], [u("705", 3200), u("602", 2790)])).toBeNull();
+    // Two units that shared a price and got the same cut.
+    expect(uniformReprice([u("705", 3000), u("602", 3000)], [u("705", 2950), u("602", 2950)])).toBeNull();
+    // One unit only, or nothing in common.
+    expect(uniformReprice([u("705", 3275)], [u("705", 3093)])).toBeNull();
+    expect(uniformReprice([u("705", 3275), u("602", 2790)], [u("801", 3093), u("802", 2635)])).toBeNull();
+    // Nothing moved.
+    expect(uniformReprice([u("705", 3275), u("602", 2790)], [u("705", 3275), u("602", 2790)])).toBeNull();
   });
 });
 

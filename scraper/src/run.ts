@@ -83,7 +83,9 @@ async function scrapeOne(
       status: "ok",
       source: source(),
       units,
-      ...(alsoListed.length > 0 ? { alsoListed } : {}),
+      // Always written, even when empty: "this run looked and found none" is
+      // what lets the next run say a row without a price is new.
+      alsoListed,
       ...(notices.length > 0 ? { notices } : {}),
     };
   } catch (err) {

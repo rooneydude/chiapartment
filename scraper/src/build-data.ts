@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { join } from "node:path";
 import { assembleWeekdayBrief, focusDeltaFromRuns } from "../../shared/src/brief";
 import { alsoListedKeys, computeDelta, deltaContextFor, listingKey } from "../../shared/src/delta";
-import { comparePrices } from "../../shared/src/listing";
+import { comparePrices, uniformReprice } from "../../shared/src/listing";
 import {
   SnapshotSchema,
   type AlsoListed,
@@ -30,7 +30,8 @@ export interface OkRun {
   units: UnitListing[];
   /** Historical: units the old lease-term cap dropped from `units` that run. */
   omitted?: OmittedListing[];
-  alsoListed?: AlsoListed[];
+  /** Undefined when the run did not record such rows at all. */
+  alsoListed?: AlsoListed[] | undefined;
   notices?: string[];
 }
 
@@ -90,15 +91,11 @@ export function computeWarnings(
   // so new/removed inventory and lease-term switches cannot fake a move.
   const prevByKey = new Map(prev.units.map((u) => [listingKey(u), u]));
   const ratios: number[] = [];
-  const comparedFrom = new Set<number>();
   for (const u of latest.units) {
     const before = prevByKey.get(listingKey(u));
     if (!before) continue;
     const cmp = comparePrices(before, u);
-    if (!cmp.notComparable && cmp.from > 0) {
-      ratios.push(cmp.to / cmp.from);
-      comparedFrom.add(cmp.from);
-    }
+    if (!cmp.notComparable && cmp.from > 0) ratios.push(cmp.to / cmp.from);
   }
   if (ratios.length >= 4) {
     const move = median(ratios) - 1;
@@ -110,23 +107,14 @@ export function computeWarnings(
     }
   }
 
-  // Every unit moving by the same ratio at once is the signature of a
-  // concession being netted into (or taken out of) the advertised rent — The
-  // Leo, 12 Nov 2026: both units ×17/18 the day a "half month free" banner
-  // went up. Base rent did not move; say so before anyone reads it as a cut.
-  // (Two units that merely shared a price and got the same cut do not count:
-  // the prices they moved from must differ.)
-  const moved = ratios.filter((r) => Math.abs(r - 1) > 0.002);
-  if (ratios.length >= 2 && moved.length === ratios.length && comparedFrom.size >= 2) {
-    const lo = Math.min(...moved);
-    const hi = Math.max(...moved);
-    if (hi - lo <= 0.0008) {
-      const pct = Math.abs((lo + hi) / 2 - 1) * 100;
-      warnings.push({
-        code: "uniform-reprice",
-        message: `All ${moved.length} units listed in both runs were repriced by the same ${lo < 1 ? "−" : "+"}${pct.toFixed(1)}% at once. That pattern usually means a concession (free rent) was ${lo < 1 ? "netted into" : "taken out of"} the advertised prices, not that base rent changed — check the site's current special.`,
-      });
-    }
+  // Every unit moving by the same ratio at once: a concession, not a rent change.
+  const uniform = uniformReprice(prev.units, latest.units);
+  if (uniform) {
+    const down = uniform.ratio < 1;
+    warnings.push({
+      code: "uniform-reprice",
+      message: `All ${uniform.units} units listed in both runs were repriced by the same ${down ? "−" : "+"}${(Math.abs(uniform.ratio - 1) * 100).toFixed(1)}% at once. That pattern usually means a concession (free rent) was ${down ? "netted into" : "taken out of"} the advertised prices, not that base rent changed — check the site's current special.`,
+    });
   }
 
   if (latest.units.length > 0 && prev.units.length >= 4 && latest.units.length < prev.units.length * 0.5) {
@@ -223,7 +211,9 @@ export function buildData(root: string): void {
         timestamp: snap.timestamp,
         units: bs.units,
         omitted: bs.omitted ?? [],
-        alsoListed: bs.alsoListed ?? [],
+        // Left undefined on runs that did not record such rows (before 15 Nov
+        // 2026): "none listed" and "not recorded" are different things.
+        alsoListed: bs.alsoListed,
         notices: bs.notices ?? [],
       });
     }

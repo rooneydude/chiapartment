@@ -6,7 +6,7 @@ import type {
   UnitListing,
   UnitMapping,
 } from "../../../shared/src/types";
-import { listingKey, listingLabel } from "../../../shared/src/delta";
+import { alsoListedKey, listingKey, listingLabel } from "../../../shared/src/delta";
 import {
   cheapestTerm,
   leaseTermTable,
@@ -210,7 +210,16 @@ function UnitDetail({
   );
 }
 
-function AlsoListedBlock({ rows, asOf }: { rows: AlsoListedCompiled[]; asOf: string }) {
+function AlsoListedBlock({
+  rows,
+  asOf,
+  newKeys,
+}: {
+  rows: AlsoListedCompiled[];
+  asOf: string;
+  /** Keys of the rows that appeared since the previous scrape. */
+  newKeys: Set<string>;
+}) {
   if (rows.length === 0) return null;
   return (
     <div className="also-listed">
@@ -239,6 +248,14 @@ function AlsoListedBlock({ rows, asOf }: { rows: AlsoListedCompiled[]; asOf: str
                 </a>
               ) : (
                 <span>{label}</span>
+              )}
+              {newKeys.has(alsoListedKey(a) ?? "") && (
+                <>
+                  {" "}
+                  <span className="badge new" title="Not on the site at the previous scrape">
+                    NEW
+                  </span>
+                </>
               )}
               <span className="also-note"> — {a.note}</span>
               {bits.length > 0 && <span className="also-bits"> · {bits.join(" · ")}</span>}
@@ -291,6 +308,18 @@ export default function AvailabilityTable({
   const newSet = useMemo(() => new Set(delta?.newUnits.map(listingKey)), [delta]);
   // New against the previous scrape, but listed before: back, not new.
   const relistedSet = useMemo(() => new Set(delta?.relistedKeys ?? []), [delta]);
+  // On the site all along, but without a price until now.
+  const pricedAgain = useMemo(
+    () => new Map((delta?.pricedAgain ?? []).map((p) => [p.key, p])),
+    [delta],
+  );
+  const newAlsoKeys = useMemo(
+    () =>
+      new Set(
+        (delta?.newAlsoListed ?? []).map(alsoListedKey).filter((k): k is string => k !== null),
+      ),
+    [delta],
+  );
   const changeByKey = useMemo(() => {
     const map = new Map<string, SnapshotDelta["priceChanges"][number]>();
     for (const c of delta?.priceChanges ?? []) {
@@ -458,7 +487,19 @@ export default function AvailabilityTable({
                       {/* A floorplan-level listing is identified by its plan name. */}
                       {u.unitNumber ?? <span className="plan-as-unit">{u.floorplanName}</span>}{" "}
                       {newSet.has(listingKey(u)) &&
-                        (relistedSet.has(listingKey(u)) ? (
+                        (pricedAgain.has(listingKey(u)) ? (
+                          <span
+                            className="badge back"
+                            title={(() => {
+                              const again = pricedAgain.get(listingKey(u))!;
+                              return again.lastPrice !== undefined && again.lastPricedAt
+                                ? `Has a price again — it was ${money(again.lastPrice)} when last priced (${shortDate(again.lastPricedAt)})`
+                                : "Listed without a price until now";
+                            })()}
+                          >
+                            PRICED
+                          </span>
+                        ) : relistedSet.has(listingKey(u)) ? (
                           <span
                             className="badge back"
                             title={`Back on the leasing site${first ? ` — first listed ${shortDate(first.firstSeen)}` : ""}`}
@@ -548,7 +589,17 @@ export default function AvailabilityTable({
                       {change && !change.notComparable && (
                         <span
                           className={change.to < change.from ? "delta-down" : "delta-up"}
-                          title={`${money(change.from)} → ${money(change.to)}${change.fromTerm ? ` for a ${change.fromTerm}-month lease` : ""} since the previous scrape${change.sourceUpdatedAt ? ` — the building set this price on ${shortDate(change.sourceUpdatedAt)}` : ""}`}
+                          title={`${money(change.from)} → ${money(change.to)}${
+                            change.fromTerm === undefined
+                              ? ""
+                              : change.fromTerm === change.toTerm
+                                ? ` for a ${change.fromTerm}-month lease`
+                                : ` — the rent the site advertises (it headlined a ${change.fromTerm}-month lease, now ${change.toTerm} months)`
+                          } since ${
+                            change.since
+                              ? `${shortDate(change.since)}, the last time this unit was priced the same way (range or single price)`
+                              : "the previous scrape"
+                          }${change.sourceUpdatedAt ? ` — the building set this price on ${shortDate(change.sourceUpdatedAt)}` : ""}`}
                         >
                           {change.to < change.from ? "▼" : "▲"} {money(Math.abs(change.to - change.from))}
                         </span>
@@ -619,8 +670,8 @@ export default function AvailabilityTable({
               : `Move-in “—”: no date published for ${noDate} of these listings.`)}
         </div>
       )}
-      <AlsoListedBlock rows={alsoListed} asOf={asOf} />
-      {delta && delta.removedUnits.length > 0 && (
+      <AlsoListedBlock rows={alsoListed} asOf={asOf} newKeys={newAlsoKeys} />
+      {delta && delta.removedUnits.length + (delta.removedAlsoListed?.length ?? 0) > 0 && (
         <div className="removed-block">
           No longer listed since the previous scrape:{" "}
           {delta.removedUnits.map((u, i) => (
@@ -629,6 +680,12 @@ export default function AvailabilityTable({
               <s>
                 {listingLabel(u)} ({money(u.price)})
               </s>
+            </span>
+          ))}
+          {(delta.removedAlsoListed ?? []).map((a, i) => (
+            <span key={`also-${alsoListedKey(a) ?? i}`}>
+              {(i > 0 || delta.removedUnits.length > 0) && ", "}
+              <s>{a.unitNumber ? `#${a.unitNumber}` : a.floorplanName} (no price)</s>
             </span>
           ))}
         </div>

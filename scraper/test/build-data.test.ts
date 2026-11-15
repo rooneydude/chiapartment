@@ -390,7 +390,7 @@ describe("buildData: what the two latest unit lists alone cannot say", () => {
   const brief = (): WeekdayBrief =>
     JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "brief.json"), "utf8")) as WeekdayBrief;
 
-  it("a plan whose price is withdrawn is still listed — not removed, and not new when the price returns", () => {
+  it("a plan whose price is withdrawn is still listed — not removed — and is announced when the price returns", () => {
     setup();
     write("2026-10-27T18:00:00Z", { units: [plan("Studio - Unit 05", 2250), plan("Studio - Unit 01", 2475)] });
     // The site now says "Contact for Pricing" for Unit 05.
@@ -412,13 +412,28 @@ describe("buildData: what the two latest unit lists alone cannot say", () => {
       }),
     ]);
 
-    // The price comes back: the plan was on the site all along.
-    write("2026-10-29T18:00:00Z", { units: [plan("Studio - Unit 01", 2475), plan("Studio - Unit 05", 2300)] });
+    // The price comes back: that is news, and it can be compared with the old one.
+    write("2026-10-29T18:00:00Z", {
+      units: [plan("Studio - Unit 01", 2475), plan("Studio - Unit 05", 2300)],
+      alsoListed: [],
+    });
     buildData(ROOT);
     h = readHistory();
-    expect(h.delta!.newUnits).toEqual([]);
+    expect(h.delta!.newUnits.map((u) => u.floorplanName)).toEqual(["Studio - Unit 05"]);
+    expect(h.delta!.pricedAgain).toEqual([
+      { key: "fp:0:Studio - Unit 05", lastPrice: 2250, lastPricedAt: "2026-10-27T18:00:00Z" },
+    ]);
+    expect(h.delta!.relistedKeys).toBeUndefined();
     expect(h.alsoListed).toEqual([]);
-    expect(brief().buildings[0]!.new).toEqual([]);
+    expect(brief().buildings[0]!.new).toEqual([
+      expect.objectContaining({
+        floorplanName: "Studio - Unit 05",
+        price: 2300,
+        pricedAgain: true,
+        lastPrice: 2250,
+        lastPricedAt: "2026-10-27T18:00:00Z",
+      }),
+    ]);
   });
 
   it("marks a unit that left and came back as a re-listing, not a first appearance", () => {

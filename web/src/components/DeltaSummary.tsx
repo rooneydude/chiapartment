@@ -15,10 +15,13 @@ export default function DeltaSummary({ delta }: { delta: SnapshotDelta | null })
   const dates = delta.dateChanges?.length ?? 0;
   const parts: string[] = [];
   const back = delta.relistedKeys?.length ?? 0;
-  const brandNew = delta.newUnits.length - back;
+  const priced = delta.pricedAgain?.length ?? 0;
+  const brandNew = delta.newUnits.length - back - priced + (delta.newAlsoListed?.length ?? 0);
   if (brandNew > 0) parts.push(`${brandNew} new`);
   if (back > 0) parts.push(`${back} back on the site`);
-  if (delta.removedUnits.length) parts.push(`${delta.removedUnits.length} removed`);
+  if (priced > 0) parts.push(`${priced} with a price again`);
+  const removed = delta.removedUnits.length + (delta.removedAlsoListed?.length ?? 0);
+  if (removed) parts.push(`${removed} removed`);
   if (drops) parts.push(plural(drops, "price drop"));
   if (hikes) parts.push(plural(hikes, "increase"));
   if (dates) parts.push(plural(dates, "move-in date change"));

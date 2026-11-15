@@ -82,14 +82,24 @@ type Quoted = Priced & Pick<UnitListing, "priceMax">;
 /**
  * Compare a unit's price across two runs LIKE FOR LIKE. Sites re-headline a
  * different lease length from day to day (18 months one day, 13 the next),
- * and some flip between a range and a single price; comparing those headline
- * numbers raw reports price moves that never happened. So:
- *   1. same advertised term (or no term info on either side) → headline vs
+ * and some flip between a range and a single price; comparing the wrong pair
+ * of numbers reports price moves that never happened — or hides real ones.
+ *
+ *   1. Same advertised term, or no term information to align on → headline vs
  *      headline — unless the quote changed FORM (range ↔ single price), which
- *      is flagged "price-form";
- *   2. different terms → compare at a term both sides have a price for
- *      (the old headline term, else the new one, else any shared term);
- *   3. no shared term → report the headline prices flagged "lease-term".
+ *      is flagged "price-form".
+ *   2. Both runs carry the unit's full lease table → still headline vs
+ *      headline: each is the rent the site advertises that day (its cheapest
+ *      lease), which is what the dashboard shows. Aligning on yesterday's
+ *      term instead would report "+61%" when only the 18-month price moved
+ *      and the site simply headlines 17 months now, and would hide a real cut
+ *      whenever the cheapest lease changes length. The two terms are carried
+ *      as information.
+ *   3. Exactly one run has a table (a quote from the 8 Sep – 14 Nov 2026
+ *      scraper, which stored one price at one lease length, against a full
+ *      table) → compare at the lease length the table-less quote was for.
+ *   4. Different terms and nothing to align on → the headline prices,
+ *      flagged "lease-term".
  */
 export function comparePrices(prev: Quoted, curr: Quoted): PriceComparison {
   const pTerm = prev.leaseTermMonths ?? null;
@@ -104,14 +114,15 @@ export function comparePrices(prev: Quoted, curr: Quoted): PriceComparison {
       notComparable: formChanged && prev.price !== curr.price ? "price-form" : null,
     };
   };
-  if (pTerm === cTerm) return headline();
-  // One side has no term information at all: nothing to align on, and no
-  // evidence the term changed — treat as a plain comparison.
-  if (pTerm === null || cTerm === null) return headline();
+  // One side with no term information at all is no evidence the term changed.
+  if (pTerm === cTerm || pTerm === null || cTerm === null) return headline();
 
-  const candidates = [pTerm, cTerm];
-  for (const t of prev.leaseTerms ?? []) candidates.push(t.months);
-  for (const months of candidates) {
+  const prevHasTable = (prev.leaseTerms?.length ?? 0) > 0;
+  const currHasTable = (curr.leaseTerms?.length ?? 0) > 0;
+  if (prevHasTable && currHasTable) return headline();
+
+  if (prevHasTable !== currHasTable) {
+    const months = prevHasTable ? cTerm : pTerm;
     const a = priceAtTerm(prev, months);
     const b = priceAtTerm(curr, months);
     if (a !== null && b !== null) {
@@ -120,6 +131,44 @@ export function comparePrices(prev: Quoted, curr: Quoted): PriceComparison {
   }
   return { ...headline(), notComparable: "lease-term" };
 }
+
+/**
+ * Did every unit listed in both runs move by the same ratio at once? That is
+ * the signature of a concession being netted into (or taken out of) the
+ * advertised rents — The Leo, 12 Nov 2026: both units ×17/18 the day a "half
+ * a month free" banner went up — not of base rent changing. Needs at least
+ * two comparable units that started from different prices (two units that
+ * merely shared a price and got the same cut do not count). Returns the
+ * common ratio (to / from), or null.
+ */
+export function uniformReprice(
+  prevUnits: readonly (Quoted & Identified)[],
+  currUnits: readonly (Quoted & Identified)[],
+): { ratio: number; units: number } | null {
+  const before = new Map(prevUnits.map((u) => [identityOf(u), u]));
+  const ratios: number[] = [];
+  const startingPrices = new Set<number>();
+  for (const u of currUnits) {
+    const was = before.get(identityOf(u));
+    if (!was) continue;
+    const cmp = comparePrices(was, u);
+    if (cmp.notComparable || cmp.from <= 0) continue;
+    ratios.push(cmp.to / cmp.from);
+    startingPrices.add(cmp.from);
+  }
+  if (ratios.length < 2 || startingPrices.size < 2) return null;
+  if (ratios.some((r) => Math.abs(r - 1) <= 0.002)) return null;
+  const lo = Math.min(...ratios);
+  const hi = Math.max(...ratios);
+  // Whole-dollar rounding moves a ratio by a few 1e-4 at these rents.
+  if (hi - lo > 0.0008) return null;
+  return { ratio: (lo + hi) / 2, units: ratios.length };
+}
+
+type Identified = Pick<UnitListing, "unitNumber" | "floorplanName" | "beds">;
+/** Same identity as `listingKey` in delta.ts (kept local to avoid an import cycle). */
+const identityOf = (u: Identified): string =>
+  u.unitNumber ? `u:${u.unitNumber}` : `fp:${u.beds}:${u.floorplanName}`;
 
 /**
  * The shortest lease that costs no more than the advertised price. Sites

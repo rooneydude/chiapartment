@@ -304,6 +304,12 @@ export interface PriceChange {
    */
   notComparable?: "lease-term" | "price-form";
   /**
+   * Set when `from` is not the previous run's price but an earlier one: the
+   * unit was printed in the other form (rent range vs single price) in
+   * between, and this is the last run that printed it in today's form.
+   */
+  since?: string;
+  /**
    * When the site itself says the new price was set (Stead 220's per-plan
    * edit timestamp). Its page trails its price edits by days, so this — not
    * the day the tracker first saw it — is when the price really changed.
@@ -333,6 +339,25 @@ export interface SnapshotDelta {
    * came back — re-listings, not first appearances. Additive.
    */
   relistedKeys?: string[];
+  /**
+   * `newUnits` that were already on the site at the previous run, only
+   * without a price ("Contact for Pricing", a waitlist): they have a price
+   * now. `lastPrice` / `lastPricedAt` say what they last cost, when known.
+   */
+  pricedAgain?: { key: string; lastPrice?: number; lastPricedAt?: string }[];
+  /**
+   * Rows that appeared on the site without a price or bed count since the
+   * previous run. Only reported between two runs that both record such rows.
+   */
+  newAlsoListed?: AlsoListed[];
+  /** Rows listed without a price at the previous run that have left the site. */
+  removedAlsoListed?: AlsoListed[];
+  /**
+   * Focus slice only: listings present in both runs that moved into or out
+   * of the sizes being shopped for because their bed count was reclassified
+   * (they are in `newUnits` / `removedUnits` of the slice).
+   */
+  reclassifiedKeys?: string[];
 }
 
 /** Calendar-day, focus-bed slice of a delta — weekday-brief input. */
@@ -378,6 +403,14 @@ export interface BriefDrop {
   to: number;
   /** Lease term both prices are quoted for, when known. */
   leaseTermMonths?: number;
+  /** Set when `from` is an earlier run's price, not the prior day's (see PriceChange.since). */
+  since?: string;
+  /**
+   * Every unit of the building moved by the same ratio at once: almost
+   * certainly a concession netted into the advertised rents, not a cut in
+   * base rent (the building's `warnings` say more).
+   */
+  concessionLikely?: boolean;
 }
 
 export interface BriefOmitted {
@@ -421,6 +454,14 @@ export interface WeekdayBriefBuilding {
   notices?: string[];
   /** With status "error": the site's bot protection refused the request. */
   blocked?: boolean;
+  /** Rows that appeared on the site without a price or bed count since the prior day. */
+  newUnpriced?: AlsoListedCompiled[];
+  /**
+   * The newest run did not scrape this building (a single-building refresh):
+   * its listings are from `listingsAsOf`, and nothing is reported as new,
+   * removed or dropped today.
+   */
+  stale?: boolean;
 }
 
 export interface WeekdayBrief {
