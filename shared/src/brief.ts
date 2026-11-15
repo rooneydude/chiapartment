@@ -1,10 +1,13 @@
 import {
   chicagoDate,
   computeFocusDelta,
+  listingKey,
   listingLabel,
   priorChicagoDayRun,
 } from "./delta";
+import { isAvailableNow } from "./listing";
 import type {
+  AlsoListed,
   BriefDrop,
   BriefListing,
   BriefOmitted,
@@ -16,15 +19,21 @@ import type {
   WeekdayBriefBuilding,
 } from "./types";
 
-function toBriefListing(u: UnitListing): BriefListing {
+function toBriefListing(u: UnitListing, asOf: string): BriefListing {
+  const now = isAvailableNow(u, asOf);
   return {
     label: listingLabel(u),
     unitNumber: u.unitNumber,
     floorplanName: u.floorplanName,
     beds: u.beds,
     price: u.price,
+    ...(u.priceMax !== undefined ? { priceMax: u.priceMax } : {}),
     availableDate: u.availableDate,
+    ...(now !== null ? { availableNow: now } : {}),
     ...(u.leaseTermMonths != null ? { leaseTermMonths: u.leaseTermMonths } : {}),
+    ...(u.leaseTerms && u.leaseTerms.length > 0 ? { leaseTerms: u.leaseTerms } : {}),
+    ...(u.sqft != null ? { sqft: u.sqft } : {}),
+    ...(u.url ? { url: u.url } : {}),
   };
 }
 
@@ -55,8 +64,20 @@ export function briefBuilding(
   focusBeds: number[] | null,
 ): WeekdayBriefBuilding {
   const { id, name, history } = input;
+  const inFocus = (beds: number) => focusBeds === null || focusBeds.includes(beds);
   const omitted = (history.omitted ?? []).map(toBriefOmitted);
   const warnings: DataWarning[] = history.warnings ?? [];
+  // Unpriced / unclassified rows: keep those in focus, plus those whose bed
+  // count the site does not publish (they might be in focus).
+  const alsoListed: AlsoListed[] = (history.alsoListed ?? []).filter(
+    (a) => a.beds === null || inFocus(a.beds),
+  );
+  const notices = history.notices ?? [];
+  const listings = history.latest
+    ? history.latest.units
+        .filter((u) => inFocus(u.beds))
+        .map((u) => toBriefListing(u, history.latest!.timestamp))
+    : [];
 
   if (history.lastAttempt?.status === "error") {
     return {
@@ -68,14 +89,18 @@ export function briefBuilding(
       to: history.lastAttempt.timestamp,
       chicagoFrom: null,
       chicagoTo: chicagoDate(history.lastAttempt.timestamp),
-      focusAvailable: history.latest?.units.filter((u) =>
-        focusBeds === null ? true : focusBeds.includes(u.beds),
-      ).length ?? 0,
+      focusAvailable: listings.length,
       new: [],
       removed: [],
       drops: [],
       omitted,
       warnings,
+      // Last-good inventory, clearly dated by `listingsAsOf`.
+      listings,
+      listingsAsOf: history.latest?.timestamp ?? null,
+      dateChanges: [],
+      alsoListed,
+      notices,
     };
   }
 
@@ -89,18 +114,23 @@ export function briefBuilding(
       to: history.latest?.timestamp ?? null,
       chicagoFrom: null,
       chicagoTo: history.latest ? chicagoDate(history.latest.timestamp) : null,
-      focusAvailable: 0,
+      focusAvailable: listings.length,
       new: [],
       removed: [],
       drops: [],
       omitted,
       warnings,
+      listings,
+      listingsAsOf: history.latest?.timestamp ?? null,
+      dateChanges: [],
+      alsoListed,
+      notices,
     };
   }
 
-  const inFocus = (beds: number) => focusBeds === null || focusBeds.includes(beds);
   const drops: BriefDrop[] = fd.priceChanges
-    .filter((c) => c.to < c.from && inFocus(c.beds))
+    // A switch in which lease length the site headlines is not a price drop.
+    .filter((c) => c.to < c.from && inFocus(c.beds) && !c.termChangeOnly)
     .map((c) => {
       const isFloorplan = c.unitNumber === c.floorplanName;
       return {
@@ -110,6 +140,9 @@ export function briefBuilding(
         beds: c.beds,
         from: c.from,
         to: c.to,
+        ...(c.fromTerm !== undefined && c.fromTerm === c.toTerm
+          ? { leaseTermMonths: c.fromTerm }
+          : {}),
       };
     });
 
@@ -121,12 +154,17 @@ export function briefBuilding(
     to: fd.to,
     chicagoFrom: fd.chicagoFrom,
     chicagoTo: fd.chicagoTo,
-    focusAvailable: history.latest.units.filter((u) => inFocus(u.beds)).length,
-    new: fd.newUnits.map(toBriefListing),
-    removed: fd.removedUnits.map(toBriefListing),
+    focusAvailable: listings.length,
+    new: fd.newUnits.map((u) => toBriefListing(u, fd.to)),
+    removed: fd.removedUnits.map((u) => toBriefListing(u, fd.from ?? fd.to)),
     drops,
     omitted: omitted.filter((o) => inFocus(o.beds)),
     warnings,
+    listings,
+    listingsAsOf: history.latest.timestamp,
+    dateChanges: fd.dateChanges ?? [],
+    alsoListed,
+    notices,
   };
 }
 
@@ -157,13 +195,19 @@ export function assembleWeekdayBrief(
       removed: rows.reduce((s, r) => s + r.removed.length, 0),
       scrapeErrors: rows.filter((r) => r.status === "error").length,
       omittedOverCap: rows.reduce((s, r) => s + r.omitted.length, 0),
+      focusAvailable: rows.reduce((s, r) => s + r.focusAvailable, 0),
+      availableNow: rows.reduce(
+        (s, r) => s + (r.listings ?? []).filter((l) => l.availableNow === true).length,
+        0,
+      ),
+      moveInDateChanges: rows.reduce((s, r) => s + (r.dateChanges?.length ?? 0), 0),
     },
     buildings: rows,
   };
 }
 
 export function focusDeltaFromRuns(
-  okRuns: { timestamp: string; units: UnitListing[] }[],
+  okRuns: { timestamp: string; units: UnitListing[]; omitted?: OmittedListing[] }[],
   focusBeds: number[] | null,
 ) {
   const latest = okRuns[okRuns.length - 1];
@@ -175,5 +219,8 @@ export function focusDeltaFromRuns(
     prev ? prev.timestamp : null,
     latest.timestamp,
     focusBeds,
+    // Units the old lease cap hid on the comparison day were on the market
+    // then too — do not report them as new.
+    (prev?.omitted ?? []).map(listingKey),
   );
 }

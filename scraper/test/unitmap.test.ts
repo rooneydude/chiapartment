@@ -16,7 +16,7 @@ const asset = JSON.parse(
   readFileSync(
     join(
       ROOT,
-      "scraper/fixtures/1225-old-town/07-assets-jl-w0-jlw03719w2y-72-7d-727d67713d611a5803dce818ec8ab.json",
+      "scraper/fixtures/legacy-2026-09/1225-old-town/07-assets-jl-w0-jlw03719w2y-72-7d-727d67713d611a5803dce818ec8ab.json",
     ),
     "utf8",
   ),

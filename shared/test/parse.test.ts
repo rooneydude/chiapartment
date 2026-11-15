@@ -59,6 +59,49 @@ describe("parseAvailableDate", () => {
   it("returns null for garbage", () => {
     expect(parseAvailableDate("call for details", ref)).toBeNull();
     expect(parseAvailableDate(null, ref)).toBeNull();
+    expect(parseAvailableDate(undefined, ref)).toBeNull();
+    expect(parseAvailableDate("not available", ref)).toBeNull();
+  });
+
+  // Old Town Park prints future move-in days as M/D/YYYY. The parser used to
+  // know only "Mon DD", so every future-dated unit lost its date.
+  it("parses US numeric dates (the Old Town Park format)", () => {
+    const nov = new Date("2026-11-15T14:00:00Z");
+    expect(parseAvailableDate("12/18/2026", nov)).toBe("2026-12-18");
+    expect(parseAvailableDate("1/2/2027", nov)).toBe("2027-01-02");
+    expect(parseAvailableDate("11/26/2026", nov)).toBe("2026-11-26");
+    expect(parseAvailableDate("Available 12/7/2026", nov)).toBe("2026-12-07");
+    expect(parseAvailableDate("1/22/27", nov)).toBe("2027-01-22");
+    expect(parseAvailableDate("12-18-2026", nov)).toBe("2026-12-18");
+  });
+
+  it("infers the year for a numeric month/day", () => {
+    const nov = new Date("2026-11-15T14:00:00Z");
+    expect(parseAvailableDate("12/18", nov)).toBe("2026-12-18");
+    expect(parseAvailableDate("1/5", nov)).toBe("2027-01-05"); // already past this year
+    expect(parseAvailableDate("11/10", nov)).toBe("2026-11-10"); // within the grace week
+  });
+
+  it("parses ordinal and long month names (the SightMap display format)", () => {
+    const nov = new Date("2026-11-15T14:00:00Z");
+    expect(parseAvailableDate("Available Dec 26th", nov)).toBe("2026-12-26");
+    expect(parseAvailableDate("Available Jan 1st", nov)).toBe("2027-01-01");
+    expect(parseAvailableDate("December 26, 2026", nov)).toBe("2026-12-26");
+    expect(parseAvailableDate("Move-in: Nov 22nd", nov)).toBe("2026-11-22");
+  });
+
+  it("rejects impossible calendar days instead of rolling them over", () => {
+    expect(parseAvailableDate("2/31/2027", ref)).toBeNull();
+    expect(parseAvailableDate("2026-02-31", ref)).toBeNull();
+    expect(parseAvailableDate("13/5/2026", ref)).toBeNull();
+  });
+
+  it("treats 'now' as the CHICAGO day, even after UTC has rolled over", () => {
+    // 02:30 UTC on Nov 16 is 8:30 pm on Nov 15 in Chicago.
+    const lateEvening = new Date("2026-11-16T02:30:00Z");
+    expect(parseAvailableDate("Available Now", lateEvening)).toBe("2026-11-15");
+    expect(parseAvailableDate("Available", lateEvening)).toBe("2026-11-15");
+    expect(parseAvailableDate("available now!", lateEvening)).toBe("2026-11-15");
   });
 });
 

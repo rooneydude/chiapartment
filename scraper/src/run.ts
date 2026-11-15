@@ -4,10 +4,10 @@ import { join } from "node:path";
 import {
   BuildingsConfigSchema,
   SnapshotSchema,
+  type AlsoListed,
   type BuildingConfig,
   type BuildingsConfig,
   type BuildingSnapshot,
-  type OmittedListing,
   type Snapshot,
 } from "../../shared/src/types";
 import { resolveAdapter } from "./adapters/index";
@@ -38,30 +38,35 @@ async function scrapeOne(
   root: string,
   building: BuildingConfig,
   opts: RefreshOptions,
-  maxLeaseTermMonths?: number,
 ): Promise<ScrapeResult> {
   const adapter = resolveAdapter(building.adapter);
   const fixtureDir = join(root, "scraper", "fixtures", building.id);
   const recorder = opts.capture ? makeRecorder(fixtureDir) : null;
-  const omitted: OmittedListing[] = [];
+  const alsoListed: AlsoListed[] = [];
+  const notices: string[] = [];
   const ctx: AdapterContext = {
     fetch: opts.fixtures ? makeFixtureFetch(fixtureDir) : httpFetch,
     log: (msg) => console.log(`  [${building.id}] ${msg}`),
     ...(recorder ? { record: recorder.record } : {}),
-    ...(maxLeaseTermMonths ? { maxLeaseTermMonths } : {}),
-    reportOmitted: (row) => omitted.push(row),
+    // Fixture runs are offline — no need to be polite to a directory.
+    ...(opts.fixtures ? {} : { pause: sleep }),
+    reportAlsoListed: (row) => alsoListed.push(row),
+    reportNotice: (text) => {
+      if (!notices.includes(text)) notices.push(text);
+    },
   };
   console.log(`Scraping ${building.name} (${adapter.id})...`);
   try {
     const units = await adapter.scrape(building, ctx);
     console.log(
-      `  → ${units.length} listings${omitted.length ? ` (${omitted.length} omitted over-cap)` : ""}`,
+      `  → ${units.length} listings${alsoListed.length ? ` (+${alsoListed.length} listed without a price / bed count)` : ""}`,
     );
     return {
       status: "ok",
       source: { adapter: adapter.id, fetchedUrl: building.url },
       units,
-      ...(omitted.length > 0 ? { omitted } : {}),
+      ...(alsoListed.length > 0 ? { alsoListed } : {}),
+      ...(notices.length > 0 ? { notices } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -101,7 +106,7 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
         : null;
     let result = cacheKey ? groupCache.get(cacheKey) : undefined;
     if (!result) {
-      result = await scrapeOne(root, building, opts, config.focus?.maxLeaseTermMonths);
+      result = await scrapeOne(root, building, opts);
       if (cacheKey) groupCache.set(cacheKey, result);
       if (!opts.fixtures && building !== targets[targets.length - 1]) {
         await sleep(POLITE_DELAY_MS);
@@ -122,7 +127,7 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
       for (const [i, fail] of failed.entries()) {
         const building = targets.find((b) => b.id === fail.buildingId);
         if (!building) continue;
-        const result = await scrapeOne(root, building, opts, config.focus?.maxLeaseTermMonths);
+        const result = await scrapeOne(root, building, opts);
         const idx = snapshot.buildings.findIndex((b) => b.buildingId === fail.buildingId);
         if (idx >= 0) snapshot.buildings[idx] = { buildingId: building.id, ...result };
         if (i < failed.length - 1) await sleep(POLITE_DELAY_MS);

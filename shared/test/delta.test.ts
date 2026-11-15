@@ -98,6 +98,90 @@ describe("chicago calendar-day", () => {
   });
 });
 
+describe("like-for-like price changes", () => {
+  const T0 = "2026-11-14T18:58:17Z";
+  const T1 = "2026-11-15T14:00:00Z";
+  const terms = (...pairs: [number, number][]) => pairs.map(([months, price]) => ({ months, price }));
+
+  it("does not report a price move when only the headlined lease term switched", () => {
+    // Nov 14: capped quote at 14 months. Nov 15: site headline at 18 months,
+    // and the lease table shows the 14-month price never moved.
+    const prev = [unit("0812", 2409, { beds: 0, leaseTermMonths: 14 })];
+    const curr = [
+      unit("0812", 2382, {
+        beds: 0,
+        leaseTermMonths: 18,
+        leaseTerms: terms([12, 3846], [14, 2409], [18, 2382]),
+      }),
+    ];
+    const d = computeDelta(prev, curr, T0, T1);
+    expect(d.priceChanges).toEqual([]);
+  });
+
+  it("reports the real move at the shared term", () => {
+    const prev = [unit("0812", 2409, { beds: 0, leaseTermMonths: 14 })];
+    const curr = [
+      unit("0812", 2382, { beds: 0, leaseTermMonths: 18, leaseTerms: terms([14, 2350], [18, 2382]) }),
+    ];
+    const d = computeDelta(prev, curr, T0, T1);
+    expect(d.priceChanges).toEqual([
+      { unitNumber: "0812", floorplanName: "A1", from: 2409, to: 2350, beds: 0, fromTerm: 14, toTerm: 14 },
+    ]);
+  });
+
+  it("flags a term switch it cannot align, and realPriceChanges drops it", async () => {
+    const { realPriceChanges } = await import("../src/delta");
+    const prev = [unit("0523", 2283, { beds: 0, leaseTermMonths: 18 })];
+    const curr = [unit("0523", 2409, { beds: 0, leaseTermMonths: 14 })];
+    const d = computeDelta(prev, curr, T0, T1);
+    expect(d.priceChanges).toHaveLength(1);
+    expect(d.priceChanges[0]).toMatchObject({ termChangeOnly: true, fromTerm: 18, toTerm: 14 });
+    expect(realPriceChanges(d)).toEqual([]);
+  });
+
+  it("does not call a unit new when the previous run knew it under another list", () => {
+    // 1225 on the day the lease cap went away: the 8 units it had hidden were
+    // on the market the day before as well.
+    const prev = [unit("0509", 3774)];
+    const curr = [unit("0509", 3774), unit("0625", 3529), unit("0701", 4944, { beds: 2 })];
+    const d = computeDelta(prev, curr, T0, T1, ["u:0625"]);
+    expect(d.newUnits.map((u) => u.unitNumber)).toEqual(["0701"]);
+  });
+});
+
+describe("move-in date changes", () => {
+  const T0 = "2026-11-14T18:58:17Z";
+  const T1 = "2026-11-15T14:00:00Z";
+
+  it("ignores available-now units, whose date is just each run's own day", () => {
+    const prev = [unit("2313", 2457, { availableDate: "2026-11-14" })];
+    const curr = [unit("2313", 2457, { availableDate: "2026-11-15", availableNow: true })];
+    expect(computeDelta(prev, curr, T0, T1).dateChanges).toEqual([]);
+  });
+
+  it("reports a future move-in day that moved", () => {
+    const prev = [unit("2111", 3359, { availableDate: "2026-12-11" })];
+    const curr = [unit("2111", 3359, { availableDate: "2026-12-18", availableNow: false })];
+    expect(computeDelta(prev, curr, T0, T1).dateChanges).toEqual([
+      { unitNumber: "2111", floorplanName: "A1", beds: 1, from: "2026-12-11", to: "2026-12-18" },
+    ]);
+  });
+
+  it("reports a unit that became available now (to = null)", () => {
+    const prev = [unit("2111", 3359, { availableDate: "2026-11-15" })]; // tomorrow, seen from T0
+    const curr = [unit("2111", 3359, { availableDate: "2026-11-15", availableNow: true })];
+    expect(computeDelta(prev, curr, T0, T1).dateChanges).toEqual([
+      { unitNumber: "2111", floorplanName: "A1", beds: 1, from: "2026-11-15", to: null },
+    ]);
+  });
+
+  it("says nothing when a side has no date at all (old Old Town Park snapshots)", () => {
+    const prev = [unit("2111", 3359, { availableDate: null })];
+    const curr = [unit("2111", 3359, { availableDate: "2026-12-18", availableNow: false })];
+    expect(computeDelta(prev, curr, T0, T1).dateChanges).toEqual([]);
+  });
+});
+
 describe("focus delta", () => {
   it("keeps studios and 2-beds, drops 1BR noise", () => {
     const prev = [

@@ -1,9 +1,11 @@
 import * as cheerio from "cheerio";
-import { parseAvailableDate } from "../../../shared/src/parse";
-import type { UnitListing } from "../../../shared/src/types";
+import { parseAvailableDate, parseLeaseTermMonths } from "../../../shared/src/parse";
+import { chicagoDate } from "../../../shared/src/time";
+import type { AlsoListed, LeaseTermPrice, UnitListing } from "../../../shared/src/types";
 import { fetchRenderedHtml } from "../browser";
 import { sleep } from "../http";
 import { coerceBeds, coercePrice, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
+import { extractTermPrices } from "./sightmap";
 import type { Adapter } from "./types";
 
 function coerceFinite(v: unknown): number | null {
@@ -19,8 +21,15 @@ function coerceFinite(v: unknown): number | null {
  * The Leo — /floorplans is a Jonah Digital widget. The real inventory lives in
  * <script id="jd-fp-data-script-app" type="application/json"> (SSR'd). Card
  * markup (a[data-jd-fp-selector="floorplan-item"]) is a fallback. Plain HTTP
- * from datacenter IPs is Imunify360-blocked, so live scrapes go through
- * Chromium; fixture mode reads the captured page directly.
+ * from datacenter IPs is sometimes Imunify360-blocked, so live scrapes fall
+ * back to Chromium; fixture mode reads the captured page directly.
+ *
+ * Per unit the blob gives: apartment_number, bedrooms (may be a label such as
+ * "JR 1 Bedroom"), bathrooms, square_feet, rent_min/rent_max, available_date
+ * (unix seconds, midnight Chicago) and available_display ("Available Now" /
+ * "Available Aug 12"). `lease_terms` and `price_entity.term` exist in the
+ * schema but this property leaves them empty — the site publishes one
+ * "starting at" price and no lease lengths. They are read when present.
  */
 
 const CARD_SELECTOR = 'a[data-jd-fp-selector="floorplan-item"]';
@@ -34,41 +43,88 @@ export function isWafPage(body: string): boolean {
   return false;
 }
 
-function unixToIsoDate(v: unknown): string | null {
+/** Unix seconds → the Chicago calendar day it falls on. */
+function unixToChicagoDay(v: unknown): string | null {
   const n =
     typeof v === "number"
       ? v
-      : typeof v === "string" && /^\d{10}$/.test(v)
+      : typeof v === "string" && /^\d{9,10}$/.test(v)
         ? Number.parseInt(v, 10)
         : NaN;
   if (!Number.isFinite(n) || n < 1e9) return null;
-  const iso = new Date(n * 1000).toISOString().slice(0, 10);
-  return iso === "1970-01-01" ? null : iso;
+  return chicagoDate(new Date(n * 1000));
 }
 
-function listingFromJdUnit(raw: Record<string, unknown>, baseUrl: string): UnitListing | null {
+/** "JR 1 Bedroom" stays recognisable; plain counts get the house style. */
+function planNameFor(raw: Record<string, unknown>, beds: number): string {
+  const label = [raw["bedrooms_display"], raw["bedrooms"]].find(
+    (v): v is string => typeof v === "string" && /[a-z]/i.test(v),
+  );
+  if (label && !/^\s*(studio|\d+\s*(bed|bedroom|br)s?)\s*$/i.test(label)) {
+    return label.replace(/\s+/g, " ").replace(/bedrooms?/i, "BR").trim();
+  }
+  return beds === 0 ? "Studio" : `${beds} BR`;
+}
+
+function leaseTermsFrom(raw: Record<string, unknown>): LeaseTermPrice[] {
+  const terms = raw["lease_terms"];
+  if (!Array.isArray(terms) || terms.length === 0) return [];
+  return [...extractTermPrices(terms).entries()]
+    .map(([months, price]) => ({ months, price }))
+    .sort((a, b) => a.months - b.months);
+}
+
+function specialsFrom(raw: Record<string, unknown>): string | undefined {
+  const specials = raw["specials"];
+  if (!Array.isArray(specials)) return undefined;
+  const texts = specials
+    .map((s) => {
+      if (typeof s === "string") return s;
+      if (s && typeof s === "object") {
+        const o = s as Record<string, unknown>;
+        return [o["title"], o["description"], o["text"]].find((v) => typeof v === "string") as
+          | string
+          | undefined;
+      }
+      return undefined;
+    })
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    .map((t) => t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+  return texts.length > 0 ? texts.join(" · ").slice(0, 300) : undefined;
+}
+
+type JdResult = { listing: UnitListing } | { alsoListed: AlsoListed } | null;
+
+function fromJdUnit(raw: Record<string, unknown>, baseUrl: string, ref: Date): JdResult {
   const beds = coerceBeds(raw["bedrooms"] ?? raw["bedrooms_display"]);
+  const entity = raw["price_entity"] as
+    | { priceLow?: unknown; priceHigh?: unknown; term?: unknown; termDisplay?: unknown }
+    | undefined;
   const price =
-    coercePrice(raw["rent_min"]) ??
-    coercePrice((raw["price_entity"] as { priceLow?: unknown } | undefined)?.priceLow) ??
-    coercePrice(raw["price"]);
-  if (beds === null || price === null || price < MIN_SANE_RENT || price > MAX_SANE_RENT) return null;
+    coercePrice(raw["rent_min"]) ?? coercePrice(entity?.priceLow) ?? coercePrice(raw["price"]);
 
   const apt = raw["apartment_number"];
   const title = typeof raw["title"] === "string" ? raw["title"].replace(/^#/, "").trim() : "";
   const unitNumber =
-    typeof apt === "string" && /^\d{3,4}$/.test(apt)
-      ? apt
-      : /^\d{3,4}$/.test(title)
+    typeof apt === "string" && /^\d{3,4}[A-Z]?$/i.test(apt.trim())
+      ? apt.trim()
+      : /^\d{3,4}[A-Z]?$/i.test(title)
         ? title
         : null;
 
   const baths = coerceFinite(raw["bathrooms"]);
-  const sqft = coerceFinite(raw["square_feet"]);
+  const sqftRaw = coerceFinite(raw["square_feet"]);
+  const sqft = sqftRaw !== null && sqftRaw >= 150 ? Math.round(sqftRaw) : null;
 
-  const availableDate =
-    unixToIsoDate(raw["available_date"]) ??
-    parseAvailableDate(typeof raw["available_display"] === "string" ? raw["available_display"] : null, new Date());
+  const display = typeof raw["available_display"] === "string" ? raw["available_display"] : null;
+  const today = chicagoDate(ref);
+  const availableDate = unixToChicagoDay(raw["available_date"]) ?? parseAvailableDate(display, ref);
+  const saysNow = /\bnow\b/i.test(display ?? "");
+  const availableNow: boolean | undefined = saysNow
+    ? true
+    : availableDate !== null
+      ? availableDate <= today
+      : undefined;
 
   const permalink = raw["permalink"];
   const href =
@@ -77,40 +133,97 @@ function listingFromJdUnit(raw: Record<string, unknown>, baseUrl: string): UnitL
       : unitNumber
         ? `/floorplans/${unitNumber}/`
         : null;
+  const url = href ? new URL(href, baseUrl).href : undefined;
+
+  const priced = price !== null && price >= MIN_SANE_RENT && price <= MAX_SANE_RENT;
+  if (beds === null || !priced) {
+    // Listed on the site but not comparable — say so instead of dropping it.
+    if (unitNumber === null && title === "") return null;
+    return {
+      alsoListed: {
+        unitNumber,
+        floorplanName: beds === null ? title || "Unit" : planNameFor(raw, beds),
+        beds,
+        baths,
+        sqft,
+        ...(priced ? { price: Math.round(price!) } : {}),
+        availableDate,
+        ...(availableNow !== undefined ? { availableNow } : {}),
+        note: priced ? "Bed count not published" : "No price published",
+        ...(url ? { url } : {}),
+      },
+    };
+  }
+
+  const rentMax = coercePrice(raw["rent_max"]) ?? coercePrice(entity?.priceHigh);
+  const term =
+    typeof entity?.term === "number" && Number.isInteger(entity.term) && entity.term > 0
+      ? entity.term
+      : parseLeaseTermMonths(typeof entity?.termDisplay === "string" ? entity.termDisplay : null);
+  const leaseTerms = leaseTermsFrom(raw);
+  const specials = specialsFrom(raw);
 
   return {
-    unitNumber,
-    floorplanName: beds === 0 ? "Studio" : `${beds} BR`,
-    beds,
-    baths,
-    sqft: sqft !== null && sqft >= 150 ? Math.round(sqft) : null,
-    price,
-    availableDate,
-    ...(href ? { url: new URL(href, baseUrl).href } : {}),
+    listing: {
+      unitNumber,
+      floorplanName: planNameFor(raw, beds),
+      beds,
+      baths,
+      sqft,
+      price: Math.round(price!),
+      ...(rentMax !== null && rentMax > price! && rentMax <= MAX_SANE_RENT
+        ? { priceMax: Math.round(rentMax) }
+        : {}),
+      ...(term !== null ? { leaseTermMonths: term } : {}),
+      ...(leaseTerms.length > 0 ? { leaseTerms } : {}),
+      availableDate,
+      ...(availableNow !== undefined ? { availableNow } : {}),
+      ...(specials ? { specials } : {}),
+      ...(url ? { url } : {}),
+    },
   };
 }
 
+export interface LeoPage {
+  listings: UnitListing[];
+  alsoListed: AlsoListed[];
+  /**
+   * The page carried the inventory blob with a `units` array — so an empty
+   * list means "nothing available", not "we were served something else".
+   */
+  sawInventory: boolean;
+}
+
 /** Parse the Jonah Digital `#jd-fp-data-script-app` JSON blob. */
-export function parseLeoEmbeddedData(html: string, baseUrl: string): UnitListing[] {
+export function parseLeoInventory(html: string, baseUrl: string, ref: Date = new Date()): LeoPage {
+  const empty: LeoPage = { listings: [], alsoListed: [], sawInventory: false };
   const $ = cheerio.load(html);
   const raw = $(`script#${DATA_SCRIPT_ID}`).first().text();
-  if (!raw.trim()) return [];
+  if (!raw.trim()) return empty;
   let data: unknown;
   try {
     data = JSON.parse(raw);
   } catch {
-    return [];
+    return empty;
   }
-  if (typeof data !== "object" || data === null) return [];
+  if (typeof data !== "object" || data === null) return empty;
   const units = (data as { units?: unknown }).units;
-  if (!Array.isArray(units)) return [];
-  const out: UnitListing[] = [];
+  if (!Array.isArray(units)) return empty;
+  const listings: UnitListing[] = [];
+  const alsoListed: AlsoListed[] = [];
   for (const u of units) {
     if (typeof u !== "object" || u === null) continue;
-    const listing = listingFromJdUnit(u as Record<string, unknown>, baseUrl);
-    if (listing) out.push(listing);
+    const r = fromJdUnit(u as Record<string, unknown>, baseUrl, ref);
+    if (!r) continue;
+    if ("listing" in r) listings.push(r.listing);
+    else alsoListed.push(r.alsoListed);
   }
-  return dedupeListings(out);
+  return { listings: dedupeListings(listings), alsoListed, sawInventory: true };
+}
+
+/** Back-compat wrapper: just the priced listings from the JSON blob. */
+export function parseLeoEmbeddedData(html: string, baseUrl: string): UnitListing[] {
+  return parseLeoInventory(html, baseUrl).listings;
 }
 
 export function parseLeoCards(html: string, baseUrl: string): UnitListing[] {
@@ -150,21 +263,38 @@ export function parseLeoPage(html: string, baseUrl: string): UnitListing[] {
   return parseLeoCards(html, baseUrl);
 }
 
+/** Full parse: JSON blob first, card markup as a fallback. */
+function parsePage(html: string, baseUrl: string, ref: Date): LeoPage {
+  const page = parseLeoInventory(html, baseUrl, ref);
+  if (page.listings.length > 0 || page.sawInventory) return page;
+  return { listings: parseLeoCards(html, baseUrl), alsoListed: [], sawInventory: false };
+}
+
 export const leo: Adapter = {
   id: "leo",
   async scrape(building, ctx) {
     const url = new URL("floorplans", building.url).href;
+    const ref = ctx.now?.() ?? new Date();
+    const finish = (page: LeoPage): UnitListing[] => {
+      for (const row of page.alsoListed) ctx.reportAlsoListed?.(row);
+      if (page.listings.length === 0) {
+        ctx.log("inventory blob present with no priced units — the building lists nothing right now");
+      }
+      return page.listings;
+    };
 
-    // Plain fetch first: hits fixtures offline, and would work live if the
-    // WAF ever relaxes.
+    // Plain fetch first: hits fixtures offline, and works live whenever the
+    // WAF lets a datacenter IP through.
     try {
       const res = await ctx.fetch(url);
       if (res.ok) {
         const html = await res.text();
         ctx.record?.(url, html, "text/html");
         if (!isWafPage(html)) {
-          const listings = parseLeoPage(html, building.url);
-          if (listings.length > 0) return listings;
+          const page = parsePage(html, building.url, ref);
+          // A real page with the inventory blob is authoritative even when it
+          // is empty: a small building with nothing to rent is not an error.
+          if (page.listings.length > 0 || page.sawInventory) return finish(page);
         } else {
           ctx.log("plain fetch hit Imunify360 WAF; rendering");
         }
@@ -186,8 +316,8 @@ export const leo: Adapter = {
       if (isWafPage(html)) {
         ctx.log(`attempt ${attempt}: WAF interstitial instead of floorplans${attempt < attempts ? "; retrying" : ""}`);
       } else {
-        const listings = parseLeoPage(html, building.url);
-        if (listings.length > 0) return listings;
+        const page = parsePage(html, building.url, ref);
+        if (page.listings.length > 0 || page.sawInventory) return finish(page);
         ctx.log(`attempt ${attempt}: no floorplan data in rendered page${attempt < attempts ? "; retrying" : ""}`);
       }
       if (attempt < attempts) await sleep(3_000 * attempt);

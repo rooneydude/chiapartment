@@ -5,7 +5,7 @@
       0,
       2
     ],
-    "maxLeaseTermMonths": 14
+    "compareLeaseTermMonths": 12
   },
   "skyline": {
     "clusterRadiusM": 1000,

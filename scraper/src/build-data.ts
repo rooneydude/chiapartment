@@ -1,9 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assembleWeekdayBrief, focusDeltaFromRuns } from "../../shared/src/brief";
-import { computeDelta } from "../../shared/src/delta";
+import { computeDelta, listingKey } from "../../shared/src/delta";
+import { comparePrices } from "../../shared/src/listing";
 import {
   SnapshotSchema,
+  type AlsoListed,
   type BuildingHistory,
   type BuildingSnapshot,
   type CompiledConfig,
@@ -11,6 +13,7 @@ import {
   type FloorplanPoint,
   type OmittedListing,
   type Snapshot,
+  type UnitListing,
 } from "../../shared/src/types";
 import { loadConfig } from "./run";
 
@@ -20,10 +23,23 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
+/** One successful scrape of one building, as the compiler sees it. */
+export interface OkRun {
+  timestamp: string;
+  units: UnitListing[];
+  /** Historical: units the old lease-term cap dropped from `units` that run. */
+  omitted?: OmittedListing[];
+  alsoListed?: AlsoListed[];
+  notices?: string[];
+}
+
+const share = (units: UnitListing[], has: (u: UnitListing) => boolean): number =>
+  units.length === 0 ? 0 : units.filter(has).length / units.length;
+
 /** Data-sanity alarms so a broken scrape never masquerades as market truth. */
 export function computeWarnings(
   lastAny: BuildingSnapshot | null,
-  okRuns: { timestamp: string; units: Snapshot["buildings"][number]["units"] }[],
+  okRuns: OkRun[],
   latestOmitted: OmittedListing[] = [],
 ): DataWarning[] {
   const warnings: DataWarning[] = [];
@@ -44,31 +60,58 @@ export function computeWarnings(
   if (latest.units.length === 0 && prev.units.length > 0) {
     warnings.push({
       code: "empty-run",
-      message: `Latest scrape returned 0 units (previous run had ${prev.units.length}) — likely a site change, not a sold-out building.`,
+      message: `Latest scrape returned 0 units (previous run had ${prev.units.length}) — check the leasing site: either the building is fully leased or its page changed.`,
     });
   }
-  if (latest.units.length > 0 && prev.units.length >= 4) {
-    const mLatest = median(latest.units.map((u) => u.price));
-    const mPrev = median(prev.units.map((u) => u.price));
-    const jump = Math.abs(mLatest - mPrev) / mPrev;
-    if (jump > 0.15) {
+
+  // Price jump: judged on units present in BOTH runs, compared like for like,
+  // so new/removed inventory and lease-term switches cannot fake a move.
+  const prevByKey = new Map(prev.units.map((u) => [listingKey(u), u]));
+  const ratios: number[] = [];
+  for (const u of latest.units) {
+    const before = prevByKey.get(listingKey(u));
+    if (!before) continue;
+    const cmp = comparePrices(before, u);
+    if (!cmp.termChangeOnly && cmp.from > 0) ratios.push(cmp.to / cmp.from);
+  }
+  if (ratios.length >= 4) {
+    const move = median(ratios) - 1;
+    if (Math.abs(move) > 0.15) {
       warnings.push({
         code: "price-jump",
-        message: `Median price moved ${Math.round(jump * 100)}% in one run ($${Math.round(mPrev)} → $${Math.round(mLatest)}) — verify before trusting.`,
+        message: `Prices of the ${ratios.length} units listed in both runs moved ${move > 0 ? "+" : "−"}${Math.round(Math.abs(move) * 100)}% (median) in one run — verify before trusting.`,
       });
     }
-    if (latest.units.length < prev.units.length * 0.5) {
-      const omitted = latestOmitted.length;
-      const accounted = latest.units.length + omitted;
-      if (omitted > 0 && accounted >= prev.units.length * 0.5) {
-        // Lease-cap omit explains the drop — not a partial scrape.
-      } else {
-        const omitBit = omitted > 0 ? `; ${omitted} omitted over-cap` : "";
-        warnings.push({
-          code: "count-drop",
-          message: `Listing count halved in one run (${prev.units.length} → ${latest.units.length}${omitBit}) — possible partial scrape.`,
-        });
-      }
+  }
+
+  if (latest.units.length > 0 && prev.units.length >= 4 && latest.units.length < prev.units.length * 0.5) {
+    const omitted = latestOmitted.length;
+    const accounted = latest.units.length + omitted;
+    if (omitted > 0 && accounted >= prev.units.length * 0.5) {
+      // Historical lease-cap omission explains the drop — not a partial scrape.
+    } else {
+      const omitBit = omitted > 0 ? `; ${omitted} omitted over-cap` : "";
+      warnings.push({
+        code: "count-drop",
+        message: `Listing count halved in one run (${prev.units.length} → ${latest.units.length}${omitBit}) — possible partial scrape.`,
+      });
+    }
+  }
+
+  // Detail that was there yesterday and is mostly gone today means a
+  // secondary request failed (e.g. the lease-term API), not that the site
+  // stopped publishing it.
+  const checks: [string, (u: UnitListing) => boolean][] = [
+    ["lease-term price tables", (u) => (u.leaseTerms?.length ?? 0) > 0],
+    ["move-in dates", (u) => u.availableDate !== null],
+  ];
+  for (const [what, has] of checks) {
+    if (latest.units.length >= 2 && share(prev.units, has) >= 0.5 && share(latest.units, has) < 0.5) {
+      const n = latest.units.filter(has).length;
+      warnings.push({
+        code: "partial-data",
+        message: `Only ${n} of ${latest.units.length} units have ${what} in the latest scrape (the previous run had them) — a follow-up request probably failed.`,
+      });
     }
   }
   return warnings;
@@ -85,12 +128,14 @@ export function buildData(root: string): void {
   mkdirSync(join(outDir, "buildings"), { recursive: true });
 
   const snapshots: Snapshot[] = [];
+  const skipped: string[] = [];
   if (existsSync(snapDir)) {
     for (const f of readdirSync(snapDir).sort()) {
       if (!f.endsWith(".json")) continue;
       try {
         snapshots.push(SnapshotSchema.parse(JSON.parse(readFileSync(join(snapDir, f), "utf8"))));
       } catch (err) {
+        skipped.push(f);
         console.warn(`Skipping invalid snapshot ${f}: ${err instanceof Error ? err.message : err}`);
       }
     }
@@ -114,13 +159,11 @@ export function buildData(root: string): void {
       lastAttempt: null,
       focusDelta: null,
       omitted: [],
+      alsoListed: [],
+      notices: [],
     };
 
-    const okRuns: {
-      timestamp: string;
-      units: Snapshot["buildings"][number]["units"];
-      omitted: OmittedListing[];
-    }[] = [];
+    const okRuns: OkRun[] = [];
     let lastAny: BuildingSnapshot | null = null;
     let lastSnapTs: string | null = null;
     for (const snap of snapshots) {
@@ -129,7 +172,13 @@ export function buildData(root: string): void {
       lastAny = bs;
       lastSnapTs = snap.timestamp;
       if (bs.status !== "ok") continue;
-      okRuns.push({ timestamp: snap.timestamp, units: bs.units, omitted: bs.omitted ?? [] });
+      okRuns.push({
+        timestamp: snap.timestamp,
+        units: bs.units,
+        omitted: bs.omitted ?? [],
+        alsoListed: bs.alsoListed ?? [],
+        notices: bs.notices ?? [],
+      });
     }
     if (lastAny && lastSnapTs) {
       history.lastAttempt = {
@@ -144,10 +193,15 @@ export function buildData(root: string): void {
       const byPlan = new Map<string, number[]>();
       for (const u of run.units) {
         if (u.unitNumber) {
-          (history.perUnit[u.unitNumber] ??= []).push({ t: run.timestamp, price: u.price });
+          (history.perUnit[u.unitNumber] ??= []).push({
+            t: run.timestamp,
+            price: u.price,
+            ...(u.leaseTermMonths != null ? { term: u.leaseTermMonths } : {}),
+          });
           history.perUnitMeta[u.unitNumber] ??= {
             firstSeen: run.timestamp,
             firstPrice: u.price,
+            ...(u.leaseTermMonths != null ? { firstTerm: u.leaseTermMonths } : {}),
           };
         }
         const prices = byPlan.get(u.floorplanName) ?? [];
@@ -174,8 +228,13 @@ export function buildData(root: string): void {
         latest.units,
         prev ? prev.timestamp : null,
         latest.timestamp,
+        // Units the old lease cap hid last run were on the market then too —
+        // they are not "new" when they appear in the list now.
+        (prev?.omitted ?? []).map(listingKey),
       );
-      history.omitted = latest.omitted;
+      history.omitted = latest.omitted ?? [];
+      history.alsoListed = latest.alsoListed ?? [];
+      history.notices = latest.notices ?? [];
       history.focusDelta = focusDeltaFromRuns(okRuns, focusBeds);
     }
     history.warnings = computeWarnings(lastAny, okRuns, latest?.omitted ?? []);
@@ -188,7 +247,12 @@ export function buildData(root: string): void {
   const generated = new Date().toISOString();
   const compiledConfig: CompiledConfig = {
     ...config,
-    health: { generated, buildings: warningCounts },
+    health: {
+      generated,
+      buildings: warningCounts,
+      snapshots: snapshots.length,
+      ...(skipped.length > 0 ? { skippedSnapshots: skipped } : {}),
+    },
   };
   writeFileSync(join(outDir, "config.json"), JSON.stringify(compiledConfig));
 
@@ -211,4 +275,11 @@ export function buildData(root: string): void {
   console.log(
     `Compiled ${snapshots.length} snapshot(s) for ${config.buildings.length} building(s) → web/public/data/ (brief ${brief.summary.drops} drops / ${brief.summary.newListings} new)`,
   );
+  if (skipped.length > 0) {
+    // A snapshot that no longer parses silently removes a day of history from
+    // the dashboard — make that impossible to miss in the build log.
+    console.error(
+      `WARNING: ${skipped.length} snapshot file(s) failed schema validation and were left out: ${skipped.join(", ")}`,
+    );
+  }
 }

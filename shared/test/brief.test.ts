@@ -27,6 +27,8 @@ function history(partial: Partial<BuildingHistory>): BuildingHistory {
     lastAttempt: null,
     focusDelta: null,
     omitted: [],
+    alsoListed: [],
+    notices: [],
     ...partial,
   };
 }
@@ -153,7 +155,7 @@ describe("weekday brief", () => {
     );
     expect(brief.schemaVersion).toBe(1);
     expect(brief.timezone).toBe("America/Chicago");
-    expect(brief.summary).toEqual({
+    expect(brief.summary).toMatchObject({
       drops: 0,
       newListings: 1,
       removed: 0,

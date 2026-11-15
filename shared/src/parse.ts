@@ -1,3 +1,4 @@
+import { chicagoDate } from "./time";
 import type { UnitMapping } from "./types";
 
 export interface ParsedUnit {
@@ -50,34 +51,85 @@ const MONTHS: Record<string, number> = {
 /** Days of slack before assuming a year-less date meant next year. */
 const YEAR_INFERENCE_GRACE_DAYS = 7;
 
+/** ISO day for y/m/d, or null when it is not a real calendar date (Feb 31). */
+function isoDay(year: number, monthIndex: number, day: number): string | null {
+  if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+  const d = new Date(Date.UTC(year, monthIndex, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== monthIndex || d.getUTCDate() !== day) {
+    return null;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 /**
- * Normalize scraped availability text to an ISO date.
- * "now" / bare "available" → the reference date; "Aug 15" / "Aug. 15, 2026" →
- * ISO, inferring next year when the month/day has already passed.
+ * A month/day with no year: this year, unless that day is already more than
+ * a week behind the reference day — then the site means next year.
  */
-export function parseAvailableDate(text: string | null, ref: Date): string | null {
+function inferYear(monthIndex: number, day: number, refDay: string): string | null {
+  const refYear = Number.parseInt(refDay.slice(0, 4), 10);
+  const thisYear = isoDay(refYear, monthIndex, day);
+  if (thisYear !== null) {
+    const behindDays =
+      (Date.parse(`${refDay}T00:00:00Z`) - Date.parse(`${thisYear}T00:00:00Z`)) / 86400e3;
+    if (behindDays <= YEAR_INFERENCE_GRACE_DAYS) return thisYear;
+  }
+  return isoDay(refYear + 1, monthIndex, day) ?? thisYear;
+}
+
+/** Words leasing sites use for "you can move in today". */
+const NOW_WORDS = /^(now|today|immediately|immediate|available)?$/;
+
+/**
+ * Normalize scraped availability text to an ISO calendar day.
+ *
+ *   "Available Now" / bare "Available" / "today"  → the reference day
+ *   "12/18/2026", "1/2/27", "12-18-2026"          → that day (US month/day order)
+ *   "12/18"                                       → year inferred
+ *   "Aug 15", "Dec 26th", "Aug. 15, 2026"         → ISO, year inferred when absent
+ *   "2026-10-09"                                  → unchanged
+ *
+ * The reference day is the CHICAGO calendar date of `ref` (the buildings and
+ * their leasing offices are in Chicago; a late-evening scrape is still
+ * "today" there even though UTC has rolled over). Returns null when the text
+ * carries no recognizable date — never a guess.
+ */
+export function parseAvailableDate(text: string | null | undefined, ref: Date): string | null {
   if (!text) return null;
-  const t = text.trim().toLowerCase().replace(/^available\s*/i, "");
-  const isoRef = ref.toISOString().slice(0, 10);
-  if (t === "" || t === "now" || t === "today" || t === "immediately") return isoRef;
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/^(available|availability|move[- ]?in|date available)\s*[:\-]?\s*/i, "")
+    .replace(/^(on|from|starting|beginning)\s+/i, "")
+    .trim();
+  const refDay = chicagoDate(ref);
+  if (NOW_WORDS.test(t)) return refDay;
 
   // Already ISO?
   const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(t);
-  if (iso) return iso[0]!;
+  if (iso) {
+    return isoDay(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  }
+
+  // US numeric: M/D/YYYY, M/D/YY, M-D-YYYY, or M/D with the year inferred.
+  const us = /\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{4}|\d{2}))?\b/.exec(t);
+  if (us) {
+    const month = Number.parseInt(us[1]!, 10) - 1;
+    const day = Number.parseInt(us[2]!, 10);
+    if (us[3]) {
+      const y = Number.parseInt(us[3], 10);
+      return isoDay(us[3].length === 2 ? 2000 + y : y, month, day);
+    }
+    return inferYear(month, day, refDay);
+  }
 
   const m = /([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/.exec(t);
-  if (!m) return null;
+  if (!m) return /\bnow\b|\bimmediate/.test(t) ? refDay : null;
   const month = MONTHS[m[1]!.slice(0, 3)];
   const day = Number.parseInt(m[2]!, 10);
-  if (month === undefined || day < 1 || day > 31) return null;
-
-  let year = m[3] ? Number.parseInt(m[3], 10) : ref.getUTCFullYear();
-  if (!m[3]) {
-    const candidate = Date.UTC(year, month, day);
-    if (candidate < ref.getTime() - YEAR_INFERENCE_GRACE_DAYS * 86400e3) year += 1;
-  }
-  const d = new Date(Date.UTC(year, month, day));
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  if (month === undefined) return null;
+  if (m[3]) return isoDay(Number.parseInt(m[3], 10), month, day);
+  return inferYear(month, day, refDay);
 }
 
 /**

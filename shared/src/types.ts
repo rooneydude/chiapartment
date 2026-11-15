@@ -74,8 +74,13 @@ export const BuildingsConfigSchema = z.object({
   focus: z
     .object({
       beds: z.array(z.number().int().min(0).max(6)).min(1),
-      /** Never quote a price that requires a lease longer than this. */
-      maxLeaseTermMonths: z.number().int().positive().optional(),
+      /**
+       * The lease length the owner compares prices at (default 12). View-time
+       * only: where a site publishes a lease-term price table the UI can show
+       * this term's price next to the advertised one. It never filters,
+       * drops or re-prices anything at scrape time.
+       */
+      compareLeaseTermMonths: z.number().int().positive().optional(),
     })
     .optional(),
   skyline: z
@@ -96,6 +101,13 @@ export type BuildingsConfig = z.infer<typeof BuildingsConfigSchema>;
 // Scrape output (data/snapshots/*.json)
 // ---------------------------------------------------------------------------
 
+/** One row of a unit's lease-term price table: N-month lease → monthly rent. */
+export const LeaseTermPriceSchema = z.object({
+  months: z.number().int().positive(),
+  price: z.number().positive(),
+});
+export type LeaseTermPrice = z.infer<typeof LeaseTermPriceSchema>;
+
 export const UnitListingSchema = z.object({
   /** null when the site only lists floorplans with "starting at" prices. */
   unitNumber: z.string().nullable(),
@@ -103,27 +115,78 @@ export const UnitListingSchema = z.object({
   /** 0 = studio */
   beds: z.number().int().min(0),
   baths: z.number().nullable(),
+  /** Interior living area. Outdoor (terrace) area goes in outdoorSqft. */
   sqft: z.number().nullable(),
-  /** Monthly USD; lowest advertised. */
-  price: z.number().positive(),
-  priceMax: z.number().positive().optional(),
+  outdoorSqft: z.number().nonnegative().optional(),
   /**
-   * Lease term (months) the advertised price applies to, when the site says.
-   * Sites tease sub-market rates on long leases; focus.maxLeaseTermMonths
-   * caps which terms adapters may quote.
+   * Monthly USD — the price the leasing site itself headlines for this unit
+   * (so it can be checked against the website at a glance). When the site
+   * ties that price to a lease length, leaseTermMonths says which.
    */
+  price: z.number().positive(),
+  /** Top of the site's advertised range, when it prints one. */
+  priceMax: z.number().positive().optional(),
+  /** Lease term (months) the advertised `price` applies to, when the site says. */
   leaseTermMonths: z.number().int().positive().nullable().optional(),
+  /**
+   * Every lease length the site offers for this unit and what each costs,
+   * quoted for the unit's earliest move-in date (`availableDate`). Present
+   * only where the site publishes it; sorted by months ascending.
+   */
+  leaseTerms: z.array(LeaseTermPriceSchema).optional(),
+  /**
+   * Earliest move-in day, YYYY-MM-DD (Chicago calendar). For a unit that can
+   * be moved into today this is the scrape day (or the day it became vacant
+   * when the site says) and `availableNow` is true. null = the site gives no
+   * date.
+   */
   availableDate: z.string().nullable(),
+  /** The site says the unit can be moved into now (vs. on a future date). */
+  availableNow: z.boolean().optional(),
   /** Concession text, e.g. "1 month free on 13-month leases". */
   specials: z.string().optional(),
+  /** Deep link to this unit on the leasing site, when there is one. */
   url: z.string().optional(),
+  /**
+   * When the SITE says it last edited this listing (ISO timestamp). Only
+   * hand-maintained catalogues expose it (Stead 220); an old value means the
+   * price is a stale "starting from" figure, however fresh our scrape is.
+   */
+  sourceUpdatedAt: z.string().optional(),
 });
 export type UnitListing = z.infer<typeof UnitListingSchema>;
 
 /**
- * A unit the scraper saw but did not quote — typically an over-cap lease
- * teaser with no in-cap price. Optional and future-only; never back-fill
- * historical snapshots.
+ * Something the site lists that cannot be compared as a regular unit: it has
+ * no price ("Contact for Pricing", waitlist plans) or the site publishes no
+ * bed count for it (townhome / penthouse plans). Recorded so the dashboard
+ * can still show that it exists — the tracker must never look emptier than
+ * the leasing site.
+ */
+export const AlsoListedSchema = z.object({
+  unitNumber: z.string().nullable(),
+  floorplanName: z.string(),
+  /** null when the site does not say. */
+  beds: z.number().int().min(0).nullable(),
+  baths: z.number().nullable().optional(),
+  sqft: z.number().nullable().optional(),
+  outdoorSqft: z.number().nonnegative().optional(),
+  /** Present when the site does print a price (the row is here for another reason). */
+  price: z.number().positive().optional(),
+  priceMax: z.number().positive().optional(),
+  availableDate: z.string().nullable().optional(),
+  availableNow: z.boolean().optional(),
+  /** Why it is not a regular listing, in the site's words where possible. */
+  note: z.string(),
+  url: z.string().optional(),
+});
+export type AlsoListed = z.infer<typeof AlsoListedSchema>;
+
+/**
+ * HISTORICAL ONLY (8 Sep – 14 Nov 2026): a unit the scraper saw but dropped
+ * because of the since-removed lease-term cap. Nothing writes this any more —
+ * every unit a site lists is recorded — but old snapshots carry it, so the
+ * schema must keep parsing it.
  */
 export const OmittedListingSchema = z.object({
   unitNumber: z.string().nullable(),
@@ -143,8 +206,12 @@ export const BuildingSnapshotSchema = z.object({
   error: z.string().optional(),
   source: z.object({ adapter: z.string(), fetchedUrl: z.string() }),
   units: z.array(UnitListingSchema),
-  /** Present on future scrapes when units were seen but not quoted. */
+  /** Historical only — see OmittedListingSchema. */
   omitted: z.array(OmittedListingSchema).optional(),
+  /** Listed on the site but not comparable (no price / no bed count). */
+  alsoListed: z.array(AlsoListedSchema).optional(),
+  /** Building-wide notices the site prints (specials, concessions). */
+  notices: z.array(z.string()).optional(),
 });
 export type BuildingSnapshot = z.infer<typeof BuildingSnapshotSchema>;
 
@@ -163,6 +230,8 @@ export type Snapshot = z.infer<typeof SnapshotSchema>;
 export interface PricePoint {
   t: string;
   price: number;
+  /** Lease term (months) that price was quoted for, when the site said. */
+  term?: number;
 }
 
 export interface FloorplanPoint {
@@ -182,6 +251,27 @@ export interface PriceChange {
   from: number;
   to: number;
   beds: number;
+  /**
+   * Lease terms the two prices were quoted for, when known. A change is
+   * like-for-like when they match (or the site gives no term at all).
+   */
+  fromTerm?: number;
+  toTerm?: number;
+  /**
+   * True when the only thing known to have changed is which lease length the
+   * site headlines — the two prices are for different terms and no same-term
+   * comparison was possible. Not a real price move; never alert on it.
+   */
+  termChangeOnly?: boolean;
+}
+
+/** A unit whose earliest move-in day changed between two runs. */
+export interface DateChange {
+  unitNumber: string;
+  floorplanName: string;
+  beds: number;
+  from: string | null;
+  to: string | null;
 }
 
 export interface SnapshotDelta {
@@ -190,6 +280,8 @@ export interface SnapshotDelta {
   newUnits: UnitListing[];
   removedUnits: UnitListing[];
   priceChanges: PriceChange[];
+  /** Move-in date moves (future ↔ future, or future → now). Additive. */
+  dateChanges?: DateChange[];
 }
 
 /** Calendar-day, focus-bed slice of a delta — weekday-brief input. */
@@ -205,8 +297,13 @@ export interface BriefListing {
   floorplanName: string;
   beds: number;
   price: number;
+  priceMax?: number;
   availableDate: string | null;
+  availableNow?: boolean;
   leaseTermMonths?: number | null;
+  leaseTerms?: LeaseTermPrice[];
+  sqft?: number | null;
+  url?: string;
 }
 
 export interface BriefDrop {
@@ -216,6 +313,8 @@ export interface BriefDrop {
   beds: number;
   from: number;
   to: number;
+  /** Lease term both prices are quoted for, when known. */
+  leaseTermMonths?: number;
 }
 
 export interface BriefOmitted {
@@ -243,6 +342,20 @@ export interface WeekdayBriefBuilding {
   drops: BriefDrop[];
   omitted: BriefOmitted[];
   warnings: DataWarning[];
+  /**
+   * Every focus-bed listing currently on the market, with its move-in date,
+   * advertised lease term and (where published) lease-term price table — so a
+   * reader of brief.json needs nothing else. Additive.
+   */
+  listings?: BriefListing[];
+  /** Timestamp of the scrape `listings` came from (last good one on error). */
+  listingsAsOf?: string | null;
+  /** Focus-bed units whose earliest move-in day moved since the prior day. */
+  dateChanges?: DateChange[];
+  /** Listed on the site but not comparable (no price / no bed count). */
+  alsoListed?: AlsoListed[];
+  /** Building-wide notices the site prints (specials). */
+  notices?: string[];
 }
 
 export interface WeekdayBrief {
@@ -257,13 +370,19 @@ export interface WeekdayBrief {
     newListings: number;
     removed: number;
     scrapeErrors: number;
+    /** Historical; always 0 since the lease-term cap was removed. */
     omittedOverCap: number;
+    /** Focus-bed listings on the market across all buildings. */
+    focusAvailable?: number;
+    /** …of which can be moved into now. */
+    availableNow?: number;
+    moveInDateChanges?: number;
   };
   buildings: WeekdayBriefBuilding[];
 }
 
 export interface DataWarning {
-  code: "scrape-error" | "empty-run" | "price-jump" | "count-drop";
+  code: "scrape-error" | "empty-run" | "price-jump" | "count-drop" | "partial-data";
   message: string;
 }
 
@@ -275,8 +394,12 @@ export interface BuildingHistory {
   perUnit: Record<string, PricePoint[]>;
   /** floorplanName → aggregate series */
   perFloorplan: Record<string, FloorplanPoint[]>;
-  /** unitNumber → first time (and price at which) the unit was ever listed. */
-  perUnitMeta: Record<string, { firstSeen: string; firstPrice: number }>;
+  /**
+   * unitNumber → first time (and price at which) the unit was ever listed.
+   * `firstTerm` is the lease length that first price was quoted for, when the
+   * site said — needed to compare "since first listing" like for like.
+   */
+  perUnitMeta: Record<string, { firstSeen: string; firstPrice: number; firstTerm?: number }>;
   /** Data-sanity alarms for the latest state of this building. */
   warnings: DataWarning[];
   /** Timestamps of every snapshot run that included this building (ok only). */
@@ -292,8 +415,12 @@ export interface BuildingHistory {
    * the weekday Grok brief; `delta` remains last-two-ok-runs unfiltered.
    */
   focusDelta: FocusDelta | null;
-  /** Over-cap units skipped on the latest ok scrape. Empty when none / historical. */
+  /** Historical: over-cap units skipped on the latest ok scrape. Empty since the cap was removed. */
   omitted: OmittedListing[];
+  /** Listed but not comparable on the latest ok scrape (no price / no bed count). */
+  alsoListed: AlsoListed[];
+  /** Building-wide notices (specials) from the latest ok scrape. */
+  notices: string[];
 }
 
 /** Shape of the compiled config.json (buildings.json + build-time health). */
@@ -302,6 +429,10 @@ export type CompiledConfig = BuildingsConfig & {
     generated: string;
     /** buildingId → warning count for dashboard badges. */
     buildings: Record<string, number>;
+    /** How many snapshot files were compiled. */
+    snapshots?: number;
+    /** Snapshot files that failed schema validation and were left out. */
+    skippedSnapshots?: string[];
   };
 };
 

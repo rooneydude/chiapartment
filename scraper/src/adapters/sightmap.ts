@@ -1,12 +1,19 @@
 import { parseLeaseTermMonths } from "../../../shared/src/parse";
-import type { BuildingConfig, UnitListing } from "../../../shared/src/types";
+import { chicagoDate, isIsoDay } from "../../../shared/src/time";
+import type { BuildingConfig, LeaseTermPrice, UnitListing } from "../../../shared/src/types";
 import { dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
 import type { Adapter, AdapterContext } from "./types";
 
 /**
  * SightMap (Engrain) — the interactive floorplate map many leasing sites
  * embed. Its pricing API carries every available unit with real unit number,
- * price, sqft, availability date, and specials. Used by 1225 Old Town.
+ * price, sqft, availability date, and specials; a per-unit leasing API adds
+ * the full lease-term price table. Used by 1225 Old Town.
+ *
+ * Every unit the API lists is recorded — at the price and lease term the site
+ * itself headlines, with the whole lease-term table attached. Nothing is
+ * filtered or re-priced here: choosing which lease length to look at is the
+ * dashboard's job, not the scraper's.
  */
 
 export interface SightmapUnit {
@@ -16,11 +23,18 @@ export interface SightmapUnit {
   floor_plan_id: string;
   price: number;
   area: number | null;
+  /** Earliest move-in day (YYYY-MM-DD); today's date for a vacant unit. */
   available_on: string | null;
+  /** "Available Now" or "Available Dec 26th". */
+  display_available_on?: string | null;
   specials_description?: string | null;
-  /** e.g. "14 Months" — the lease term the advertised price applies to. */
+  /** e.g. "18 Months" — the lease term the advertised price applies to. */
   display_lease_term?: string | null;
-  /** Per-unit leasing API with the full lease-term × start-date matrix. */
+  /**
+   * Per-unit leasing API: lease term → price for ONE move-in day, chosen with
+   * a `date=YYYY-MM-DD` query parameter. Without it the API assumes today and
+   * answers `{"options": []}` for any unit that is not vacant yet.
+   */
   leasing_price_url?: string | null;
 }
 
@@ -98,7 +112,8 @@ const PRICE_KEY = /^(price|rent|amount|rate|monthly_price|base_rent)$/i;
  * Pull {term, price} pairs out of a leasing-matrix payload without assuming
  * its exact shape: any object carrying a plausible term field and a plausible
  * price field counts. Terms labeled as strings ("14 Months") work too.
- * Dedupes to the cheapest price seen per term.
+ * Dedupes to the cheapest price seen per term. Fallback for payloads that do
+ * not match the documented `data.options[]` shape (see parseLeaseTable).
  */
 export function extractTermPrices(json: unknown): Map<number, number> {
   const best = new Map<number, number>();
@@ -136,29 +151,72 @@ export function extractTermPrices(json: unknown): Map<number, number> {
   return best;
 }
 
+/** The leasing-API URL for one move-in day (see SightmapUnit.leasing_price_url). */
+export function leasingUrlForDate(leasingUrl: string, moveInDay: string | null): string {
+  if (!moveInDay || !isIsoDay(moveInDay)) return leasingUrl;
+  try {
+    const u = new URL(leasingUrl);
+    u.searchParams.set("date", moveInDay);
+    return u.href;
+  } catch {
+    return leasingUrl;
+  }
+}
+
+export interface LeaseTable {
+  terms: LeaseTermPrice[];
+  /** lease term → the site's own "apply for this unit at this term" link. */
+  applyUrls: Map<number, string>;
+}
+
 /**
- * The advertised price sometimes belongs to a lease longer than the user
- * shops for. Fetch the unit's leasing matrix and return the cheapest
- * {price, term} within maxMonths — or null when the matrix has nothing usable.
+ * Parse a leasing-API payload into a sorted lease-term table. The documented
+ * shape is `{data: {options: [{lease_term, price, apply_url}]}}`; anything
+ * else falls back to the shape-agnostic extractor.
  */
-async function cheapestWithinTerm(
+export function parseLeaseTable(json: unknown): LeaseTable {
+  const byTerm = new Map<number, number>();
+  const applyUrls = new Map<number, string>();
+  const options = (json as { data?: { options?: unknown } } | null)?.data?.options;
+  if (Array.isArray(options)) {
+    for (const raw of options) {
+      if (raw === null || typeof raw !== "object") continue;
+      const opt = raw as { lease_term?: unknown; price?: unknown; apply_url?: unknown };
+      const months = typeof opt.lease_term === "number" ? opt.lease_term : Number.NaN;
+      const price = typeof opt.price === "number" ? opt.price : Number.NaN;
+      if (!Number.isInteger(months) || months < 1 || months > 36) continue;
+      if (!Number.isFinite(price) || price < MIN_SANE_RENT || price > MAX_SANE_RENT) continue;
+      byTerm.set(months, Math.round(price));
+      if (typeof opt.apply_url === "string" && opt.apply_url.startsWith("https://")) {
+        applyUrls.set(months, opt.apply_url);
+      }
+    }
+  }
+  const source = byTerm.size > 0 ? byTerm : extractTermPrices(json);
+  const terms = [...source.entries()]
+    .map(([months, price]) => ({ months, price }))
+    .sort((a, b) => a.months - b.months);
+  return { terms, applyUrls };
+}
+
+/**
+ * Fetch a unit's lease-term table for its earliest move-in day. Null when the
+ * unit has no leasing URL, the request fails, or the table is empty — the
+ * unit is still recorded, just without the table.
+ */
+async function fetchLeaseTable(
   u: SightmapUnit,
-  maxMonths: number,
+  moveInDay: string | null,
   ctx: AdapterContext,
-): Promise<{ price: number; term: number } | null> {
+): Promise<LeaseTable | null> {
   if (!u.leasing_price_url) return null;
   try {
-    const text = await fetchText(u.leasing_price_url, ctx, "leasing matrix");
-    const byTerm = extractTermPrices(JSON.parse(text));
-    let bestEntry: { price: number; term: number } | null = null;
-    for (const [term, price] of byTerm) {
-      if (term > maxMonths) continue;
-      if (!bestEntry || price < bestEntry.price) bestEntry = { price, term };
-    }
-    return bestEntry;
+    const url = leasingUrlForDate(u.leasing_price_url, moveInDay);
+    const table = parseLeaseTable(JSON.parse(await fetchText(url, ctx, "leasing matrix")));
+    return table.terms.length > 0 ? table : null;
   } catch (err) {
     ctx.log(
-      `leasing matrix for unit ${u.unit_number} unavailable (${err instanceof Error ? err.message : err})`,
+      `lease terms for unit ${u.unit_number} unavailable (${err instanceof Error ? err.message : err})`,
     );
     return null;
   }
@@ -178,50 +236,34 @@ export const sightmap: Adapter = {
   async scrape(building, ctx) {
     const payload = await fetchSightmapPayload(building, ctx);
     const plans = new Map(payload.data.floor_plans.map((p) => [p.id, p]));
-
-    const maxMonths = ctx.maxLeaseTermMonths;
-
-    // Capture mode: record one unit's leasing matrix even when nothing is
-    // over the cap, so the matrix shape is on file for offline validation.
-    if (ctx.record && maxMonths) {
-      const sample = payload.data.units.find((u) => u.leasing_price_url);
-      if (sample) await cheapestWithinTerm(sample, maxMonths, ctx);
-    }
+    const today = chicagoDate(ctx.now?.() ?? new Date());
 
     const listings: UnitListing[] = [];
+    let withTerms = 0;
     for (const u of payload.data.units) {
       const plan = plans.get(u.floor_plan_id);
       if (!plan || !u.unit_number || !Number.isFinite(u.price) || u.price <= 0) continue;
 
-      let price = u.price;
-      let term = parseLeaseTermMonths(u.display_lease_term);
-      if (maxMonths && term !== null && term > maxMonths) {
-        // The teaser price needs a longer lease than the user shops for —
-        // re-price from the unit's leasing calendar, capped at maxMonths.
-        const capped = await cheapestWithinTerm(u, maxMonths, ctx);
-        if (capped) {
+      const availableOn = u.available_on && isIsoDay(u.available_on) ? u.available_on : null;
+      const saysNow = /\bnow\b/i.test(u.display_available_on ?? "");
+      const availableNow = saysNow || (availableOn !== null && availableOn <= today);
+      const availableDate = availableOn ?? (saysNow ? today : null);
+
+      // The lease-term table is quoted for the unit's own earliest move-in
+      // day; asking without a date returns nothing for units not yet vacant.
+      const term = parseLeaseTermMonths(u.display_lease_term);
+      await ctx.pause?.(250);
+      const table = await fetchLeaseTable(u, availableDate, ctx);
+      if (table) {
+        withTerms++;
+        const atTerm = term !== null ? table.terms.find((t) => t.months === term) : undefined;
+        if (atTerm && Math.abs(atTerm.price - u.price) > 1) {
           ctx.log(
-            `unit ${u.unit_number}: advertised $${price} @ ${term}mo → quoting $${capped.price} @ ${capped.term}mo (cap ${maxMonths}mo)`,
+            `unit ${u.unit_number}: site headlines $${u.price} @ ${term}mo but its lease table says $${atTerm.price} for that term`,
           );
-          price = capped.price;
-          term = capped.term;
-        } else {
-          ctx.log(
-            `unit ${u.unit_number}: advertised price needs a ${term}-month lease and no ≤${maxMonths}-month price found — skipping`,
-          );
-          ctx.reportOmitted?.({
-            unitNumber: u.unit_number,
-            floorplanName: cleanPlanName(plan),
-            beds: plan.bedroom_count,
-            baths: plan.bathroom_count || null,
-            sqft: u.area && u.area > 100 ? Math.round(u.area) : null,
-            advertisedPrice: u.price,
-            leaseTermMonths: term,
-            reason: "over-cap",
-          });
-          continue;
         }
       }
+      const applyUrl = term !== null ? table?.applyUrls.get(term) : undefined;
 
       listings.push({
         unitNumber: u.unit_number,
@@ -229,12 +271,17 @@ export const sightmap: Adapter = {
         beds: plan.bedroom_count,
         baths: plan.bathroom_count || null,
         sqft: u.area && u.area > 100 ? Math.round(u.area) : null,
-        price,
+        price: Math.round(u.price),
         leaseTermMonths: term,
-        availableDate: u.available_on ?? null,
+        ...(table ? { leaseTerms: table.terms } : {}),
+        availableDate,
+        ...(availableDate !== null ? { availableNow } : {}),
         ...(u.specials_description ? { specials: u.specials_description } : {}),
-        url: building.url,
+        url: applyUrl ?? building.url,
       });
+    }
+    if (listings.length > 0) {
+      ctx.log(`${withTerms}/${listings.length} units have a lease-term price table`);
     }
     return dedupeListings(listings);
   },
