@@ -206,6 +206,35 @@ export function flagGroupOutages(
   return flagged;
 }
 
+/** What one run achieved, for the CI summary page and the workflow's health check. */
+export function describeRun(snap: Snapshot): {
+  ok: number;
+  total: number;
+  /** Ids of the buildings that could not be read. */
+  failed: string[];
+  markdown: string;
+} {
+  const okCount = snap.buildings.filter((b) => b.status === "ok").length;
+  const failed = snap.buildings.filter((b) => b.status !== "ok").map((b) => b.buildingId);
+  const cell = (text: string): string =>
+    text.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim().slice(0, 300);
+  const rows = snap.buildings.map((b) =>
+    b.status === "ok"
+      ? `| ${b.buildingId} | ok | ${b.units.length} listed${b.alsoListed?.length ? `, ${b.alsoListed.length} without a price` : ""} | ${b.source.requests ?? "?"} |`
+      : `| ${b.buildingId} | ${b.blocked ? "refused by the site" : "FAILED"} | ${cell(b.error ?? "unknown error")} | ${b.source.requests ?? "?"} |`,
+  );
+  const markdown = [
+    `### Scrape ${snap.timestamp}: ${okCount}/${snap.buildings.length} buildings ok`,
+    "",
+    "| Building | Result | Detail | Requests |",
+    "| --- | --- | --- | --- |",
+    ...rows,
+    "",
+    "",
+  ].join("\n");
+  return { ok: okCount, total: snap.buildings.length, failed, markdown };
+}
+
 export async function refresh(root: string, opts: RefreshOptions): Promise<string> {
   if (opts.fixtures && opts.capture) {
     throw new Error("--fixtures and --capture are mutually exclusive");

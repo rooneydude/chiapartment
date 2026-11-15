@@ -10,6 +10,7 @@ import {
 } from "../../shared/src/types";
 import { makeRecorder } from "../src/fixtures";
 import {
+  describeRun,
   flagGroupOutages,
   loadPreviousOk,
   pickStableObservation,
@@ -185,5 +186,52 @@ describe("fixture recorder", () => {
     writeFileSync(join(dir, "00-old.json"), "{}");
     makeRecorder(dir).flush();
     expect(readdirSync(dir)).toEqual(["00-old.json"]);
+  });
+});
+
+describe("describeRun (the CI summary and health check)", () => {
+  const snap = (buildings: Snapshot["buildings"]): Snapshot => ({
+    schemaVersion: 1,
+    timestamp: "2026-11-16T14:20:00Z",
+    buildings,
+  });
+
+  it("counts what worked and names what did not, refusals apart from failures", () => {
+    const run = describeRun(
+      snap([
+        { buildingId: "a", ...ok([unit("101", 2000)], { source: { adapter: "x", fetchedUrl: "https://a/", requests: 17 } }) },
+        {
+          buildingId: "b",
+          status: "error",
+          error: "the site's bot protection refused the request (HTTP 403)",
+          blocked: true,
+          source: { adapter: "x", fetchedUrl: "https://b/", requests: 1 },
+          units: [],
+        },
+        {
+          buildingId: "c",
+          status: "error",
+          error: "no unit data | found\non the page",
+          source: { adapter: "x", fetchedUrl: "https://c/" },
+          units: [],
+        },
+      ]),
+    );
+    expect(run).toMatchObject({ ok: 1, total: 3, failed: ["b", "c"] });
+    expect(run.markdown).toContain("### Scrape 2026-11-16T14:20:00Z: 1/3 buildings ok");
+    expect(run.markdown).toContain("| a | ok | 1 listed | 17 |");
+    expect(run.markdown).toContain("| b | refused by the site |");
+    // A pipe or line break in an error must not break the table.
+    expect(run.markdown).toContain("| c | FAILED | no unit data \\| found on the page | ? |");
+  });
+
+  it("reports a run in which nothing could be read", () => {
+    const run = describeRun(
+      snap([
+        { buildingId: "a", status: "error", error: "fetch failed", source: { adapter: "x", fetchedUrl: "https://a/" }, units: [] },
+      ]),
+    );
+    expect(run.ok).toBe(0);
+    expect(run.failed).toEqual(["a"]);
   });
 });

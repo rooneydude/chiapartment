@@ -20,8 +20,10 @@ on:
     # flags: "capture", "skyline", "buildings=a,b").
     paths: [".github/refresh-trigger"]
   schedule:
-    # Every morning, Chicago time (14:00 UTC ≈ 8/9am depending on DST).
-    - cron: "0 14 * * *"
+    # Every morning, Chicago time (14:17 UTC ≈ 8/9am depending on DST).
+    # Deliberately NOT on the hour: GitHub queues scheduled runs at :00 for
+    # hours (the 14:00 runs of Nov 2026 actually started 18:00–21:20 UTC).
+    - cron: "17 14 * * *"
 
 permissions:
   contents: write
@@ -35,6 +37,10 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.scrape.outputs.ok }}
+      total: ${{ steps.scrape.outputs.total }}
+      failed: ${{ steps.scrape.outputs.failed }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,12 +49,20 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # No tracked building needs a browser today (every adapter reads plain
+      # HTTP). Only pay for the Chromium download when one is configured to.
+      - name: Does any building need a browser?
+        id: browser
+        run: |
+          if grep -q '"adapter": *"playwright' buildings.json; then echo "needed=true" >> "$GITHUB_OUTPUT"; else echo "needed=false" >> "$GITHUB_OUTPUT"; fi
       - name: Cache Playwright browser
+        if: steps.browser.outputs.needed == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright Chromium
+        if: steps.browser.outputs.needed == 'true'
         run: |
           # Browser zip comes from Playwright's CDN. `--with-deps` runs
           # apt-get update, which fails the whole daily scrape when the
@@ -59,6 +73,9 @@ jobs:
 
       - name: Resolve flags (inputs or trigger file)
         id: flags
+        env:
+          # Typed-in text reaches the shell as data, never as script.
+          INPUT_BUILDINGS: ${{ inputs.buildings }}
         run: |
           # The trigger file's words are flags for the push run that committed
           # it — manual and scheduled runs must not inherit stale flags from it.
@@ -66,10 +83,15 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ] && [ -f .github/refresh-trigger ]; then
             TRIG=$(cat .github/refresh-trigger)
           fi
-          CAPTURE=false; SKYLINE=false; BUILDINGS="${{ inputs.buildings }}"
+          CAPTURE=false; SKYLINE=false; BUILDINGS="$INPUT_BUILDINGS"
           if [ "${{ inputs.capture }}" = "true" ] || echo "$TRIG" | grep -qw capture; then CAPTURE=true; fi
           if [ "${{ inputs.skyline }}" = "true" ] || echo "$TRIG" | grep -qw skyline; then SKYLINE=true; fi
           if [ -z "$BUILDINGS" ]; then BUILDINGS=$(echo "$TRIG" | grep -o 'buildings=[a-z0-9,-]*' | cut -d= -f2 || true); fi
+          # Building ids are lower-case letters, digits and dashes.
+          if ! printf '%s' "$BUILDINGS" | grep -Eq '^[a-z0-9,-]*$'; then
+            echo "::error::Unexpected characters in the buildings list."
+            exit 1
+          fi
           echo "capture=$CAPTURE" >> "$GITHUB_OUTPUT"
           echo "skyline=$SKYLINE" >> "$GITHUB_OUTPUT"
           echo "buildings=$BUILDINGS" >> "$GITHUB_OUTPUT"
@@ -79,16 +101,47 @@ jobs:
         continue-on-error: true # a bad Overpass day must not block price scraping
         run: npm run skyline
 
+      # Writes data/snapshots/<time>.json, a per-building table on this run's
+      # summary page, and the outputs ok / total / failed.
       - name: Scrape
+        id: scrape
+        env:
+          BUILDINGS: ${{ steps.flags.outputs.buildings }}
         run: |
           FLAGS=""
-          if [ -n "${{ steps.flags.outputs.buildings }}" ]; then FLAGS="$FLAGS --buildings=${{ steps.flags.outputs.buildings }}"; fi
+          if [ -n "$BUILDINGS" ]; then FLAGS="$FLAGS --buildings=$BUILDINGS"; fi
           if [ "${{ steps.flags.outputs.capture }}" = "true" ]; then FLAGS="$FLAGS --capture"; fi
           npm run refresh -- $FLAGS
 
       - name: Update unit-position maps
         continue-on-error: true # positional data is a bonus, never a blocker
         run: npm run unitmap
+
+      # The data is committed BEFORE anyone is alerted, so an alert can never
+      # describe a snapshot that failed to land (and be repeated tomorrow).
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshots data/skyline.geojson data/unitmaps scraper/fixtures 2>/dev/null || git add data/snapshots
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+            exit 0
+          fi
+          git commit -m "data: snapshot $(date -u +%FT%TZ)"
+          # Something else may have landed on the branch while we scraped (a
+          # merge, another run). Snapshot files have unique names, so a rebase
+          # never conflicts — retry instead of losing the day's data.
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then pushed=true; break; fi
+            echo "Push rejected (attempt $attempt); rebasing onto origin/${GITHUB_REF_NAME} and trying again."
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+          done
+          if [ "$pushed" != true ]; then
+            echo "::error::Could not push today's snapshot after 3 attempts."
+            exit 1
+          fi
 
       - name: Price alerts (GitHub issue → phone push via the GitHub app)
         continue-on-error: true # alerting must never fail the scrape
@@ -103,18 +156,6 @@ jobs:
               --repo "$GITHUB_REPOSITORY"
           fi
 
-      - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots data/skyline.geojson data/unitmaps scraper/fixtures 2>/dev/null || git add data/snapshots
-          if git diff --cached --quiet; then
-            echo "Nothing changed."
-          else
-            git commit -m "data: snapshot $(date -u +%FT%TZ)"
-            git push
-          fi
-
   deploy:
     needs: scrape
     uses: ./.github/workflows/deploy.yml
@@ -122,3 +163,16 @@ jobs:
       contents: read
       pages: write
       id-token: write
+
+  # The snapshot (with its errors) is committed and the dashboard redeployed
+  # either way, so the site itself shows what failed. This job only turns the
+  # RUN red when not a single building could be read — a dead network or a
+  # broken scraper should not look like a quiet day.
+  health:
+    needs: scrape
+    if: needs.scrape.outputs.ok == '0'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::None of the ${{ needs.scrape.outputs.total }} buildings could be scraped (${{ needs.scrape.outputs.failed }}). See the scrape job's summary."
+          exit 1
