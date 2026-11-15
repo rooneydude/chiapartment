@@ -44,21 +44,43 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   “since yesterday.” The existing Grok bot can keep reading live building
   JSON; `delta` is unchanged in shape (additive `beds` on price changes,
   plus floorplan identity for Stead stacks).
-- **Lease-term cap.** `focus.maxLeaseTermMonths` (14) keeps quoted prices
-  honest: where a site tags prices with lease terms (1225 Old Town's
-  SightMap), a price that requires a longer lease is replaced by the
-  cheapest price at a term within the cap, pulled from the unit's leasing
-  calendar API — or the unit is omitted when no in-cap price exists.
-  Future scrapes record those skips as optional `omitted[]` (unit, term,
-  advertised price) so a count-drop is explainable. Applied **at scrape
-  time only**; past snapshots are never rewritten.
-- **Price alerts.** When a refresh finds a focus-bed price drop or new
-  listing (including Stead floorplan/stack identity), the workflow opens a
-  GitHub issue. Alerts compare the last two **ok** scrapes per building, so
-  a failed Leo run does not look like every unit vanished. Prefer
-  `brief.json` for the morning digest — GitHub issues are a phone-push
-  fallback. **To get issues as phone notifications:** install the GitHub
-  mobile app and Watch this repository (Custom → Issues, or All Activity).
+- **Nothing is filtered at scrape time.** Every unit a leasing site lists is
+  recorded, at the rent and lease length the site itself advertises — so a
+  row can be checked against the website at a glance. No lease-length cap,
+  no move-in-date cut-off. (A 14-month cap ran from 8 Sep to 14 Nov 2026 and
+  hid every 1225 unit that was not vacant yet; it is gone. Snapshots from
+  that period carry the hidden units in `omitted[]`, and the compiler folds
+  them back into each unit's history.) Rows a site lists without a price or
+  a bed count ("Contact for Pricing", penthouse/townhome plans) are kept in
+  `alsoListed[]` and shown under the table instead of vanishing.
+- **Lease terms.** Where a site publishes them (1225 Old Town), each unit
+  carries its full lease-term price table (`leaseTerms`: 2–18 months → rent,
+  quoted for the unit's own earliest move-in day). The dashboard shows the
+  advertised term, the 12-month price next to it
+  (`focus.compareLeaseTermMonths`), the whole table when a row is opened,
+  and can re-price the table at any lease length. Choosing a lease length
+  is a view setting — it never changes what is stored. See *Data status*
+  for what each building does and does not publish.
+- **Move-in dates.** `availableDate` is the earliest move-in day as a
+  Chicago calendar date; `availableNow` marks units the site says can be
+  moved into today, and `vacantSince` says how long they have sat empty
+  when the site tells. The table shows "Now" or the date and can filter by
+  move-in window (default: any).
+- **Like-for-like changes.** A price change is only a price change when the
+  two prices are comparable. If the site merely switches which lease length
+  it headlines, the old term's price is looked up in the new lease table;
+  if that is impossible — or the site flips between a rent range and a
+  single price, which Old Town Park does for some plans within minutes —
+  the change is recorded with `notComparable` and never alerted on.
+- **Price alerts.** When a refresh finds a like-for-like focus-bed price
+  drop or a new listing (including Stead floorplan/stack identity), the
+  workflow opens a GitHub issue that states the lease term and move-in date.
+  Alerts compare the last two **ok** scrapes per building, and only for
+  buildings the latest run actually scraped, so neither a failed Leo run nor
+  a single-building refresh re-announces old news. Prefer `brief.json` for
+  the morning digest — GitHub issues are a phone-push fallback. **To get
+  issues as phone notifications:** install the GitHub mobile app and Watch
+  this repository (Custom → Issues, or All Activity).
 - **3D.** Building footprints come from OpenStreetMap (`npm run skyline`),
   extruded to their tagged heights. A unit's floor is parsed from its unit
   number; its position on the floorplate comes from the per-building
@@ -83,16 +105,20 @@ Node 22+. `npm install` once at the repo root (npm workspaces).
 
 ## Data status
 
-| Building | Adapter | Status |
-|---|---|---|
-| Old Town Park I–III | `oldtownpark` | ✅ real per-unit prices + ranges from per-tower availability pages |
-| Stead 220 | `stead220` | ✅ floorplan/stack prices (plans are stacks; PH plans are real units). Deltas/alerts key stacks by floorplan name + beds. |
-| 1225 Old Town | `sightmap` | ✅ per-unit prices/sqft/dates; lease-term cap (14 mo) at scrape time |
-| The Leo | `leo` | ✅ per-unit cards from Jonah SSR JSON; Playwright fallback (Imunify360 on GH IPs) |
+What each leasing site publishes — and therefore what the tracker can show.
+Verified against the live sites on 15 Nov 2026.
+
+| Building | Adapter | Units | Lease terms | Move-in dates | Notes |
+|---|---|---|---|---|---|
+| 1225 Old Town | `sightmap` | every unit, with sqft | ✅ full table per unit, 2–18 months, for the unit's move-in day | ✅ date per unit; "now" flagged; vacancy date from the marketing page when reachable | Rent is base rent; the site headlines rent + a mandatory $100–$230 utility bundle (`monthlyFees`). "18 Months" on the site is the *longest* lease at the cheapest price, not a requirement — often 12 months costs the same. |
+| Old Town Park I–III | `oldtownpark` | every unit; interior + outdoor sqft | ❌ not published — only a rent **range** per unit (cheapest–dearest option). Per-term prices are in the leasing portal behind a bot challenge the tracker does not go around; every row deep-links there. | ✅ "Available" or a date per unit | "Jr. 2 Bed" / "1 Bed + Flex" / "Convertible" kept as `planType`. Penthouse / townhome rows have no published bed count → `alsoListed`. The site alternates between two pricing states for a few plans; the runner takes a second look and the pipeline never treats a range↔single flip as a price move. |
+| The Leo | `leo` | every unit, with sqft | ❌ not published (one "starting at" price) | ✅ "Available Now" (+ vacant since) or a date | Jonah SSR JSON; Playwright fallback when the WAF refuses datacenter IPs. A page with an empty inventory is an empty building, not an error. |
+| Stead 220 | `stead220` | **floorplans/stacks, not units** (penthouse plans are real units); no sqft | ❌ not published | "Available Now" label only | A hand-maintained catalogue: each "starting from" price is edited by the building (`sourceUpdatedAt`), sometimes not for months. "Contact for Pricing" plans → `alsoListed`. Real per-unit inventory is in RentCafe behind a bot wall. |
 
 The stack→facade maps in `buildings.json` are placeholder quadrant guesses
 until refined per building (`unitMapping.stacks`), except 1225 which also
-has a SightMap-derived `data/unitmaps/` sidecar.
+has a SightMap-derived `data/unitmaps/` sidecar (exact positions for every
+unit the site has listed since August).
 
 **Price history is sacred.** `data/snapshots/` is append-only. Never delete,
 rewrite, squash, or rebase those files away. Failed scrapes are recorded as
@@ -102,12 +128,30 @@ rewrite, squash, or rebase those files away. Failed scrapes are recorded as
 
 1. Run **Refresh prices** with `capture: true` (or locally
    `npm run refresh -- --capture` from a network that can reach the sites).
-   Raw HTML/JSON payloads land in `scraper/fixtures/<building-id>/`.
+   Raw HTML/JSON payloads land in `scraper/fixtures/<building-id>/`; a
+   re-capture replaces the previous one (older captures worth keeping as
+   regression cases live under `scraper/fixtures/legacy-2026-09/`).
 2. Write an adapter in `scraper/src/adapters/` against those fixtures
    (`npm run refresh -- --fixtures` + tests to iterate offline), register it
    in `adapters/index.ts`, and point the building's `"adapter"` field at it.
 3. Leave existing `data/snapshots/` files untouched. A new adapter only
    affects snapshots written after it ships.
+
+Rules every adapter follows (and `scraper/test/site-adapters.test.ts`
+enforces):
+
+- **Record what the site says.** `price` is the site's own advertised rent,
+  `leaseTermMonths` the term it is advertised for. Never re-price, never
+  drop a unit because of its lease length or move-in date.
+- **Never drop a row silently.** A row without a price or bed count goes to
+  `ctx.reportAlsoListed(...)`; a building-wide special to
+  `ctx.reportNotice(...)`.
+- **"Today" is the Chicago day**, taken from `ctx.now()` so tests can pin it;
+  dates are calendar days (`YYYY-MM-DD`), never timestamps.
+- **Do not go around bot protection.** Where the data sits behind a
+  challenge (SecureCafe / RentCafe), store the deep link and stop.
+- **An empty page is not always an error.** Distinguish "the building lists
+  nothing" (ok, 0 units) from "we were served something else" (throw).
 
 The bundled `generic` adapter (JSON-LD → discovered JSON endpoints → DOM
 heuristics) and `playwright-generic` (rendered pages + XHR capture) cover many

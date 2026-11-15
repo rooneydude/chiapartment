@@ -45,7 +45,8 @@ interface UmapElement {
   type: string;
   id?: string;
   uid?: string;
-  shape?: { type: string; points?: string };
+  /** Polygon: `points` ("x,y x,y …"). Rect: x / y / width / height. */
+  shape?: { type: string; points?: string; x?: number; y?: number; width?: number; height?: number };
   elements?: UmapElement[];
   latitude?: number;
   longitude?: number;
@@ -79,17 +80,32 @@ export function extractUmap(asset: UmapAsset): {
     levelIndex += 1;
     const idx = levelIndex;
     (function walk(node: UmapElement): void {
-      if (node.type === "Unit" && node.id && node.shape?.points) {
-        const ring = node.shape.points
-          .trim()
-          .split(/\s+/)
-          .map((pair): Vec2 => {
-            const [x, y] = pair.split(",");
-            return [Number.parseFloat(x!), Number.parseFloat(y!)];
-          })
-          .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
-        if (ring.length >= 3) {
-          units.push({ unitId: node.id, levelIndex: idx, centroidPx: ringCentroid(ring) });
+      if (node.type === "Unit" && node.id && node.shape) {
+        const s = node.shape;
+        if (s.points) {
+          const ring = s.points
+            .trim()
+            .split(/\s+/)
+            .map((pair): Vec2 => {
+              const [x, y] = pair.split(",");
+              return [Number.parseFloat(x!), Number.parseFloat(y!)];
+            })
+            .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+          if (ring.length >= 3) {
+            units.push({ unitId: node.id, levelIndex: idx, centroidPx: ringCentroid(ring) });
+          }
+        } else if (
+          // A few units are drawn as plain rectangles (7 of 250 at 1225 Old
+          // Town, unit 0509 among them) — they were being skipped entirely.
+          [s.x, s.y, s.width, s.height].every((n) => typeof n === "number" && Number.isFinite(n)) &&
+          s.width! > 0 &&
+          s.height! > 0
+        ) {
+          units.push({
+            unitId: node.id,
+            levelIndex: idx,
+            centroidPx: [s.x! + s.width! / 2, s.y! + s.height! / 2],
+          });
         }
       }
       for (const child of node.elements ?? []) walk(child);

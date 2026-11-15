@@ -36,8 +36,38 @@ describe("unitmap georeference transform", () => {
   it("extracts levels, unit shapes, and the georeference from the real asset", () => {
     const { georeference, units } = extractUmap(asset);
     expect(georeference.bearing).toBeCloseTo(89, 0);
-    expect(units.length).toBeGreaterThan(200); // 250 unit polygons
+    // 243 polygons + 7 units the floorplate draws as plain rectangles.
+    expect(units).toHaveLength(250);
     expect(new Set(units.map((u) => u.levelIndex)).size).toBeGreaterThanOrEqual(13);
+  });
+
+  it("places rectangle-shaped units too (unit 0509 was missing from the 3D map)", () => {
+    const { units } = extractUmap(asset);
+    // SightMap unit id 10028715 = unit 0509, drawn as a Rect at x 772.91, y 368.38.
+    const u0509 = units.find((u) => u.unitId === "10028715");
+    expect(u0509).toBeDefined();
+    expect(u0509!.centroidPx[0]).toBeCloseTo(772.91 + 121.91 / 2, 2);
+    expect(u0509!.centroidPx[1]).toBeCloseTo(368.38 + 172.15 / 2, 2);
+
+    const synthetic = extractUmap({
+      width: 100,
+      height: 100,
+      elements: [
+        { type: "Georeference", latitude: 41.9, longitude: -87.63, zoom: 19, bearing: 0 },
+        {
+          type: "Level",
+          elements: [
+            { type: "Unit", id: "rect", shape: { type: "Rect", x: 10, y: 20, width: 30, height: 40 } },
+            { type: "Unit", id: "empty", shape: { type: "Rect", x: 10, y: 20, width: 0, height: 40 } },
+            { type: "Unit", id: "poly", shape: { type: "Polygon", points: "0,0 10,0 10,10 0,10" } },
+          ],
+        },
+      ],
+    });
+    expect(synthetic.units.map((u) => [u.unitId, u.centroidPx])).toEqual([
+      ["rect", [25, 40]],
+      ["poly", [5, 5]],
+    ]);
   });
 
   it("fits every unit centroid onto (or within 15m of) the OSM footprint", () => {

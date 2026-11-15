@@ -135,7 +135,7 @@ describe("like-for-like price changes", () => {
     const curr = [unit("0523", 2409, { beds: 0, leaseTermMonths: 14 })];
     const d = computeDelta(prev, curr, T0, T1);
     expect(d.priceChanges).toHaveLength(1);
-    expect(d.priceChanges[0]).toMatchObject({ termChangeOnly: true, fromTerm: 18, toTerm: 14 });
+    expect(d.priceChanges[0]).toMatchObject({ notComparable: "lease-term", fromTerm: 18, toTerm: 14 });
     expect(realPriceChanges(d)).toEqual([]);
   });
 

@@ -72,7 +72,7 @@ export function computeWarnings(
     const before = prevByKey.get(listingKey(u));
     if (!before) continue;
     const cmp = comparePrices(before, u);
-    if (!cmp.termChangeOnly && cmp.from > 0) ratios.push(cmp.to / cmp.from);
+    if (!cmp.notComparable && cmp.from > 0) ratios.push(cmp.to / cmp.from);
   }
   if (ratios.length >= 4) {
     const move = median(ratios) - 1;
@@ -207,6 +207,25 @@ export function buildData(root: string): void {
         const prices = byPlan.get(u.floorplanName) ?? [];
         prices.push(u.price);
         byPlan.set(u.floorplanName, prices);
+      }
+      // Units the old lease cap left out of `units` (8 Sep – 14 Nov 2026) were
+      // on the site all the same, and their snapshots recorded what the site
+      // advertised. Give them their place in the per-unit history — so a unit
+      // listed for two months is not shown as "first seen today" — without
+      // touching the snapshot files. (Floorplan aggregates stay as they were:
+      // mixing these headline prices into the capped ones would distort them.)
+      for (const o of run.omitted ?? []) {
+        if (!o.unitNumber) continue;
+        (history.perUnit[o.unitNumber] ??= []).push({
+          t: run.timestamp,
+          price: o.advertisedPrice,
+          term: o.leaseTermMonths,
+        });
+        history.perUnitMeta[o.unitNumber] ??= {
+          firstSeen: run.timestamp,
+          firstPrice: o.advertisedPrice,
+          firstTerm: o.leaseTermMonths,
+        };
       }
       for (const [plan, prices] of byPlan) {
         const point: FloorplanPoint = {

@@ -130,7 +130,7 @@ export function briefBuilding(
 
   const drops: BriefDrop[] = fd.priceChanges
     // A switch in which lease length the site headlines is not a price drop.
-    .filter((c) => c.to < c.from && inFocus(c.beds) && !c.termChangeOnly)
+    .filter((c) => c.to < c.from && inFocus(c.beds) && !c.notComparable)
     .map((c) => {
       const isFloorplan = c.unitNumber === c.floorplanName;
       return {

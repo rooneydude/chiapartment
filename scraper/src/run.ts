@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { listingKey, listingLabel } from "../../shared/src/delta";
 import {
   BuildingsConfigSchema,
   SnapshotSchema,
@@ -9,6 +10,7 @@ import {
   type BuildingsConfig,
   type BuildingSnapshot,
   type Snapshot,
+  type UnitListing,
 } from "../../shared/src/types";
 import { resolveAdapter } from "./adapters/index";
 import type { AdapterContext } from "./adapters/types";
@@ -23,6 +25,10 @@ export interface RefreshOptions {
 }
 
 const POLITE_DELAY_MS = 1500;
+/** How long to wait before looking again at a page that changed pricing form. */
+const STABILITY_RECHECK_MS = 75_000;
+/** How many of the newest snapshot files to search for a building's last ok run. */
+const PREVIOUS_LOOKBACK_FILES = 12;
 
 export function loadConfig(root: string): BuildingsConfig {
   const path = join(root, "buildings.json");
@@ -32,7 +38,7 @@ export function loadConfig(root: string): BuildingsConfig {
   return BuildingsConfigSchema.parse(JSON.parse(readFileSync(path, "utf8")));
 }
 
-type ScrapeResult = Omit<BuildingSnapshot, "buildingId">;
+export type ScrapeResult = Omit<BuildingSnapshot, "buildingId">;
 
 async function scrapeOne(
   root: string,
@@ -82,6 +88,110 @@ async function scrapeOne(
   }
 }
 
+/**
+ * The last successful scrape of each wanted building, looked up in the
+ * newest snapshot files. Used only to sanity-check a fresh scrape — nothing
+ * is ever copied forward from it.
+ */
+export function loadPreviousOk(root: string, buildingIds: string[]): Map<string, UnitListing[]> {
+  const found = new Map<string, UnitListing[]>();
+  const dir = join(root, "data", "snapshots");
+  if (!existsSync(dir)) return found;
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .reverse()
+    .slice(0, PREVIOUS_LOOKBACK_FILES);
+  for (const f of files) {
+    if (buildingIds.every((id) => found.has(id))) break;
+    const parsed = SnapshotSchema.safeParse(JSON.parse(readFileSync(join(dir, f), "utf8")));
+    if (!parsed.success) continue;
+    for (const b of parsed.data.buildings) {
+      if (b.status === "ok" && buildingIds.includes(b.buildingId) && !found.has(b.buildingId)) {
+        found.set(b.buildingId, b.units);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Units whose quote changed FORM since the previous run — a rent range one
+ * time, a different single price the other. Old Town Park's site alternates
+ * between two such pricing states for some plans, minutes apart, with no
+ * real change behind it.
+ */
+export function priceFormFlips(prev: UnitListing[] | null, curr: UnitListing[]): string[] {
+  if (!prev) return [];
+  const before = new Map(prev.map((u) => [listingKey(u), u]));
+  const flips: string[] = [];
+  for (const u of curr) {
+    const was = before.get(listingKey(u));
+    if (!was) continue;
+    const formChanged = (was.priceMax !== undefined) !== (u.priceMax !== undefined);
+    if (formChanged && was.price !== u.price) flips.push(listingLabel(u));
+  }
+  return flips;
+}
+
+/**
+ * Two observations of the same page taken a minute apart, when the first
+ * showed units flipping pricing form. If the second agrees with the previous
+ * run more than the first does, the first caught the site mid-flip: keep the
+ * second. If both agree with each other the change is real: keep the later
+ * one. A failed second look never replaces a good first one.
+ */
+export function pickStableObservation(
+  prev: UnitListing[] | null,
+  first: ScrapeResult,
+  second: ScrapeResult,
+): { result: ScrapeResult; picked: "first" | "second"; flips: [number, number] } {
+  const f1 = priceFormFlips(prev, first.units).length;
+  if (second.status !== "ok" || second.units.length === 0) {
+    return { result: first, picked: "first", flips: [f1, -1] };
+  }
+  const f2 = priceFormFlips(prev, second.units).length;
+  return f2 <= f1
+    ? { result: second, picked: "second", flips: [f1, f2] }
+    : { result: first, picked: "first", flips: [f1, f2] };
+}
+
+/**
+ * A tower whose page lists nothing is fully leased. EVERY tower of a complex
+ * listing nothing in the same run is the complex's availability feed being
+ * down (2026-10-01: all three Old Town Park pages were empty and back the
+ * next day). Record that as a failed scrape — which keeps yesterday's data on
+ * the dashboard, flagged — instead of as three sold-out buildings whose
+ * units would all be announced as "new" tomorrow. Returns the ids it flagged.
+ */
+export function flagGroupOutages(
+  buildings: BuildingConfig[],
+  results: Snapshot["buildings"],
+): string[] {
+  const groups = new Map<string, BuildingConfig[]>();
+  for (const b of buildings) {
+    if (!b.group) continue;
+    groups.set(b.group, [...(groups.get(b.group) ?? []), b]);
+  }
+  const flagged: string[] = [];
+  for (const [group, members] of groups) {
+    if (members.length < 2) continue;
+    const entries = members.map((m) => results.find((r) => r.buildingId === m.id));
+    const allEmpty = entries.every(
+      (e) => e !== undefined && e.status === "ok" && e.units.length === 0 && (e.alsoListed?.length ?? 0) === 0,
+    );
+    if (!allEmpty) continue;
+    for (const e of entries) {
+      if (!e) continue;
+      e.status = "error";
+      e.error = `all ${members.length} "${group}" pages listed nothing in the same run — the site's availability feed is probably down (one empty tower alone would be recorded as fully leased)`;
+      delete e.notices;
+      flagged.push(e.buildingId);
+    }
+  }
+  return flagged;
+}
+
 export async function refresh(root: string, opts: RefreshOptions): Promise<string> {
   if (opts.fixtures && opts.capture) {
     throw new Error("--fixtures and --capture are mutually exclusive");
@@ -94,6 +204,9 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
 
   const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const snapshot: Snapshot = { schemaVersion: 1, timestamp, buildings: [] };
+  const previous = opts.fixtures
+    ? new Map<string, UnitListing[]>()
+    : loadPreviousOk(root, targets.map((b) => b.id));
 
   // Towers sharing a group + url + adapter are scraped once and reused —
   // but only in live modes; fixture mode reads per-building fixtures.
@@ -107,6 +220,23 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
     let result = cacheKey ? groupCache.get(cacheKey) : undefined;
     if (!result) {
       result = await scrapeOne(root, building, opts);
+
+      // A page caught between two pricing states gets a second look.
+      const prevUnits = previous.get(building.id) ?? null;
+      const flips = result.status === "ok" ? priceFormFlips(prevUnits, result.units) : [];
+      if (!opts.fixtures && flips.length > 0) {
+        console.log(
+          `  [${building.id}] ${flips.length} unit(s) switched between a rent range and a single price since the last run (${flips.slice(0, 6).join(", ")}${flips.length > 6 ? ", …" : ""}); this site flips between two pricing states — looking again in ${STABILITY_RECHECK_MS / 1000}s`,
+        );
+        await sleep(STABILITY_RECHECK_MS);
+        const second = await scrapeOne(root, building, opts);
+        const pick = pickStableObservation(prevUnits, result, second);
+        console.log(
+          `  [${building.id}] kept the ${pick.picked} observation (${pick.flips[0]} vs ${pick.flips[1] < 0 ? "failed" : pick.flips[1]} form flips against the last run)`,
+        );
+        result = pick.result;
+      }
+
       if (cacheKey) groupCache.set(cacheKey, result);
       if (!opts.fixtures && building !== targets[targets.length - 1]) {
         await sleep(POLITE_DELAY_MS);
@@ -116,6 +246,15 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
     }
     snapshot.buildings.push({ buildingId: building.id, ...result });
   }
+
+  const reportOutage = (ids: string[]): void => {
+    if (ids.length > 0) {
+      console.error(
+        `Every page of a multi-building complex was empty (${ids.join(", ")}) — treating it as a site outage, not a sell-out.`,
+      );
+    }
+  };
+  reportOutage(flagGroupOutages(config.buildings, snapshot.buildings));
 
   // One retry pass for buildings that failed (Leo's WAF is flaky from GH
   // Actions IPs). Skip in fixture mode — fixtures are deterministic.
@@ -132,6 +271,7 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
         if (idx >= 0) snapshot.buildings[idx] = { buildingId: building.id, ...result };
         if (i < failed.length - 1) await sleep(POLITE_DELAY_MS);
       }
+      reportOutage(flagGroupOutages(config.buildings, snapshot.buildings));
     }
   }
 

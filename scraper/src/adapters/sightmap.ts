@@ -33,22 +33,31 @@ export interface SightmapUnit {
   /**
    * Per-unit leasing API: lease term → price for ONE move-in day, chosen with
    * a `date=YYYY-MM-DD` query parameter. Without it the API assumes today and
-   * answers `{"options": []}` for any unit that is not vacant yet.
+   * answers `{"options": []}` for any unit that is not vacant yet (and for
+   * any date before the unit's first available day).
    */
   leasing_price_url?: string | null;
+  /** Ascending list of valid move-in days; its first entry is the earliest. */
+  leasing_start_dates_url?: string | null;
+  /** [min, max] mandatory monthly charges on top of base rent. */
+  total_additional_expenses?: [number, number] | null;
+}
+
+export interface SightmapPlan {
+  id: string;
+  name: string;
+  bedroom_count: number;
+  bathroom_count: number;
+  /** "Studio", "1 Bed" … null on placeholder plans such as "TEMP / Coming Soon". */
+  bedroom_label?: string | null;
+  filter_label?: string | null;
 }
 
 export interface SightmapPayload {
   data: {
     id: string;
     floors: { id: string; filter_short_label: string }[];
-    floor_plans: {
-      id: string;
-      name: string;
-      bedroom_count: number;
-      bathroom_count: number;
-      bedroom_label?: string | null;
-    }[];
+    floor_plans: SightmapPlan[];
     units: SightmapUnit[];
     unit_map?: { url?: string };
   };
@@ -185,7 +194,9 @@ export function parseLeaseTable(json: unknown): LeaseTable {
       const months = typeof opt.lease_term === "number" ? opt.lease_term : Number.NaN;
       const price = typeof opt.price === "number" ? opt.price : Number.NaN;
       if (!Number.isInteger(months) || months < 1 || months > 36) continue;
-      if (!Number.isFinite(price) || price < MIN_SANE_RENT || price > MAX_SANE_RENT) continue;
+      // No rent ceiling here: these are the site's own quotes, and a 2-month
+      // lease on a 2-bed really is quoted above $23,000.
+      if (!Number.isFinite(price) || price <= 0) continue;
       byTerm.set(months, Math.round(price));
       if (typeof opt.apply_url === "string" && opt.apply_url.startsWith("https://")) {
         applyUrls.set(months, opt.apply_url);
@@ -200,9 +211,12 @@ export function parseLeaseTable(json: unknown): LeaseTable {
 }
 
 /**
- * Fetch a unit's lease-term table for its earliest move-in day. Null when the
- * unit has no leasing URL, the request fails, or the table is empty — the
- * unit is still recorded, just without the table.
+ * Fetch a unit's lease-term table for its earliest move-in day. When the
+ * table comes back empty for the payload's date (the API rejects any day
+ * before the unit's first start date), ask the start-dates endpoint for the
+ * real first day and try once more. Null when the unit has no leasing URL,
+ * a request fails, or the table stays empty — the unit is still recorded,
+ * just without the table, and the reason is logged.
  */
 async function fetchLeaseTable(
   u: SightmapUnit,
@@ -210,13 +224,138 @@ async function fetchLeaseTable(
   ctx: AdapterContext,
 ): Promise<LeaseTable | null> {
   if (!u.leasing_price_url) return null;
+  const tableFor = async (day: string | null): Promise<LeaseTable> =>
+    parseLeaseTable(
+      JSON.parse(await fetchText(leasingUrlForDate(u.leasing_price_url!, day), ctx, "leasing matrix")),
+    );
   try {
-    const url = leasingUrlForDate(u.leasing_price_url, moveInDay);
-    const table = parseLeaseTable(JSON.parse(await fetchText(url, ctx, "leasing matrix")));
-    return table.terms.length > 0 ? table : null;
+    let table = await tableFor(moveInDay);
+    if (table.terms.length === 0 && u.leasing_start_dates_url) {
+      await ctx.pause?.(250);
+      const dates = (
+        JSON.parse(await fetchText(u.leasing_start_dates_url, ctx, "lease start dates")) as {
+          data?: unknown;
+        }
+      ).data;
+      const first = Array.isArray(dates)
+        ? dates.filter((d): d is string => typeof d === "string" && isIsoDay(d)).sort()[0]
+        : undefined;
+      if (first && first !== moveInDay) {
+        await ctx.pause?.(250);
+        table = await tableFor(first);
+      }
+    }
+    if (table.terms.length === 0) {
+      ctx.log(`lease terms for unit ${u.unit_number}: the site returned an empty table`);
+      return null;
+    }
+    return table;
   } catch (err) {
     ctx.log(
       `lease terms for unit ${u.unit_number} unavailable (${err instanceof Error ? err.message : err})`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Best-effort enrichment from the property's marketing page (same building,
+ * different system): the site-wide special it announces, and the day each
+ * vacant unit actually became available (SightMap only says "today"). The
+ * page sits behind a WAF that sometimes refuses datacenter IPs — any failure
+ * here is logged and ignored; the listing itself never depends on it.
+ */
+export interface MarketingExtras {
+  notices: string[];
+  /** SightMap unit id → ISO day the unit became available. */
+  vacantSince: Map<string, string>;
+}
+
+export function parseMarketingPage(html: string): MarketingExtras {
+  const notices: string[] = [];
+  const vacantSince = new Map<string, string>();
+
+  // JSON-LD: "jonah:announcements": [{ "jonah:name": "…$1,500 Off Base Rent…", … }]
+  const ldBlocks = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n);
+      return;
+    }
+    if (node === null || typeof node !== "object") return;
+    const obj = node as Record<string, unknown>;
+    const announcements = obj["jonah:announcements"];
+    if (Array.isArray(announcements)) {
+      for (const a of announcements) {
+        if (a === null || typeof a !== "object") continue;
+        const rec = a as Record<string, unknown>;
+        const name = typeof rec["jonah:name"] === "string" ? rec["jonah:name"].trim() : "";
+        const desc =
+          typeof rec["jonah:description"] === "string" ? rec["jonah:description"].trim() : "";
+        const text = [name, desc].filter(Boolean).join(" — ").replace(/\s+/g, " ");
+        if (text && text.length <= 300 && !notices.includes(text)) notices.push(text);
+      }
+    }
+    for (const v of Object.values(obj)) visit(v);
+  };
+  for (const m of ldBlocks) {
+    try {
+      visit(JSON.parse(m[1]!));
+    } catch {
+      // a malformed JSON-LD block is not our problem
+    }
+  }
+
+  // Jonah floorplan widget: units[].id_value is the SightMap unit id,
+  // available_date is unix seconds at local midnight.
+  const blob = /<script[^>]*id=["']jd-fp-data-script-app["'][^>]*>([\s\S]*?)<\/script>/i.exec(html);
+  if (blob) {
+    try {
+      const units = (JSON.parse(blob[1]!) as { units?: unknown }).units;
+      if (Array.isArray(units)) {
+        for (const raw of units) {
+          if (raw === null || typeof raw !== "object") continue;
+          const r = raw as Record<string, unknown>;
+          const id = typeof r["id_value"] === "string" ? r["id_value"] : null;
+          const ts =
+            typeof r["available_date"] === "number"
+              ? r["available_date"]
+              : typeof r["available_date"] === "string" && /^\d{9,10}$/.test(r["available_date"])
+                ? Number.parseInt(r["available_date"], 10)
+                : Number.NaN;
+          if (id && Number.isFinite(ts) && ts > 1e9) {
+            vacantSince.set(id, chicagoDate(new Date(ts * 1000)));
+          }
+        }
+      }
+    } catch {
+      // ignore — enrichment only
+    }
+  }
+  return { notices, vacantSince };
+}
+
+async function fetchMarketingExtras(
+  building: BuildingConfig,
+  ctx: AdapterContext,
+): Promise<MarketingExtras | null> {
+  const pageUrl = new URL("floorplans/", building.url).href;
+  try {
+    const res = await ctx.fetch(pageUrl);
+    if (!res.ok) {
+      ctx.log(`marketing page not available (HTTP ${res.status}) — specials and vacancy dates skipped`);
+      return null;
+    }
+    const html = await res.text();
+    ctx.record?.(pageUrl, html, "text/html");
+    if (/imunify360|access denied/i.test(html.slice(0, 2000)) && html.length < 5000) {
+      ctx.log("marketing page refused the request (WAF) — specials and vacancy dates skipped");
+      return null;
+    }
+    return parseMarketingPage(html);
+  } catch (err) {
+    ctx.log(
+      `marketing page not available (${err instanceof Error ? err.message : err}) — specials and vacancy dates skipped`,
     );
     return null;
   }
@@ -238,16 +377,46 @@ export const sightmap: Adapter = {
     const plans = new Map(payload.data.floor_plans.map((p) => [p.id, p]));
     const today = chicagoDate(ctx.now?.() ?? new Date());
 
+    const extras = await fetchMarketingExtras(building, ctx);
+    for (const notice of extras?.notices ?? []) ctx.reportNotice?.(notice);
+
     const listings: UnitListing[] = [];
     let withTerms = 0;
     for (const u of payload.data.units) {
+      if (!u.unit_number) continue; // nothing to identify it by
       const plan = plans.get(u.floor_plan_id);
-      if (!plan || !u.unit_number || !Number.isFinite(u.price) || u.price <= 0) continue;
-
       const availableOn = u.available_on && isIsoDay(u.available_on) ? u.available_on : null;
       const saysNow = /\bnow\b/i.test(u.display_available_on ?? "");
       const availableNow = saysNow || (availableOn !== null && availableOn <= today);
       const availableDate = availableOn ?? (saysNow ? today : null);
+      const sqft = u.area && u.area > 100 ? Math.round(u.area) : null;
+      const priced = Number.isFinite(u.price) && u.price > 0;
+      // A plan whose bedroom label is null and that has no bathrooms is a
+      // placeholder ("TEMP / Coming Soon", bedroom_count 0) — not a studio.
+      const bedsKnown =
+        plan !== undefined && !(plan.bedroom_label === null && !plan.bathroom_count);
+
+      if (!plan || !priced || !bedsKnown) {
+        // On the site but not comparable: say so instead of dropping it.
+        const note = !priced
+          ? "No price published"
+          : !plan
+            ? "Floor plan not published"
+            : `${plan.filter_label?.trim() || "Plan"} — bed count not published`;
+        ctx.log(`unit ${u.unit_number}: ${note.toLowerCase()} — kept in the also-listed list`);
+        ctx.reportAlsoListed?.({
+          unitNumber: u.unit_number,
+          floorplanName: plan ? cleanPlanName(plan) : "Unknown plan",
+          beds: plan && bedsKnown ? plan.bedroom_count : null,
+          sqft,
+          ...(priced ? { price: Math.round(u.price) } : {}),
+          availableDate,
+          ...(availableDate !== null ? { availableNow } : {}),
+          note,
+          url: building.url,
+        });
+        continue;
+      }
 
       // The lease-term table is quoted for the unit's own earliest move-in
       // day; asking without a date returns nothing for units not yet vacant.
@@ -265,17 +434,34 @@ export const sightmap: Adapter = {
       }
       const applyUrl = term !== null ? table?.applyUrls.get(term) : undefined;
 
+      const fees = u.total_additional_expenses;
+      const monthlyFees =
+        Array.isArray(fees) &&
+        fees.length === 2 &&
+        fees.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
+        fees[1] > 0
+          ? { min: Math.min(fees[0], fees[1]), max: Math.max(fees[0], fees[1]) }
+          : undefined;
+      // "Convertible" plans are filed as studios by the site; keep the label.
+      const planType = /convertible/i.test(`${plan.filter_label ?? ""} ${plan.name}`)
+        ? "Convertible"
+        : undefined;
+      const since = availableNow ? extras?.vacantSince.get(u.id) : undefined;
+
       listings.push({
         unitNumber: u.unit_number,
         floorplanName: cleanPlanName(plan),
         beds: plan.bedroom_count,
+        ...(planType ? { planType } : {}),
         baths: plan.bathroom_count || null,
-        sqft: u.area && u.area > 100 ? Math.round(u.area) : null,
+        sqft,
         price: Math.round(u.price),
+        ...(monthlyFees ? { monthlyFees } : {}),
         leaseTermMonths: term,
         ...(table ? { leaseTerms: table.terms } : {}),
         availableDate,
         ...(availableDate !== null ? { availableNow } : {}),
+        ...(since && since < today ? { vacantSince: since } : {}),
         ...(u.specials_description ? { specials: u.specials_description } : {}),
         url: applyUrl ?? building.url,
       });

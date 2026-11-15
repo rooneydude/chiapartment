@@ -55,15 +55,19 @@ function unixToChicagoDay(v: unknown): string | null {
   return chicagoDate(new Date(n * 1000));
 }
 
-/** "JR 1 Bedroom" stays recognisable; plain counts get the house style. */
-function planNameFor(raw: Record<string, unknown>, beds: number): string {
+/** The plan key the history is charted under — stable house style. */
+const planNameFor = (beds: number): string => (beds === 0 ? "Studio" : `${beds} BR`);
+
+/**
+ * The site's own unit-type label when it says more than the bed count:
+ * "JR 1 Bedroom" (a junior one-bed that would otherwise pass for a full one).
+ */
+function planTypeFor(raw: Record<string, unknown>): string | undefined {
   const label = [raw["bedrooms_display"], raw["bedrooms"]].find(
     (v): v is string => typeof v === "string" && /[a-z]/i.test(v),
   );
-  if (label && !/^\s*(studio|\d+\s*(bed|bedroom|br)s?)\s*$/i.test(label)) {
-    return label.replace(/\s+/g, " ").replace(/bedrooms?/i, "BR").trim();
-  }
-  return beds === 0 ? "Studio" : `${beds} BR`;
+  if (!label || /^\s*(studio|\d+\s*(bed|bedroom|br)s?)\s*$/i.test(label)) return undefined;
+  return label.replace(/\s+/g, " ").trim();
 }
 
 function leaseTermsFrom(raw: Record<string, unknown>): LeaseTermPrice[] {
@@ -118,13 +122,19 @@ function fromJdUnit(raw: Record<string, unknown>, baseUrl: string, ref: Date): J
 
   const display = typeof raw["available_display"] === "string" ? raw["available_display"] : null;
   const today = chicagoDate(ref);
-  const availableDate = unixToChicagoDay(raw["available_date"]) ?? parseAvailableDate(display, ref);
+  // The blob's date is when the unit became (or becomes) available. For a
+  // unit the site calls "Available Now" that is a day in the past: the
+  // earliest move-in is today, and the past day is how long it has sat empty.
+  const siteDate = unixToChicagoDay(raw["available_date"]) ?? parseAvailableDate(display, ref);
   const saysNow = /\bnow\b/i.test(display ?? "");
   const availableNow: boolean | undefined = saysNow
     ? true
-    : availableDate !== null
-      ? availableDate <= today
+    : siteDate !== null
+      ? siteDate <= today
       : undefined;
+  const availableDate = availableNow === true ? today : siteDate;
+  const vacantSince =
+    availableNow === true && siteDate !== null && siteDate < today ? siteDate : undefined;
 
   const permalink = raw["permalink"];
   const href =
@@ -142,7 +152,7 @@ function fromJdUnit(raw: Record<string, unknown>, baseUrl: string, ref: Date): J
     return {
       alsoListed: {
         unitNumber,
-        floorplanName: beds === null ? title || "Unit" : planNameFor(raw, beds),
+        floorplanName: beds === null ? title || "Unit" : planNameFor(beds),
         beds,
         baths,
         sqft,
@@ -162,12 +172,14 @@ function fromJdUnit(raw: Record<string, unknown>, baseUrl: string, ref: Date): J
       : parseLeaseTermMonths(typeof entity?.termDisplay === "string" ? entity.termDisplay : null);
   const leaseTerms = leaseTermsFrom(raw);
   const specials = specialsFrom(raw);
+  const planType = planTypeFor(raw);
 
   return {
     listing: {
       unitNumber,
-      floorplanName: planNameFor(raw, beds),
+      floorplanName: planNameFor(beds),
       beds,
+      ...(planType ? { planType } : {}),
       baths,
       sqft,
       price: Math.round(price!),
@@ -178,6 +190,7 @@ function fromJdUnit(raw: Record<string, unknown>, baseUrl: string, ref: Date): J
       ...(leaseTerms.length > 0 ? { leaseTerms } : {}),
       availableDate,
       ...(availableNow !== undefined ? { availableNow } : {}),
+      ...(vacantSince ? { vacantSince } : {}),
       ...(specials ? { specials } : {}),
       ...(url ? { url } : {}),
     },

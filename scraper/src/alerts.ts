@@ -125,7 +125,7 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
     );
 
     for (const c of delta.priceChanges) {
-      if (!inFocus(c.beds) || c.to >= c.from || c.termChangeOnly) continue;
+      if (!inFocus(c.beds) || c.to >= c.from || c.notComparable) continue;
       const unit = pair.curr.units.find(
         (u) => (u.unitNumber ?? u.floorplanName) === c.unitNumber,
       );

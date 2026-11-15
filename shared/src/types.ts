@@ -114,18 +114,31 @@ export const UnitListingSchema = z.object({
   floorplanName: z.string(),
   /** 0 = studio */
   beds: z.number().int().min(0),
+  /**
+   * The site's own name for the unit type when it says more than the bed
+   * count does: "Jr. 2 Bed", "1 Bed + Flex", "Convertible", "JR 1 Bedroom".
+   * `beds` stays a plain number so filters and history keep working; this
+   * keeps a junior 2-bed from passing for a full one.
+   */
+  planType: z.string().optional(),
   baths: z.number().nullable(),
   /** Interior living area. Outdoor (terrace) area goes in outdoorSqft. */
   sqft: z.number().nullable(),
   outdoorSqft: z.number().nonnegative().optional(),
   /**
-   * Monthly USD — the price the leasing site itself headlines for this unit
-   * (so it can be checked against the website at a glance). When the site
-   * ties that price to a lease length, leaseTermMonths says which.
+   * Monthly USD BASE RENT — the rent the leasing site itself advertises for
+   * this unit (so it can be checked against the website at a glance). When
+   * the site ties that price to a lease length, leaseTermMonths says which.
    */
   price: z.number().positive(),
   /** Top of the site's advertised range, when it prints one. */
   priceMax: z.number().positive().optional(),
+  /**
+   * Mandatory monthly charges on top of base rent, when the site publishes
+   * them (1225 Old Town: a $100–$230 utility bundle — the site headlines
+   * rent + this). Usage-based and third-party costs are not included.
+   */
+  monthlyFees: z.object({ min: z.number().nonnegative(), max: z.number().nonnegative() }).optional(),
   /** Lease term (months) the advertised `price` applies to, when the site says. */
   leaseTermMonths: z.number().int().positive().nullable().optional(),
   /**
@@ -136,13 +149,16 @@ export const UnitListingSchema = z.object({
   leaseTerms: z.array(LeaseTermPriceSchema).optional(),
   /**
    * Earliest move-in day, YYYY-MM-DD (Chicago calendar). For a unit that can
-   * be moved into today this is the scrape day (or the day it became vacant
-   * when the site says) and `availableNow` is true. null = the site gives no
-   * date.
+   * be moved into today this is the scrape day and `availableNow` is true
+   * (snapshots before 2026-11-15 have no flag, and The Leo's carried the
+   * vacancy date here — `isAvailableNow` handles both). null = the site
+   * gives no date.
    */
   availableDate: z.string().nullable(),
   /** The site says the unit can be moved into now (vs. on a future date). */
   availableNow: z.boolean().optional(),
+  /** Day the unit became vacant, when the site says (a now-available unit). */
+  vacantSince: z.string().optional(),
   /** Concession text, e.g. "1 month free on 13-month leases". */
   specials: z.string().optional(),
   /** Deep link to this unit on the leasing site, when there is one. */
@@ -258,11 +274,14 @@ export interface PriceChange {
   fromTerm?: number;
   toTerm?: number;
   /**
-   * True when the only thing known to have changed is which lease length the
-   * site headlines — the two prices are for different terms and no same-term
-   * comparison was possible. Not a real price move; never alert on it.
+   * Set when `from` and `to` are not like for like, so this is NOT a real
+   * price move and must never be alerted on:
+   *   "lease-term" — the site headlines a different lease length now and no
+   *                  same-length comparison was possible;
+   *   "price-form" — one run printed a rent range, the other a single price
+   *                  (Old Town Park alternates between two pricing states).
    */
-  termChangeOnly?: boolean;
+  notComparable?: "lease-term" | "price-form";
 }
 
 /** A unit whose earliest move-in day changed between two runs. */

@@ -42,8 +42,9 @@ export function priorChicagoDayRun<T extends { timestamp: string }>(
  * so removals and price moves can alert.
  *
  * Prices are compared like for like (see comparePrices): when the site only
- * switched which lease length it headlines, that is recorded with
- * `termChangeOnly` instead of masquerading as a price move.
+ * switched which lease length it headlines, or flipped between a rent range
+ * and a single price, the entry carries `notComparable` instead of
+ * masquerading as a price move.
  *
  * `prevExtraKeys` lists identities that existed in the previous run but were
  * not in its unit list (historically: units the lease cap omitted). They are
@@ -80,21 +81,19 @@ export function computeDelta(
       continue;
     }
     const cmp = comparePrices(prev, u);
-    if (cmp.from !== cmp.to || cmp.termChangeOnly) {
-      // A pure headline-term switch at an unchanged like-for-like price is
-      // not a change at all; a non-comparable one is kept but flagged.
-      if (cmp.from !== cmp.to) {
-        delta.priceChanges.push({
-          unitNumber: u.unitNumber ?? u.floorplanName,
-          floorplanName: u.floorplanName,
-          from: cmp.from,
-          to: cmp.to,
-          beds: u.beds,
-          ...(cmp.fromTerm !== undefined ? { fromTerm: cmp.fromTerm } : {}),
-          ...(cmp.toTerm !== undefined ? { toTerm: cmp.toTerm } : {}),
-          ...(cmp.termChangeOnly ? { termChangeOnly: true } : {}),
-        });
-      }
+    // An unchanged like-for-like price is not a change at all, whatever the
+    // headline did; a non-comparable pair is kept, flagged with the reason.
+    if (cmp.from !== cmp.to) {
+      delta.priceChanges.push({
+        unitNumber: u.unitNumber ?? u.floorplanName,
+        floorplanName: u.floorplanName,
+        from: cmp.from,
+        to: cmp.to,
+        beds: u.beds,
+        ...(cmp.fromTerm !== undefined ? { fromTerm: cmp.fromTerm } : {}),
+        ...(cmp.toTerm !== undefined ? { toTerm: cmp.toTerm } : {}),
+        ...(cmp.notComparable ? { notComparable: cmp.notComparable } : {}),
+      });
     }
     const dateMoved = movedDate(prev, u, from, to);
     if (dateMoved) {
@@ -145,7 +144,7 @@ function movedDate(
 
 /** Price moves that are real (like-for-like), i.e. safe to alert on. */
 export function realPriceChanges(delta: SnapshotDelta): SnapshotDelta["priceChanges"] {
-  return delta.priceChanges.filter((c) => !c.termChangeOnly);
+  return delta.priceChanges.filter((c) => !c.notComparable);
 }
 
 export function filterFocusDelta(

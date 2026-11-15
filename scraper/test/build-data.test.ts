@@ -247,7 +247,19 @@ describe("buildData metrics and warnings", () => {
       { t: "2026-11-14T18:00:00Z", price: 2409, term: 14 },
       { t: "2026-11-15T18:00:00Z", price: 2382, term: 18 },
     ]);
-    // Unit 102 was on the market yesterday too (hidden by the cap): not new.
+    // Unit 102 was on the market yesterday too (hidden by the cap): not new —
+    // and its history starts the day it was first SEEN, at the price the
+    // site advertised then, not the day the cap stopped hiding it.
+    expect(h.perUnit["102"]).toEqual([
+      { t: "2026-11-14T18:00:00Z", price: 3529, term: 18 },
+      { t: "2026-11-15T18:00:00Z", price: 3529, term: 18 },
+    ]);
+    expect(h.perUnitMeta["102"]).toEqual({
+      firstSeen: "2026-11-14T18:00:00Z",
+      firstPrice: 3529,
+      firstTerm: 18,
+    });
+    expect(h.perUnitMeta["103"]).toMatchObject({ firstSeen: "2026-11-15T18:00:00Z" });
     expect(h.delta?.newUnits.map((u) => u.unitNumber)).toEqual(["103"]);
     // 101's 14-month price did not move; only the headline term did.
     expect(h.delta?.priceChanges).toEqual([]);

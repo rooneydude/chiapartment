@@ -212,4 +212,17 @@ describe("buildAlerts", () => {
     );
     expect(r.markdown).toContain("#1503 (2 BR, 600 sqft) listed at **$5,007–$5,200** · move-in now");
   });
+
+  it("does not alert when Old Town Park flips between a range and a single price", () => {
+    // Tower I #1715 (2 BR) 'dropped' $4,849 → $4,528 on 2026-08-31 and was
+    // back at $4,903 the next day: the site alternating pricing states.
+    const day1 = snap("2026-08-30T18:00:00Z", [{ ...unit("1715", 2, 4849), priceMax: 5270 }], "ok", "old-town-park-1");
+    const day2 = snap("2026-08-31T18:00:00Z", [unit("1715", 2, 4528)], "ok", "old-town-park-1");
+    const day3 = snap("2026-09-01T18:00:00Z", [{ ...unit("1715", 2, 4903), priceMax: 5330 }], "ok", "old-town-park-1");
+    expect(buildAlerts(ROOT, [day1, day2]).markdown).toBeNull();
+    expect(buildAlerts(ROOT, [day1, day2, day3]).markdown).toBeNull();
+    // An ordinary drop on the same unit still alerts.
+    const real = snap("2026-08-31T18:00:00Z", [{ ...unit("1715", 2, 4700), priceMax: 5100 }], "ok", "old-town-park-1");
+    expect(buildAlerts(ROOT, [day1, real]).drops).toBe(1);
+  });
 });

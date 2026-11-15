@@ -5,6 +5,7 @@ import {
   isAvailableNow,
   leaseTermTable,
   priceAtTerm,
+  shortestTermAtAdvertisedPrice,
 } from "../src/listing";
 import { chicagoDate, daysBetween, isIsoDay } from "../src/time";
 import type { LeaseTermPrice } from "../src/types";
@@ -93,12 +94,12 @@ describe("comparePrices (like for like)", () => {
   it("compares headline prices when the term did not change", () => {
     expect(
       comparePrices({ price: 2400, leaseTermMonths: 12 }, { price: 2300, leaseTermMonths: 12 }),
-    ).toEqual({ from: 2400, to: 2300, fromTerm: 12, toTerm: 12, termChangeOnly: false });
+    ).toEqual({ from: 2400, to: 2300, fromTerm: 12, toTerm: 12, notComparable: null });
     // Sites with no term info at all (Old Town Park, Stead, The Leo).
     expect(comparePrices({ price: 2400 }, { price: 2300 })).toEqual({
       from: 2400,
       to: 2300,
-      termChangeOnly: false,
+      notComparable: null,
     });
   });
 
@@ -116,7 +117,7 @@ describe("comparePrices (like for like)", () => {
       to: 2409,
       fromTerm: 14,
       toTerm: 14,
-      termChangeOnly: false,
+      notComparable: null,
     });
   });
 
@@ -134,7 +135,7 @@ describe("comparePrices (like for like)", () => {
       to: 2409,
       fromTerm: 18,
       toTerm: 14,
-      termChangeOnly: true,
+      notComparable: "lease-term",
     });
   });
 
@@ -142,7 +143,46 @@ describe("comparePrices (like for like)", () => {
     expect(comparePrices({ price: 2400 }, { price: 2300, leaseTermMonths: 12 })).toMatchObject({
       from: 2400,
       to: 2300,
-      termChangeOnly: false,
+      notComparable: null,
     });
+  });
+
+  it("flags a range ↔ single-price flip as not comparable (Old Town Park's two pricing states)", () => {
+    // Tower III #1207, 2026-11-15: "$3,225 - $3,342" at 13:25Z, "$3,096" at 13:52Z.
+    expect(comparePrices({ price: 3225, priceMax: 3342 }, { price: 3096 })).toEqual({
+      from: 3225,
+      to: 3096,
+      notComparable: "price-form",
+    });
+    expect(comparePrices({ price: 3640 }, { price: 3631, priceMax: 3882 }).notComparable).toBe("price-form");
+    // Range to range, or single to single, is an ordinary price move.
+    expect(comparePrices({ price: 3225, priceMax: 3342 }, { price: 3200, priceMax: 3300 }).notComparable).toBeNull();
+    expect(comparePrices({ price: 3096 }, { price: 3050 }).notComparable).toBeNull();
+    // A range appearing at an unchanged minimum is no change at all.
+    expect(comparePrices({ price: 3096 }, { price: 3096, priceMax: 3200 })).toMatchObject({
+      from: 3096,
+      to: 3096,
+      notComparable: null,
+    });
+  });
+});
+
+describe("shortestTermAtAdvertisedPrice", () => {
+  it("finds the shortest lease that costs no more than the headline", () => {
+    // 1225 #0625: headline "$3,529 · 18 Months", but 12 months costs the same.
+    const u0625 = {
+      price: 3529,
+      leaseTermMonths: 18,
+      leaseTerms: table([10, 4472], [11, 4701], [12, 3529], [13, 3529], [18, 3529]),
+    };
+    expect(shortestTermAtAdvertisedPrice(u0625)).toBe(12);
+    // 1225 #0812: the headline really is only available on the longest lease.
+    const u0812 = { price: 2382, leaseTermMonths: 18, leaseTerms: table([12, 3846], [14, 2409], [18, 2382]) };
+    expect(shortestTermAtAdvertisedPrice(u0812)).toBe(18);
+  });
+
+  it("says nothing without a lease table", () => {
+    expect(shortestTermAtAdvertisedPrice({ price: 2400, leaseTermMonths: 12 })).toBeNull();
+    expect(shortestTermAtAdvertisedPrice({ price: 2400 })).toBeNull();
   });
 });
