@@ -8,7 +8,7 @@ export default function DeltaSummary({ delta }: { delta: SnapshotDelta | null })
   if (!delta || !delta.from) return null;
   // Only like-for-like moves count as price changes; a site switching which
   // lease length it headlines is reported separately.
-  const real = delta.priceChanges.filter((c) => !c.termChangeOnly);
+  const real = delta.priceChanges.filter((c) => !c.notComparable);
   const termSwitches = delta.priceChanges.length - real.length;
   const drops = real.filter((c) => c.to < c.from).length;
   const hikes = real.length - drops;

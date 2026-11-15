@@ -7,7 +7,12 @@ import type {
   UnitMapping,
 } from "../../../shared/src/types";
 import { listingKey, listingLabel } from "../../../shared/src/delta";
-import { cheapestTerm, leaseTermTable, priceAtTerm } from "../../../shared/src/listing";
+import {
+  cheapestTerm,
+  leaseTermTable,
+  priceAtTerm,
+  shortestTermAtAdvertisedPrice,
+} from "../../../shared/src/listing";
 import { parseUnitNumber, stackFromPlan } from "../../../shared/src/parse";
 import { UnitMappingSchema } from "../../../shared/src/types";
 import {
@@ -79,9 +84,12 @@ function UnitDetail({
 }) {
   const table = leaseTermTable(u);
   const cheapest = cheapestTerm(u);
+  const shortest = shortestTermAtAdvertisedPrice(u);
   const mi = moveIn(u, asOf);
   const facts: string[] = [];
-  facts.push(`${bedsLabel(u.beds)}${u.baths != null ? ` · ${u.baths} bath` : ""}`);
+  facts.push(
+    `${u.planType ? `${u.planType} (${bedsLabel(u.beds)})` : bedsLabel(u.beds)}${u.baths != null ? ` · ${u.baths} bath` : ""}`,
+  );
   if (u.sqft != null) {
     facts.push(
       `${u.sqft.toLocaleString()} sq ft${u.outdoorSqft ? ` + ${u.outdoorSqft.toLocaleString()} outdoor` : ""}`,
@@ -101,6 +109,25 @@ function UnitDetail({
           <span key={f}>{f}</span>
         ))}
       </div>
+
+      {u.monthlyFees && (
+        <div className="unit-detail-note">
+          Base rent {priceLabel(u.price, u.priceMax)} + required monthly fees{" "}
+          {priceLabel(u.monthlyFees.min, u.monthlyFees.max)} ={" "}
+          <strong>
+            {priceLabel(u.price + u.monthlyFees.min, (u.priceMax ?? u.price) + u.monthlyFees.max)}
+          </strong>{" "}
+          a month, which is the figure the leasing site headlines. Usage-based utilities and
+          insurance are extra.
+        </div>
+      )}
+      {shortest !== null && u.leaseTermMonths != null && shortest < u.leaseTermMonths && (
+        <div className="unit-detail-note">
+          The site advertises {money(u.price)} with “{u.leaseTermMonths} months”, but that is just
+          the longest lease at this price — a <strong>{shortest}-month</strong> lease costs the
+          same.
+        </div>
+      )}
 
       {table.length > 1 ? (
         <>
@@ -355,6 +382,7 @@ export default function AvailabilityTable({
               const shown = shownPrice(u, leaseTerm);
               const mi = moveIn(u, asOf);
               const termCount = leaseTermTable(u).length;
+              const shortest = shortestTermAtAdvertisedPrice(u);
               const atCompare =
                 shown.term !== compareTerm && !shown.termUnavailable
                   ? priceAtTerm(u, compareTerm)
@@ -394,8 +422,15 @@ export default function AvailabilityTable({
                       {newSet.has(listingKey(u)) && <span className="badge new">NEW</span>}
                     </td>
                     <td className="num">{floor ?? "—"}</td>
-                    <td>
-                      {bedsLabel(u.beds)} <span className="plan-name">{u.floorplanName}</span>
+                    <td
+                      title={
+                        u.planType
+                          ? `The site calls this a "${u.planType}" — counted with ${bedsLabel(u.beds)} listings`
+                          : undefined
+                      }
+                    >
+                      {u.planType ?? bedsLabel(u.beds)}{" "}
+                      <span className="plan-name">{u.floorplanName}</span>
                     </td>
                     <td className="num">{u.sqft?.toLocaleString() ?? "—"}</td>
                     <td className="num price-cell">
@@ -417,7 +452,17 @@ export default function AvailabilityTable({
                     </td>
                     <td className="lease-col">
                       {shown.term !== null ? (
-                        <span className="lease-term">{shown.term} mo</span>
+                        <span
+                          className="lease-term"
+                          title={
+                            leaseTerm === null && shortest !== null && shortest < shown.term
+                              ? `Advertised with a ${shown.term}-month lease, but a ${shortest}-month lease costs the same`
+                              : `Rent shown is for a ${shown.term}-month lease`
+                          }
+                        >
+                          {shown.term} mo
+                          {leaseTerm === null && shortest !== null && shortest < shown.term ? "*" : ""}
+                        </span>
                       ) : (
                         <span
                           className="muted"
@@ -445,7 +490,7 @@ export default function AvailabilityTable({
                       )}
                     </td>
                     <td className="num">
-                      {change && !change.termChangeOnly && (
+                      {change && !change.notComparable && (
                         <span
                           className={change.to < change.from ? "delta-down" : "delta-up"}
                           title={`${money(change.from)} → ${money(change.to)}${change.fromTerm ? ` for a ${change.fromTerm}-month lease` : ""} since the previous scrape`}
@@ -453,12 +498,20 @@ export default function AvailabilityTable({
                           {change.to < change.from ? "▼" : "▲"} {money(Math.abs(change.to - change.from))}
                         </span>
                       )}
-                      {change?.termChangeOnly && (
+                      {change?.notComparable === "lease-term" && (
                         <span
                           className="muted"
                           title={`The site now advertises a ${change.toTerm}-month lease instead of ${change.fromTerm} months (${money(change.from)} → ${money(change.to)}) — not a like-for-like price change`}
                         >
                           {change.fromTerm}→{change.toTerm}mo
+                        </span>
+                      )}
+                      {change?.notComparable === "price-form" && (
+                        <span
+                          className="muted"
+                          title={`The site switched between printing a rent range and a single price for this unit (${money(change.from)} → ${money(change.to)}). This site alternates between two pricing states for some plans, so it is not counted as a price change.`}
+                        >
+                          ≈ {money(change.from)}
                         </span>
                       )}
                       {first && nowAtFirstTerm !== null && nowAtFirstTerm !== first.firstPrice && (

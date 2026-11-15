@@ -70,12 +70,16 @@ export default function Dashboard() {
   const inFocus = (beds: number) => focus === null || focus.includes(beds);
 
   // Portfolio stats across every building's latest snapshot.
-  const cheapest = (beds: number): Best | null => {
+  // A "Jr. 2 Bed" is counted as a 2 BR but is not what someone shopping a
+  // full two-bedroom means — so the tile can also name the cheapest regular one.
+  const isJunior = (u: UnitListing) => /\bjr\b|junior/i.test(u.planType ?? "");
+  const cheapest = (beds: number, regularOnly = false): Best | null => {
     let best: Best | null = null;
     for (const { building, history } of rows) {
       if (!history.latest) continue;
       for (const u of history.latest.units) {
         if (u.beds !== beds) continue;
+        if (regularOnly && isJunior(u)) continue;
         if (!best || u.price < best.unit.price) {
           best = { unit: u, name: building.name, id: building.id, asOf: history.latest.timestamp };
         }
@@ -84,14 +88,17 @@ export default function Dashboard() {
     return best;
   };
   const statBeds = focus ?? [0, 1];
-  const statTiles = statBeds.map((b) => ({ beds: b, best: cheapest(b) }));
+  const statTiles = statBeds.map((b) => {
+    const best = cheapest(b);
+    return { beds: b, best, regular: best && isJunior(best.unit) ? cheapest(b, true) : null };
+  });
 
   // Biggest REAL drop among focus-bed units: like-for-like lease length only
   // (a site re-headlining a longer lease is not a price drop).
   let drop: { amount: number; name: string; id: string; label: string } | null = null;
   for (const { building, history } of rows) {
     for (const c of history.delta?.priceChanges ?? []) {
-      if (!inFocus(c.beds) || c.termChangeOnly) continue;
+      if (!inFocus(c.beds) || c.notComparable) continue;
       const amount = c.from - c.to;
       if (amount > 0 && (!drop || amount > drop.amount)) {
         drop = {
@@ -161,7 +168,7 @@ export default function Dashboard() {
         </div>
       )}
       <div className="stat-strip">
-        {statTiles.map(({ beds, best }) => {
+        {statTiles.map(({ beds, best, regular }) => {
           if (!best) return null;
           const u = best.unit;
           const mi = moveIn(u, best.asOf);
@@ -179,11 +186,17 @@ export default function Dashboard() {
                 )}
               </span>
               <span className="stat-sub">
+                {u.planType ? `${u.planType} · ` : ""}
                 {best.name}
                 {u.unitNumber ? ` #${u.unitNumber}` : ""}
                 {mi.kind === "now" ? " · move-in now" : mi.kind === "future" ? ` · move-in ${mi.label}` : ""}
                 {atCompare !== null ? ` · ${compareTerm}-mo ${money(atCompare)}` : ""}
                 {beds === 2 ? ` · ${money(Math.round(u.price / 2))}/person` : ""}
+                {regular
+                  ? ` · regular ${bedsLabel(beds)} from ${money(regular.unit.price)} (${regular.name}${
+                      regular.unit.unitNumber ? ` #${regular.unit.unitNumber}` : ""
+                    })`
+                  : ""}
               </span>
             </Link>
           );
@@ -258,7 +271,7 @@ export default function Dashboard() {
         const newCount = d?.newUnits.filter((u) => inFocus(u.beds)).length ?? 0;
         const goneCount = d?.removedUnits.filter((u) => inFocus(u.beds)).length ?? 0;
         const focusChanges = (d?.priceChanges ?? []).filter(
-          (c) => inFocus(c.beds) && !c.termChangeOnly,
+          (c) => inFocus(c.beds) && !c.notComparable,
         );
         const drops = focusChanges.filter((c) => c.to < c.from).length;
         const hikes = focusChanges.filter((c) => c.to > c.from).length;

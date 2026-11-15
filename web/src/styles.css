@@ -748,6 +748,19 @@ table.units tbody tr.empty-row td {
   padding: 8px 10px 12px;
 }
 
+.chart-note {
+  padding: 6px 16px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 96ch;
+}
+
+.viz-tooltip .tooltip-term {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .legend-row {
   display: flex;
   flex-wrap: wrap;

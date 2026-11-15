@@ -25,10 +25,13 @@ function ChartTooltip({
   active,
   label,
   payload,
+  termAt,
 }: {
   active?: boolean;
   label?: number;
   payload?: { name?: string; value?: number | string; stroke?: string }[];
+  /** series name → run time (ms) → lease term the price was quoted for. */
+  termAt?: Map<string, Map<number, number>>;
 }) {
   if (!active || !payload?.length || label === undefined) return null;
   const rows: TooltipRow[] = payload
@@ -39,15 +42,21 @@ function ChartTooltip({
   return (
     <div className="viz-tooltip">
       <div className="t">{shortDate(new Date(label).toISOString())}</div>
-      {shown.map((r) => (
-        <div className="row" key={r.name}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span className="swatch" style={{ background: r.color, width: 8, height: 8, borderRadius: 2, display: "inline-block" }} />
-            {r.name}
-          </span>
-          <strong>{money(r.value)}</strong>
-        </div>
-      ))}
+      {shown.map((r) => {
+        const term = termAt?.get(r.name)?.get(label);
+        return (
+          <div className="row" key={r.name}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span className="swatch" style={{ background: r.color, width: 8, height: 8, borderRadius: 2, display: "inline-block" }} />
+              {r.name}
+            </span>
+            <strong>
+              {money(r.value)}
+              {term !== undefined && <span className="tooltip-term"> {term}mo</span>}
+            </strong>
+          </div>
+        );
+      })}
       {rows.length > shown.length && (
         <div className="t" style={{ marginTop: 4 }}>
           +{rows.length - shown.length} more
@@ -109,6 +118,23 @@ export default function PriceHistoryChart({
       .sort((a, b) => a.t - b.t);
   }, [history, chartMode, unitNumbers]);
 
+  // Lease term behind each unit price point, for the tooltip — and whether
+  // the visible series mix lease lengths at all.
+  const { termAt, mixedTerms } = useMemo(() => {
+    const map = new Map<string, Map<number, number>>();
+    const terms = new Set<number>();
+    for (const u of unitNumbers) {
+      const byTime = new Map<number, number>();
+      for (const p of history.perUnit[u] ?? []) {
+        if (p.term === undefined) continue;
+        byTime.set(new Date(p.t).getTime(), p.term);
+        terms.add(p.term);
+      }
+      if (byTime.size > 0) map.set(u, byTime);
+    }
+    return { termAt: map, mixedTerms: terms.size > 1 };
+  }, [history, unitNumbers]);
+
   const single = history.runs.length < 2;
 
   return (
@@ -136,6 +162,13 @@ export default function PriceHistoryChart({
         )}
         {single && <span className="hint">one snapshot so far — history builds with each refresh</span>}
       </div>
+      {chartMode === "units" && mixedTerms && (
+        <div className="chart-note">
+          Each point is the rent recorded that day. The lease length it was quoted for changed
+          over time (hover a point to see it), so a step in a line can be a different lease
+          length rather than a price change.
+        </div>
+      )}
       {chartMode === "floorplans" && (
         <div className="legend-row">
           {plans.map((p) => (
@@ -175,7 +208,7 @@ export default function PriceHistoryChart({
               domain={["auto", "auto"]}
             />
             <Tooltip
-              content={<ChartTooltip />}
+              content={<ChartTooltip {...(chartMode === "units" ? { termAt } : {})} />}
               cursor={{ stroke: "var(--baseline)", strokeDasharray: "3 3" }}
             />
             {chartMode === "floorplans"

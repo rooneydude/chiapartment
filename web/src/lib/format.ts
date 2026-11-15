@@ -89,15 +89,19 @@ export interface MoveIn {
 
 /** Everything the UI needs to say about when a unit can be moved into. */
 export function moveIn(
-  u: Pick<UnitListing, "availableDate" | "availableNow">,
+  u: Pick<UnitListing, "availableDate" | "availableNow" | "vacantSince">,
   asOf: string,
 ): MoveIn {
   const now = isAvailableNow(u, asOf);
   const snapshotDay = chicagoDate(asOf);
   if (now === true) {
+    // Newer snapshots say when the unit became vacant; older Leo snapshots
+    // carried that day in availableDate.
+    const sinceDay =
+      u.vacantSince ?? (u.availableDate && u.availableDate < snapshotDay ? u.availableDate : null);
     const since =
-      u.availableDate && u.availableDate < snapshotDay
-        ? ` — vacant since ${longDate(u.availableDate)}`
+      sinceDay && sinceDay < snapshotDay
+        ? ` — vacant since ${longDate(sinceDay)} (${daysBetween(sinceDay, snapshotDay)} days)`
         : "";
     return { label: "Now", kind: "now", days: 0, title: `Available to move in now${since}` };
   }
