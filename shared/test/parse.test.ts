@@ -152,3 +152,41 @@ describe("parseLeaseTermMonths", () => {
     expect(parseLeaseTermMonths("99 months")).toBeNull();
   });
 });
+
+describe("parseAvailableDate never invents a date", () => {
+  const on = (day: string) => new Date(`${day}T18:00:00Z`);
+
+  it("does not read the start of a year, a quantity or an ordinary word as a day", () => {
+    const ref = on("2026-11-15");
+    // A month and a year name no day.
+    expect(parseAvailableDate("Available December 2026", ref)).toBeNull();
+    expect(parseAvailableDate("Available January 2028", ref)).toBeNull();
+    // Quantities are not dates.
+    expect(parseAvailableDate("Available in 1-2 weeks", ref)).toBeNull();
+    expect(parseAvailableDate("1/2 month free", ref)).toBeNull();
+    expect(parseAvailableDate("2/2 bath", ref)).toBeNull();
+    // A word that merely starts like a month.
+    expect(parseAvailableDate("Junior 1 Bedroom", ref)).toBeNull();
+    expect(parseAvailableDate("Marble 12 counters", ref)).toBeNull();
+    // Real dates still parse, in every form the sites use.
+    expect(parseAvailableDate("Available December 26, 2026", ref)).toBe("2026-12-26");
+    expect(parseAvailableDate("Dec. 26th", ref)).toBe("2026-12-26");
+    expect(parseAvailableDate("12/10/2026", ref)).toBe("2026-12-10");
+    expect(parseAvailableDate("12-10-2026", ref)).toBe("2026-12-10");
+    expect(parseAvailableDate("1/2/27", ref)).toBe("2027-01-02");
+    expect(parseAvailableDate("12/18", ref)).toBe("2026-12-18");
+    expect(parseAvailableDate("Sept 5", on("2026-08-01"))).toBe("2026-09-05");
+    expect(parseAvailableDate("May 3", on("2026-04-01"))).toBe("2026-05-03");
+  });
+
+  it("reads a year-less date just after New Year as the day that just passed", () => {
+    // Seen on 2 Jan 2027, "Dec 28" was five days ago — not next December.
+    expect(parseAvailableDate("Dec 28", on("2027-01-02"))).toBe("2026-12-28");
+    expect(parseAvailableDate("12/30", on("2027-01-02"))).toBe("2026-12-30");
+    // And one that is further back than a week means the coming one.
+    expect(parseAvailableDate("Dec 20", on("2027-01-02"))).toBe("2027-12-20");
+    // Just before New Year, January is next month.
+    expect(parseAvailableDate("Jan 5", on("2026-12-20"))).toBe("2027-01-05");
+    expect(parseAvailableDate("Feb 29", on("2027-06-01"))).toBe("2028-02-29");
+  });
+});

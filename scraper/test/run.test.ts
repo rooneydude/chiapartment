@@ -86,6 +86,20 @@ describe("pickStableObservation", () => {
     const oneFlip = ok([unit("1207", 3225, 3342), unit("3907", 3546)]);
     expect(pickStableObservation(yesterday, oneFlip, flipped).result).toBe(oneFlip);
   });
+
+  it("does not let a partial second look win for having fewer units to flip", () => {
+    // 19 units the first time, 1 the second: fewer flips, and most of the page missing.
+    const many = Array.from({ length: 19 }, (_, i) => unit(String(1000 + i), 3000 + i));
+    const before = many.map((u) => ({ ...u }));
+    const first = ok(many.map((u, i) => (i < 2 ? { ...u, price: u.price + 100, priceMax: u.price + 300 } : u)));
+    const partial = ok([many[5]!]);
+    const pick = pickStableObservation(before, first, partial);
+    expect(pick.picked).toBe("first");
+    expect(pick.result.units).toHaveLength(19);
+    // A second look missing a unit or two is still a full look, judged on what both saw.
+    const nearlyAll = ok(many.slice(0, 18));
+    expect(pickStableObservation(before, first, nearlyAll).picked).toBe("second");
+  });
 });
 
 describe("flagGroupOutages", () => {
@@ -119,6 +133,27 @@ describe("flagGroupOutages", () => {
     const results = [entry("otp-1", []), entry("otp-2", [unit("0701", 4594)]), entry("otp-3", [unit("0801", 4096)])];
     expect(flagGroupOutages(towers, results)).toEqual([]);
     expect(results[0]!.status).toBe("ok");
+  });
+
+  it("still sees the outage when one tower's request fails outright and the others come back empty", () => {
+    const failed: Snapshot["buildings"][number] = {
+      buildingId: "otp-1",
+      ...ok([]),
+      status: "error",
+      error: "HTTP 503",
+    };
+    const results = [failed, entry("otp-2", []), entry("otp-3", [])];
+    expect(flagGroupOutages(towers, results)).toEqual(["otp-2", "otp-3"]);
+    expect(results.map((r) => r.status)).toEqual(["error", "error", "error"]);
+    // The tower that failed on its own keeps its own error.
+    expect(results[0]!.error).toBe("HTTP 503");
+    // Every tower failing outright is already three errors: nothing to flag.
+    const allFailed = [failed, { ...failed, buildingId: "otp-2" }, { ...failed, buildingId: "otp-3" }];
+    expect(flagGroupOutages(towers, allFailed)).toEqual([]);
+    // One failure next to towers that list units is just one failure.
+    const mixed = [failed, entry("otp-2", [unit("0701", 4594)]), entry("otp-3", [])];
+    expect(flagGroupOutages(towers, mixed)).toEqual([]);
+    expect(mixed[2]!.status).toBe("ok");
   });
 
   it("does not judge a complex from a partial run", () => {
@@ -163,6 +198,23 @@ describe("loadPreviousOk", () => {
     expect(prev.get("b")![0]!.price).toBe(3000);
     expect(prev.has("c")).toBe(false);
     expect(loadPreviousOk(join(ROOT, "nowhere"), ["a"]).size).toBe(0);
+  });
+});
+
+describe("loadPreviousOk with a damaged file", () => {
+  it("skips a snapshot that is not valid JSON instead of aborting the scrape", () => {
+    const root = join(ROOT, "damaged");
+    const dir = join(root, "data", "snapshots");
+    mkdirSync(dir, { recursive: true });
+    const good: Snapshot = {
+      schemaVersion: 1,
+      timestamp: "2026-11-14T18:00:00Z",
+      buildings: [{ buildingId: "a", ...ok([unit("101", 2000)]) }],
+    };
+    writeFileSync(join(dir, "2026-11-14T18-00-00Z.json"), JSON.stringify(good));
+    writeFileSync(join(dir, "2026-11-15T18-00-00Z.json"), "");
+    writeFileSync(join(dir, "2026-11-16T18-00-00Z.json"), '{"schemaVersion": 1, "timest');
+    expect(loadPreviousOk(root, ["a"]).get("a")).toHaveLength(1);
   });
 });
 

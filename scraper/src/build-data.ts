@@ -1,7 +1,14 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assembleWeekdayBrief, focusDeltaFromRuns } from "../../shared/src/brief";
-import { alsoListedKeys, computeDelta, deltaContextFor, listingKey } from "../../shared/src/delta";
+import {
+  alsoListedKeys,
+  chicagoDate,
+  computeDelta,
+  deltaContextFor,
+  listingKey,
+  priorChicagoDayRun,
+} from "../../shared/src/delta";
 import { comparePrices, uniformReprice } from "../../shared/src/listing";
 import {
   SnapshotSchema,
@@ -12,6 +19,7 @@ import {
   type CompiledConfig,
   type DataWarning,
   type FloorplanPoint,
+  type MethodChange,
   type OmittedListing,
   type Snapshot,
   type UnitListing,
@@ -34,6 +42,9 @@ export interface OkRun {
   alsoListed?: AlsoListed[] | undefined;
   notices?: string[];
 }
+
+/** How far back a "this detail used to be there" check looks. */
+const PARTIAL_DATA_LOOKBACK_RUNS = 14;
 
 const share = (units: UnitListing[], has: (u: UnitListing) => boolean): number =>
   units.length === 0 ? 0 : units.filter(has).length / units.length;
@@ -67,7 +78,7 @@ export function computeWarnings(
   if (lastAny?.status === "error") {
     const lastGood = okRuns[okRuns.length - 1];
     const lastGoodBit = lastGood
-      ? ` Showing data from ${lastGood.timestamp.slice(0, 10)}.`
+      ? ` Showing data from ${chicagoDate(lastGood.timestamp)}.`
       : "";
     warnings.push({
       code: "scrape-error",
@@ -77,7 +88,10 @@ export function computeWarnings(
     });
   }
   const latest = okRuns[okRuns.length - 1];
-  const prev = okRuns[okRuns.length - 2];
+  // Judged against the same baseline the daily brief uses — the last run of
+  // an earlier Chicago day — so a second run on the same day does not erase
+  // a warning the morning run raised. (No earlier day yet: the previous run.)
+  const prev = latest ? (priorChicagoDayRun(okRuns, latest) ?? okRuns[okRuns.length - 2]) : undefined;
   if (!latest || !prev) return warnings;
 
   if (latest.units.length === 0 && prev.units.length > 0) {
@@ -138,16 +152,48 @@ export function computeWarnings(
     ["lease-term price tables", (u) => (u.leaseTerms?.length ?? 0) > 0],
     ["move-in dates", (u) => u.availableDate !== null],
   ];
+  // Compared with any recent run that still had the detail, so the warning
+  // stays up until the data is back instead of vanishing after one run.
+  const recent = okRuns.slice(-(PARTIAL_DATA_LOOKBACK_RUNS + 1), -1);
   for (const [what, has] of checks) {
-    if (latest.units.length >= 2 && share(prev.units, has) >= 0.5 && share(latest.units, has) < 0.5) {
-      const n = latest.units.filter(has).length;
-      warnings.push({
-        code: "partial-data",
-        message: `Only ${n} of ${latest.units.length} units have ${what} in the latest scrape (the previous run had them) — a follow-up request probably failed.`,
-      });
-    }
+    if (latest.units.length < 2 || share(latest.units, has) >= 0.5) continue;
+    const hadIt = [...recent].reverse().find((r) => r.units.length >= 2 && share(r.units, has) >= 0.5);
+    if (!hadIt) continue;
+    const n = latest.units.filter(has).length;
+    warnings.push({
+      code: "partial-data",
+      message: `Only ${n} of ${latest.units.length} units have ${what} in the latest scrape (the run of ${chicagoDate(hadIt.timestamp)} had them) — a follow-up request is probably failing.`,
+    });
   }
   return warnings;
+}
+
+/**
+ * Where the MEANING of a building's stored prices changed. From 8 Sep to 14
+ * Nov 2026 the scraper stored each 1225 unit at its cheapest rent for a lease
+ * of 14 months or less (and left out units without one); before and after,
+ * the rent the site advertises. A chart line stepping at those two points is
+ * the method, not the market — the chart marks them.
+ */
+export function findMethodChanges(okRuns: OkRun[]): MethodChange[] {
+  const out: MethodChange[] = [];
+  let capped = false;
+  for (const run of okRuns) {
+    const isCapped = (run.omitted?.length ?? 0) > 0;
+    if (isCapped && !capped) {
+      out.push({
+        t: run.timestamp,
+        note: "From here the tracker stored each unit's cheapest rent for a lease of 14 months or less, and left out units that had none.",
+      });
+    } else if (!isCapped && capped) {
+      out.push({
+        t: run.timestamp,
+        note: "From here on: the rent the leasing site itself advertises, at the lease length it advertises — and every listed unit.",
+      });
+    }
+    capped = isCapped;
+  }
+  return out;
 }
 
 /**
@@ -230,6 +276,8 @@ export function buildData(root: string): void {
     for (const run of okRuns) {
       history.runs.push(run.timestamp);
       const byPlan = new Map<string, number[]>();
+      // The lease term behind each plan's cheapest price that run, when known.
+      const cheapestOfPlan = new Map<string, UnitListing>();
       for (const u of run.units) {
         if (u.unitNumber) {
           (history.perUnit[u.unitNumber] ??= []).push({
@@ -254,6 +302,8 @@ export function buildData(root: string): void {
         const prices = byPlan.get(u.floorplanName) ?? [];
         prices.push(u.price);
         byPlan.set(u.floorplanName, prices);
+        const cheapest = cheapestOfPlan.get(u.floorplanName);
+        if (!cheapest || u.price < cheapest.price) cheapestOfPlan.set(u.floorplanName, u);
       }
       // Units the old lease cap left out of `units` (8 Sep – 14 Nov 2026) were
       // on the site all the same, and their snapshots recorded what the site
@@ -280,10 +330,16 @@ export function buildData(root: string): void {
           minPrice: Math.min(...prices),
           avgPrice: Math.round(prices.reduce((s, p) => s + p, 0) / prices.length),
           count: prices.length,
+          ...(cheapestOfPlan.get(plan)?.leaseTermMonths != null
+            ? { term: cheapestOfPlan.get(plan)!.leaseTermMonths! }
+            : {}),
         };
         (history.perFloorplan[plan] ??= []).push(point);
       }
     }
+
+    const methodChanges = findMethodChanges(okRuns);
+    if (methodChanges.length > 0) history.methodChanges = methodChanges;
 
     const latest = okRuns[okRuns.length - 1];
     const prev = okRuns[okRuns.length - 2];

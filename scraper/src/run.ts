@@ -120,7 +120,15 @@ export function loadPreviousOk(root: string, buildingIds: string[]): Map<string,
     .slice(0, PREVIOUS_LOOKBACK_FILES);
   for (const f of files) {
     if (buildingIds.every((id) => found.has(id))) break;
-    const parsed = SnapshotSchema.safeParse(JSON.parse(readFileSync(join(dir, f), "utf8")));
+    // A half-written or empty file must not stop today's scrape.
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    } catch {
+      console.warn(`Skipping unreadable snapshot ${f} while looking up the previous run.`);
+      continue;
+    }
+    const parsed = SnapshotSchema.safeParse(raw);
     if (!parsed.success) continue;
     for (const b of parsed.data.buildings) {
       if (b.status === "ok" && buildingIds.includes(b.buildingId) && !found.has(b.buildingId)) {
@@ -162,11 +170,20 @@ export function pickStableObservation(
   first: ScrapeResult,
   second: ScrapeResult,
 ): { result: ScrapeResult; picked: "first" | "second"; flips: [number, number] } {
-  const f1 = priceFormFlips(prev, first.units).length;
-  if (second.status !== "ok" || second.units.length === 0) {
-    return { result: first, picked: "first", flips: [f1, -1] };
-  }
-  const f2 = priceFormFlips(prev, second.units).length;
+  const keepFirst = (): ReturnType<typeof pickStableObservation> => ({
+    result: first,
+    picked: "first",
+    flips: [priceFormFlips(prev, first.units).length, -1],
+  });
+  if (second.status !== "ok" || second.units.length === 0) return keepFirst();
+  // A second look that returned only part of the page has fewer units to
+  // flip — it must not win for that. Short of ~the same page, keep the first.
+  if (second.units.length < first.units.length * 0.8) return keepFirst();
+  // Judge both looks on the units they have in common.
+  const inFirst = new Set(first.units.map(listingKey));
+  const inSecond = new Set(second.units.map(listingKey));
+  const f1 = priceFormFlips(prev, first.units.filter((u) => inSecond.has(listingKey(u)))).length;
+  const f2 = priceFormFlips(prev, second.units.filter((u) => inFirst.has(listingKey(u)))).length;
   return f2 <= f1
     ? { result: second, picked: "second", flips: [f1, f2] }
     : { result: first, picked: "first", flips: [f1, f2] };
@@ -193,12 +210,18 @@ export function flagGroupOutages(
   for (const [group, members] of groups) {
     if (members.length < 2) continue;
     const entries = members.map((m) => results.find((r) => r.buildingId === m.id));
-    const allEmpty = entries.every(
-      (e) => e !== undefined && e.status === "ok" && e.units.length === 0 && (e.alsoListed?.length ?? 0) === 0,
-    );
-    if (!allEmpty) continue;
+    // Not judged from a partial run: every tower must have been scraped.
+    if (entries.some((e) => e === undefined)) continue;
+    const emptyOk = (e: Snapshot["buildings"][number]): boolean =>
+      e.status === "ok" && e.units.length === 0 && (e.alsoListed?.length ?? 0) === 0;
+    // Down = no tower lists anything, and at least one answered with an empty
+    // page (a tower whose request failed outright counts as "nothing" too —
+    // a feed outage does not fail every request the same way).
+    const down =
+      entries.every((e) => e!.status === "error" || emptyOk(e!)) && entries.some((e) => emptyOk(e!));
+    if (!down) continue;
     for (const e of entries) {
-      if (!e) continue;
+      if (!e || !emptyOk(e)) continue;
       e.status = "error";
       e.error = `all ${members.length} "${group}" pages listed nothing in the same run — the site's availability feed is probably down (one empty tower alone would be recorded as fully leased)`;
       delete e.notices;

@@ -3,13 +3,14 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { BuildingHistory } from "../../../shared/src/types";
-import { money, shortDate } from "../lib/format";
+import { longDate, money, shortDate } from "../lib/format";
 import { useStore } from "../state/store";
 
 const SLOT_VARS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `var(--series-${n})`);
@@ -136,22 +137,29 @@ export default function PriceHistoryChart({
       .sort((a, b) => a.t - b.t);
   }, [history, chartMode, unitNumbers]);
 
-  // Lease term behind each unit price point, for the tooltip — and whether
-  // the visible series mix lease lengths at all.
+  // Lease term behind each price point, for the tooltip — and whether the
+  // visible series mix lease lengths at all.
   const { termAt, mixedTerms } = useMemo(() => {
     const map = new Map<string, Map<number, number>>();
     const terms = new Set<number>();
-    for (const u of unitNumbers) {
+    const series: [string, { t: string; term?: number }[]][] =
+      chartMode === "floorplans"
+        ? plans.map((p) => [p, history.perFloorplan[p] ?? []])
+        : unitNumbers.map((u) => [u, history.perUnit[u] ?? []]);
+    for (const [name, points] of series) {
       const byTime = new Map<number, number>();
-      for (const p of history.perUnit[u] ?? []) {
+      for (const p of points) {
         if (p.term === undefined) continue;
         byTime.set(new Date(p.t).getTime(), p.term);
         terms.add(p.term);
       }
-      if (byTime.size > 0) map.set(u, byTime);
+      if (byTime.size > 0) map.set(name, byTime);
     }
     return { termAt: map, mixedTerms: terms.size > 1 };
-  }, [history, unitNumbers]);
+  }, [history, chartMode, plans, unitNumbers]);
+
+  // Points where what the stored prices MEAN changed (not the prices).
+  const methodChanges = history.methodChanges ?? [];
 
   const single = history.runs.length < 2;
 
@@ -180,11 +188,23 @@ export default function PriceHistoryChart({
         )}
         {single && <span className="hint">one snapshot so far — history builds with each refresh</span>}
       </div>
-      {chartMode === "units" && mixedTerms && (
+      {mixedTerms && (
         <div className="chart-note">
           Each point is the rent recorded that day. The lease length it was quoted for changed
           over time (hover a point to see it), so a step in a line can be a different lease
           length rather than a price change.
+        </div>
+      )}
+      {methodChanges.length > 0 && (
+        <div className="chart-note">
+          <strong>Dashed lines</strong> mark where the recorded number changed meaning, not
+          price:
+          {methodChanges.map((m) => (
+            <span key={m.t}>
+              {" "}
+              <strong>{longDate(m.t)}</strong> — {m.note}
+            </span>
+          ))}
         </div>
       )}
       {chartMode === "floorplans" && (
@@ -226,9 +246,18 @@ export default function PriceHistoryChart({
               domain={["auto", "auto"]}
             />
             <Tooltip
-              content={<ChartTooltip {...(chartMode === "units" ? { termAt } : {})} />}
+              content={<ChartTooltip termAt={termAt} />}
               cursor={{ stroke: "var(--baseline)", strokeDasharray: "3 3" }}
             />
+            {methodChanges.map((m) => (
+              <ReferenceLine
+                key={m.t}
+                x={new Date(m.t).getTime()}
+                stroke="var(--text-muted)"
+                strokeDasharray="5 4"
+                ifOverflow="hidden"
+              />
+            ))}
             {chartMode === "floorplans"
               ? plans.map((p) => (
                   <Line

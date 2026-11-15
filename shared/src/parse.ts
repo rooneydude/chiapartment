@@ -62,18 +62,21 @@ function isoDay(year: number, monthIndex: number, day: number): string | null {
 }
 
 /**
- * A month/day with no year: this year, unless that day is already more than
- * a week behind the reference day — then the site means next year.
+ * A month/day with no year. Sites print such dates for the near future, or —
+ * for a few days — for a day that has just passed. So: a date within the
+ * last week (this year or, around New Year, last year) is that recent day;
+ * otherwise it is the next time that month/day comes round.
  */
 function inferYear(monthIndex: number, day: number, refDay: string): string | null {
   const refYear = Number.parseInt(refDay.slice(0, 4), 10);
-  const thisYear = isoDay(refYear, monthIndex, day);
-  if (thisYear !== null) {
-    const behindDays =
-      (Date.parse(`${refDay}T00:00:00Z`) - Date.parse(`${thisYear}T00:00:00Z`)) / 86400e3;
-    if (behindDays <= YEAR_INFERENCE_GRACE_DAYS) return thisYear;
-  }
-  return isoDay(refYear + 1, monthIndex, day) ?? thisYear;
+  const refMs = Date.parse(`${refDay}T00:00:00Z`);
+  const candidates = [refYear - 1, refYear, refYear + 1]
+    .map((y) => isoDay(y, monthIndex, day))
+    .filter((d): d is string => d !== null);
+  const behind = (d: string): number => (refMs - Date.parse(`${d}T00:00:00Z`)) / 86400e3;
+  const justPassed = candidates.filter((d) => behind(d) >= 0 && behind(d) <= YEAR_INFERENCE_GRACE_DAYS);
+  if (justPassed.length > 0) return justPassed[justPassed.length - 1]!;
+  return candidates.find((d) => behind(d) < 0) ?? null;
 }
 
 /** Words leasing sites use for "you can move in today". */
@@ -111,19 +114,27 @@ export function parseAvailableDate(text: string | null | undefined, ref: Date): 
     return isoDay(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
   }
 
-  // US numeric: M/D/YYYY, M/D/YY, M-D-YYYY, or M/D with the year inferred.
-  const us = /\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{4}|\d{2}))?\b/.exec(t);
-  if (us) {
-    const month = Number.parseInt(us[1]!, 10) - 1;
-    const day = Number.parseInt(us[2]!, 10);
-    if (us[3]) {
-      const y = Number.parseInt(us[3], 10);
-      return isoDay(us[3].length === 2 ? 2000 + y : y, month, day);
-    }
-    return inferYear(month, day, refDay);
+  // US numeric with a year: M/D/YYYY, M/D/YY, M-D-YYYY, M.D.YYYY.
+  const full = /\b(\d{1,2})([/\-.])(\d{1,2})\2(\d{4}|\d{2})\b/.exec(t);
+  if (full) {
+    const y = Number.parseInt(full[4]!, 10);
+    return isoDay(
+      full[4]!.length === 2 ? 2000 + y : y,
+      Number.parseInt(full[1]!, 10) - 1,
+      Number.parseInt(full[3]!, 10),
+    );
+  }
+  // M/D with the year inferred — slashes only, and never a quantity
+  // ("1-2 weeks", "1/2 month free", "2/2 bath").
+  const short = /(?<![\d/])(\d{1,2})\/(\d{1,2})(?![\d/])(?!\s*(?:weeks?|days?|months?|mos?\b|beds?|baths?|br\b|ba\b|off\b))/.exec(t);
+  if (short) {
+    return inferYear(Number.parseInt(short[1]!, 10) - 1, Number.parseInt(short[2]!, 10), refDay);
   }
 
-  const m = /([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/.exec(t);
+  // "Aug 15", "Dec. 26th", "December 26, 2026" — whole month names only (not
+  // "Junior 1 Bedroom"), and a day that is not the start of a year
+  // ("December 2026" names no day: no date, rather than an invented one).
+  const m = MONTH_DAY.exec(t);
   if (!m) return /\bnow\b|\bimmediate/.test(t) ? refDay : null;
   const month = MONTHS[m[1]!.slice(0, 3)];
   const day = Number.parseInt(m[2]!, 10);
@@ -131,6 +142,9 @@ export function parseAvailableDate(text: string | null | undefined, ref: Date): 
   if (m[3]) return isoDay(Number.parseInt(m[3], 10), month, day);
   return inferYear(month, day, refDay);
 }
+
+const MONTH_DAY =
+  /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b\.?\s+(\d{1,2})(?!\d)(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/;
 
 /**
  * When floorplans are stacks (mapping.stackFromPlanRegex set), extract the

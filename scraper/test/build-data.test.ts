@@ -509,3 +509,131 @@ describe("buildData: what the two latest unit lists alone cannot say", () => {
     expect(readHistory().warnings).toEqual([]);
   });
 });
+
+describe("buildData: warnings and notes that must not vanish", () => {
+  const write = (ts: string, building: object, buildingId = "test-bldg"): void =>
+    writeFileSync(
+      join(ROOT, "data", "snapshots", `${ts.replaceAll(":", "-")}.json`),
+      JSON.stringify({
+        schemaVersion: 1,
+        timestamp: ts,
+        buildings: [
+          {
+            buildingId,
+            status: "ok",
+            source: { adapter: "generic", fetchedUrl: "https://example.com/" },
+            units: [],
+            ...building,
+          },
+        ],
+      }),
+    );
+  const brief = (): WeekdayBrief =>
+    JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "brief.json"), "utf8")) as WeekdayBrief;
+
+  it("keeps a warning through a second run on the same day (judged against yesterday, like the brief)", () => {
+    setup();
+    write("2026-11-10T18:00:00Z", { units: [unit("705", 3275), unit("602", 2790)] });
+    write("2026-11-12T15:00:00Z", { units: [unit("705", 3093), unit("602", 2635)] });
+    buildData(ROOT);
+    expect(readHistory().warnings.map((w) => w.code)).toEqual(["uniform-reprice"]);
+    // A second look the same afternoon: nothing new, but the day's story is the same.
+    write("2026-11-12T21:00:00Z", { units: [unit("705", 3093), unit("602", 2635)] });
+    buildData(ROOT);
+    expect(readHistory().warnings.map((w) => w.code)).toEqual(["uniform-reprice"]);
+    const row = brief().buildings[0]!;
+    expect(row.drops.map((d) => [d.label, d.concessionLikely])).toEqual([
+      ["#705", true],
+      ["#602", true],
+    ]);
+    // The next day, with prices unchanged, it is over.
+    write("2026-11-13T18:00:00Z", { units: [unit("705", 3093), unit("602", 2635)] });
+    buildData(ROOT);
+    expect(readHistory().warnings).toEqual([]);
+  });
+
+  it("keeps saying lease tables are missing until they are back", () => {
+    setup();
+    const withTable = (n: string) => ({
+      ...unit(n, 2400),
+      leaseTermMonths: 18,
+      leaseTerms: [{ months: 12, price: 2600 }, { months: 18, price: 2400 }],
+    });
+    const bare = (n: string) => ({ ...unit(n, 2400), leaseTermMonths: 18 });
+    write("2026-11-15T18:00:00Z", { units: [withTable("101"), withTable("102")] });
+    write("2026-11-16T18:00:00Z", { units: [bare("101"), bare("102")] });
+    buildData(ROOT);
+    expect(readHistory().warnings.map((w) => w.code)).toEqual(["partial-data"]);
+    expect(readHistory().warnings[0]!.message).toContain("the run of 2026-11-15 had them");
+    // Still missing the next day: still flagged.
+    write("2026-11-17T18:00:00Z", { units: [bare("101"), bare("102")] });
+    buildData(ROOT);
+    expect(readHistory().warnings.map((w) => w.code)).toEqual(["partial-data"]);
+    // Back: clear.
+    write("2026-11-18T18:00:00Z", { units: [withTable("101"), withTable("102")] });
+    buildData(ROOT);
+    expect(readHistory().warnings).toEqual([]);
+  });
+
+  it("marks where the stored prices changed meaning, and records the lease term behind each plan price", () => {
+    setup();
+    const capped = { unitNumber: "103", floorplanName: "A1", beds: 1, advertisedPrice: 3529, leaseTermMonths: 18, reason: "over-cap" };
+    write("2026-09-07T18:00:00Z", { units: [{ ...unit("101", 2283), leaseTermMonths: 18 }] });
+    write("2026-09-08T18:00:00Z", { units: [{ ...unit("101", 2409), leaseTermMonths: 14 }], omitted: [capped] });
+    write("2026-11-14T18:00:00Z", { units: [{ ...unit("101", 2409), leaseTermMonths: 14 }], omitted: [capped] });
+    write("2026-11-15T18:00:00Z", {
+      units: [
+        { ...unit("101", 2382), leaseTermMonths: 18, leaseTerms: [{ months: 14, price: 2409 }, { months: 18, price: 2382 }] },
+        { ...unit("103", 3529), leaseTermMonths: 18 },
+      ],
+      alsoListed: [],
+    });
+    buildData(ROOT);
+    const h = readHistory();
+    expect(h.methodChanges?.map((m) => m.t)).toEqual(["2026-09-08T18:00:00Z", "2026-11-15T18:00:00Z"]);
+    expect(h.methodChanges![0]!.note).toMatch(/14 months or less/);
+    expect(h.methodChanges![1]!.note).toMatch(/the leasing site itself advertises/);
+    // The plan line steps on those days; each point says which lease length it was.
+    expect(h.perFloorplan["A1"]!.map((p) => [p.minPrice, p.term])).toEqual([
+      [2283, 18],
+      [2409, 14],
+      [2409, 14],
+      [2382, 18],
+    ]);
+    // …and the like-for-like delta knows nothing really changed.
+    expect(h.delta!.priceChanges).toEqual([]);
+    expect(h.delta!.newUnits).toEqual([]);
+  });
+
+  it("does not replay yesterday's news for a building the newest run did not scrape", () => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(join(ROOT, "data", "snapshots"), { recursive: true });
+    const b = (id: string) => ({ id, name: id, address: "x", lat: 41.9, lon: -87.63, url: "https://example.com/", adapter: "generic", geometry: { floors: 10 } });
+    writeFileSync(join(ROOT, "buildings.json"), JSON.stringify({ schemaVersion: 1, buildings: [b("aaa"), b("bbb")] }));
+    const both = (ts: string, a: object[], bUnits: object[]): void =>
+      writeFileSync(
+        join(ROOT, "data", "snapshots", `${ts.replaceAll(":", "-")}.json`),
+        JSON.stringify({
+          schemaVersion: 1,
+          timestamp: ts,
+          buildings: [
+            { buildingId: "aaa", status: "ok", source: { adapter: "generic", fetchedUrl: "https://example.com/" }, units: a },
+            { buildingId: "bbb", status: "ok", source: { adapter: "generic", fetchedUrl: "https://example.com/" }, units: bUnits },
+          ],
+        }),
+      );
+    both("2026-11-13T18:00:00Z", [unit("101", 2000)], [unit("201", 3000)]);
+    both("2026-11-14T18:00:00Z", [unit("101", 1900)], [unit("201", 2900), unit("202", 3100)]);
+    buildData(ROOT);
+    expect(brief().summary).toMatchObject({ drops: 2, newListings: 1 });
+    // 15 Nov: only building "aaa" is refreshed.
+    write("2026-11-15T18:00:00Z", { units: [unit("101", 1900)] }, "aaa");
+    buildData(ROOT);
+    const day = brief();
+    expect(day.summary).toMatchObject({ drops: 0, newListings: 0 });
+    const stale = day.buildings.find((r) => r.id === "bbb")!;
+    expect(stale).toMatchObject({ stale: true, drops: [], new: [], listingsAsOf: "2026-11-14T18:00:00Z" });
+    expect(stale.listings).toHaveLength(2);
+    expect(day.buildings.find((r) => r.id === "aaa")!.stale).toBeUndefined();
+  });
+});

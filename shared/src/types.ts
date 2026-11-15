@@ -276,6 +276,18 @@ export interface FloorplanPoint {
   minPrice: number;
   avgPrice: number;
   count: number;
+  /** Lease term (months) the cheapest unit's price was quoted for, when known. */
+  term?: number;
+}
+
+/**
+ * A point in a building's history where what the stored prices MEAN changed
+ * (not the prices themselves), so a step in a chart line at that point is
+ * not a price move. Drawn as a marked line in the price-history chart.
+ */
+export interface MethodChange {
+  t: string;
+  note: string;
 }
 
 export interface PriceChange {
@@ -550,6 +562,8 @@ export interface BuildingHistory {
   alsoListed: AlsoListedCompiled[];
   /** Building-wide notices (specials) from the latest ok scrape. */
   notices: string[];
+  /** Where the meaning of the stored prices changed — see MethodChange. */
+  methodChanges?: MethodChange[];
 }
 
 /** Shape of the compiled config.json (buildings.json + build-time health). */
