@@ -88,7 +88,25 @@ export default function PriceHistoryChart({
     allPlans.forEach((p, i) => map.set(p, i));
     return map;
   }, [allPlans]);
-  const plans = allPlans.slice(0, MAX_PLAN_SERIES);
+  // Which plans get a line: the ones listed right now first, then the ones
+  // with the longest history. A plan name seen in a single run and gone again
+  // (a one-off label) draws nothing useful and is left out.
+  const { plans, plansLeftOut } = useMemo(() => {
+    const latestT = history.latest?.timestamp;
+    const ranked = allPlans
+      .map((plan) => {
+        const series = history.perFloorplan[plan] ?? [];
+        return { plan, n: series.length, current: series[series.length - 1]?.t === latestT };
+      })
+      .filter((x) => x.current || x.n >= 2)
+      .sort(
+        (a, b) => Number(b.current) - Number(a.current) || b.n - a.n || a.plan.localeCompare(b.plan),
+      );
+    return {
+      plans: ranked.slice(0, MAX_PLAN_SERIES).map((x) => x.plan),
+      plansLeftOut: Math.max(0, ranked.length - MAX_PLAN_SERIES),
+    };
+  }, [allPlans, history]);
 
   const unitNumbers = useMemo(
     () => Object.keys(history.perUnit).filter((u) => visibleUnits.has(u)),
@@ -180,8 +198,8 @@ export default function PriceHistoryChart({
               {p}
             </span>
           ))}
-          {allPlans.length > plans.length && (
-            <span className="key">+{allPlans.length - plans.length} more plans (see units view)</span>
+          {plansLeftOut > 0 && (
+            <span className="key">+{plansLeftOut} more plans (see units view)</span>
           )}
         </div>
       )}
