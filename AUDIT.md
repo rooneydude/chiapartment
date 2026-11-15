@@ -223,11 +223,42 @@ and left alone.
   adapter's output: 1225 15/15 units, Old Town Park 19/19/20 (+2 penthouse /
   townhome rows), The Leo 2/2, Stead 13 priced plans + 2 unpriced — matching
   the page the tracker is allowed to read.
-- 196 automated tests, most of them run against pages captured that day
+- 252 automated tests, most of them run against pages captured that day
   (kept under `scraper/fixtures/`, with the August captures as a second set),
   plus `tsc` and a production build.
 - The CI changes were simulated locally (run summary, health gate, push
   rebase-and-retry against a concurrent commit).
+- The first run of the new scraper against the old history was replayed:
+  it raises no alert and reports no new unit, no price change and no date
+  change that did not happen.
+
+## Independent review of the new pipeline
+
+After the rewrite, a separate adversarial review tried to break the
+change-detection code and had to reproduce every claim by running it. It
+confirmed thirteen defects — two serious — all fixed since, each with a test:
+
+- With a full lease table on both days, prices were compared at yesterday's
+  lease length. When the cheapest lease simply changed length that reported a
+  "+61%" rise that never happened, and hid real cuts. Advertised rent is now
+  compared with advertised rent.
+- A listing that sat on the site without a price was invisible to every
+  comparison: getting its price back was never announced. It is now ("has a
+  price again: $1,950, was $2,250 on Oct 27").
+- Old Town Park's range ↔ single-price flips swallowed real price moves that
+  landed on a flip day (46 in the history, 6 of them cuts on studio / 2-bed
+  units). A flipped unit is now compared with the last time it was priced
+  the same way.
+- A same-ratio repricing of every unit was alerted as plain price drops; it
+  now has its own section and says it is probably a concession.
+- Smaller ones: warnings that vanished after a second run the same day; a
+  chart line stepping on the two days the stored number changed meaning (now
+  marked); the daily brief replaying yesterday's news for a building that was
+  not re-scraped; dates invented from text such as "December 2026" or
+  "1-2 weeks"; an outage missed when one tower's request failed outright; a
+  partial second look replacing a full first one; a damaged snapshot file
+  silencing alerts; alert wording (UTC date in the title, scraped text pasted
+  unescaped).
 
 ---
 
