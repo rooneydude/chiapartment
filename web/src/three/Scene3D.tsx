@@ -1,6 +1,14 @@
-import { OrbitControls, Sky } from "@react-three/drei";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { OrbitControls } from "@react-three/drei";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DependencyList,
+  type MutableRefObject,
+} from "react";
 import { useLocation } from "react-router-dom";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -8,16 +16,14 @@ import { makeProjector } from "../../../shared/src/geo";
 import { parseUnitNumber, stackFromPlan } from "../../../shared/src/parse";
 import {
   facadeParam,
-  makeBoxRing,
-  normalizeRing,
   orientedBoxRing,
   placeStackBand,
   placeUnit,
-  ringCentroid,
   type UnitPlacement,
   type Vec2,
 } from "../../../shared/src/placement";
-import { isBuildingFeature } from "../../../shared/src/types";
+import { sunPosition, wallClockInstant } from "../../../shared/src/sun";
+import { CHICAGO_TZ, chicagoDate } from "../../../shared/src/time";
 import type {
   BuildingConfig,
   BuildingHistory,
@@ -25,26 +31,50 @@ import type {
   SkylineCollection,
   UnitMapSidecar,
 } from "../../../shared/src/types";
-import { sunPosition } from "../../../shared/src/sun";
 import { isDarkActive } from "../lib/theme";
 import CompassHud from "../components/CompassHud";
 import TuneOverlay, { type TuneClick } from "../components/TuneOverlay";
 import { loadSkyline, loadUnitMap } from "../lib/data";
 import { useStore } from "../state/store";
+import { atmosphereAt, type Atmosphere } from "./atmosphere";
+import { createCity, FOG_FAR, FOG_NEAR, type City } from "./city";
 import {
-  buildAreaGeometry,
-  buildContextGeometry,
-  buildLineGeometry,
-  buildRoadRibbonGeometry,
+  buildRailGeometry,
   DARK_THEME,
   extrudeRing,
   LIGHT_THEME,
-  makeGroundTexture,
   planToThree,
   type SceneTheme,
 } from "./geometry";
-import { makeFacadeMaterial } from "./facade";
 import Landmarks from "./Landmarks";
+import { resolveSite, type Site } from "./site";
+
+const CAMERA_FOV_DEG = 45;
+const CAMERA = { fov: CAMERA_FOV_DEG, near: 1, far: 9000 };
+const RENDERER = { toneMapping: THREE.NeutralToneMapping };
+// Nothing that casts a shadow moves, so the shadow map is rendered once per
+// sun position or city (see SceneContent) instead of once per frame.
+const SHADOWS = { enabled: true, type: THREE.PCFSoftShadowMap, autoUpdate: false };
+
+/**
+ * `?t=` in the URL: the hour of the day (Chicago wall clock, 0–24, fractions
+ * allowed) to light the scene for. Null = absent or not a time of day.
+ */
+function parseHourOfDay(raw: string | null): number | null {
+  if (raw === null || raw.trim() === "") return null;
+  const hours = Number(raw);
+  return Number.isFinite(hours) && hours >= 0 && hours <= 24 ? hours : null;
+}
+
+/** A memoized GPU resource, freed when it is replaced or its owner unmounts. */
+function useDisposable<T extends { dispose(): void } | null>(
+  create: () => T,
+  deps: DependencyList,
+): T {
+  const resource = useMemo(create, deps);
+  useEffect(() => () => resource?.dispose(), [resource]);
+  return resource;
+}
 
 /** Writes camera azimuth into the compass disc's transform — no React state. */
 function AzimuthBridge({ discRef }: { discRef: MutableRefObject<HTMLDivElement | null> }) {
@@ -72,144 +102,38 @@ function useTheme(): SceneTheme {
   return dark ? DARK_THEME : LIGHT_THEME;
 }
 
-/** Everything the scene needs, derived once per building/skyline. */
-interface SceneModel {
-  ring: Vec2[]; // building footprint, plan meters
-  center: Vec2;
-  buildingHeight: number;
-  contextGeometry: THREE.BufferGeometry | null;
-  roadGeometry: THREE.BufferGeometry | null;
-  roadRibbonGeometry: THREE.BufferGeometry | null;
-  railGeometry: THREE.BufferGeometry | null;
-  waterGeometry: THREE.BufferGeometry | null;
-  parkGeometry: THREE.BufferGeometry | null;
-  trackedGeometry: THREE.BufferGeometry;
-  skyline: SkylineCollection | null;
-  trackedOsmIds: Set<number>;
-  fromOsm: boolean;
-}
-
-function configuredHeight(b: BuildingConfig): number {
-  return b.geometry.groundFloorOffsetM + b.geometry.floors * b.geometry.floorHeightM;
-}
-
-function findFeature(building: BuildingConfig, skyline: SkylineCollection) {
-  return skyline.features.filter(isBuildingFeature).find(
-    (f) =>
-      (building.geometry.osmWayId !== undefined &&
-        f.properties.osmId === building.geometry.osmWayId) ||
-      f.properties.trackedId === building.id,
-  );
-}
-
-function buildModel(
-  building: BuildingConfig,
-  allBuildings: BuildingConfig[],
-  skyline: SkylineCollection | null,
-  contextColor: string,
-): SceneModel {
-  const g = building.geometry;
-  const buildingHeight = configuredHeight(building);
-
-  let ring: Vec2[] | null = null;
-  let contextGeometry: THREE.BufferGeometry | null = null;
-  let roadGeometry: THREE.BufferGeometry | null = null;
-  let roadRibbonGeometry: THREE.BufferGeometry | null = null;
-  let railGeometry: THREE.BufferGeometry | null = null;
-  let waterGeometry: THREE.BufferGeometry | null = null;
-  let parkGeometry: THREE.BufferGeometry | null = null;
-  const trackedOsmIds = new Set<number>();
-  let fromOsm = false;
-
-  if (skyline) {
-    const feature = findFeature(building, skyline);
-    if (feature?.geometry.coordinates[0]) {
-      ring = normalizeRing(feature.geometry.coordinates[0] as Vec2[]);
-      fromOsm = true;
-    }
-    // Other tracked towers keep their configured heights in the context —
-    // OSM's data for new towers is often stale (podium-only levels).
-    const exclude = new Set<number>();
-    const overrides = new Map<number, number>();
-    for (const b of allBuildings) {
-      const f = findFeature(b, skyline);
-      if (!f) continue;
-      trackedOsmIds.add(f.properties.osmId);
-      if (b.id === building.id) exclude.add(f.properties.osmId);
-      else overrides.set(f.properties.osmId, configuredHeight(b));
-    }
-    contextGeometry = buildContextGeometry(skyline, exclude, overrides, contextColor);
-    roadGeometry = buildLineGeometry(skyline, "road");
-    roadRibbonGeometry = buildRoadRibbonGeometry(skyline);
-    railGeometry = buildLineGeometry(skyline, "rail");
-    waterGeometry = buildAreaGeometry(skyline, "water");
-    parkGeometry = buildAreaGeometry(skyline, "park");
-    if (!ring) {
-      const projector = makeProjector(skyline.meta.origin);
-      const [x, y] = projector.toLocal(building.lon, building.lat);
-      ring = makeBoxRing(x, y, g.fallbackWidthM, g.fallbackDepthM);
-    }
-  } else {
-    ring = makeBoxRing(0, 0, g.fallbackWidthM, g.fallbackDepthM);
-  }
-
-  // Extrude the tracked building to its CONFIGURED height (floors-derived),
-  // which the floor math uses — OSM height may disagree.
-  const trackedGeometry = extrudeRing(ring, 0, buildingHeight);
-
-  return {
-    ring,
-    center: ringCentroid(ring),
-    buildingHeight,
-    contextGeometry,
-    roadGeometry,
-    roadRibbonGeometry,
-    railGeometry,
-    waterGeometry,
-    parkGeometry,
-    trackedGeometry,
-    skyline,
-    trackedOsmIds,
-    fromOsm,
-  };
-}
-
-/** Sun direction in three-space from real solar position (clamped to dusk). */
-function sunVector(building: BuildingConfig): [number, number, number] {
-  const { azimuthDeg, altitudeDeg } = sunPosition(new Date(), building.lat, building.lon);
-  const alt = Math.max(altitudeDeg, 12) * (Math.PI / 180); // never fully horizontal
-  const az = azimuthDeg * (Math.PI / 180);
-  const east = Math.sin(az) * Math.cos(alt);
-  const north = Math.cos(az) * Math.cos(alt);
-  const up = Math.sin(alt);
-  return planToThree(east * 900, north * 900, up * 900);
-}
-
 /** Animates the camera between orbit mode and the unit's window viewpoint. */
 function CameraRig({
   placement,
-  center,
-  buildingHeight,
+  city,
+  sunAzDeg,
+  night,
 }: {
   placement: UnitPlacement | null;
-  center: Vec2;
-  buildingHeight: number;
+  city: City;
+  sunAzDeg: number;
+  night: number;
 }) {
   const cameraMode = useStore((s) => s.cameraMode);
   const controls = useRef<OrbitControlsImpl>(null);
-  const goal = useRef<{ pos: THREE.Vector3; target: THREE.Vector3; t: number } | null>(null);
+  const goal = useRef<{
+    pos: THREE.Vector3;
+    target: THREE.Vector3;
+    t: number;
+    started: boolean;
+  } | null>(null);
+  const invalidate = useThree((s) => s.invalidate);
+  const aspect = useThree((s) => s.size.width / Math.max(s.size.height, 1));
 
-  const homePos = useMemo(() => {
-    // Short buildings still need enough distance and altitude to clear
-    // taller neighbors.
-    const d = Math.max(buildingHeight, 110);
-    return new THREE.Vector3(
-      ...planToThree(center[0] + d * 1.5, center[1] - d * 1.7, d * 1.35),
-    );
-  }, [center, buildingHeight]);
-  const homeTarget = useMemo(
-    () => new THREE.Vector3(...planToThree(center[0], center[1], buildingHeight * 0.45)),
-    [center, buildingHeight],
+  // Home view: the whole tower framed for THIS panel's shape, from its
+  // least-occluded side. Recomputed when the panel's shape changes by a
+  // noticeable step — and deliberately not when the time of day does: the
+  // sun only tips the choice of side, and a change of lighting must not send
+  // the camera flying.
+  const aspectStep = Math.round(aspect * 20);
+  const home = useMemo(
+    () => city.homeView({ aspect, fovDeg: CAMERA_FOV_DEG, sunAzDeg, night }),
+    [city, aspectStep],
   );
 
   // Recompute the animation goal when mode or placement changes.
@@ -226,22 +150,33 @@ function CameraRig({
           ),
         ),
         t: 0,
+        started: false,
       };
     } else {
-      goal.current = { pos: homePos.clone(), target: homeTarget.clone(), t: 0 };
+      goal.current = {
+        pos: home.position.clone(),
+        target: home.target.clone(),
+        t: 0,
+        started: false,
+      };
     }
-  }, [cameraMode, placement, homePos, homeTarget]);
+    invalidate(); // frames are rendered on demand: ask for the first one
+  }, [cameraMode, placement, home, invalidate]);
 
   useFrame(({ camera }, delta) => {
     const g = goal.current;
     const c = controls.current;
     if (!g || !c) return;
-    g.t = Math.min(g.t + delta * 1.8, 1);
+    // The first frame after a pause reports the whole pause as its delta,
+    // which would finish the move in one jump: the move's clock starts here.
+    if (g.started) g.t = Math.min(g.t + delta * 1.8, 1);
+    g.started = true;
     const k = 1 - Math.pow(1 - g.t, 3); // ease-out cubic
     camera.position.lerp(g.pos, k);
     c.target.lerp(g.target, k);
     c.update();
     if (g.t >= 1) goal.current = null; // hand control back to the user
+    else invalidate(); // keep the frames coming until the move is done
   });
 
   return (
@@ -258,42 +193,71 @@ function CameraRig({
 }
 
 function SceneContent({
-  building,
-  model,
+  site,
+  skyline,
   theme,
-  exactFor,
+  atmosphere,
+  placement,
   onTuneClick,
 }: {
-  building: BuildingConfig;
-  model: SceneModel;
+  site: Site;
+  skyline: SkylineCollection | null;
   theme: SceneTheme;
-  exactFor: (unit: string | null) => { x: number; y: number } | undefined;
+  atmosphere: Atmosphere;
+  placement: UnitPlacement | null;
   onTuneClick?: (c: TuneClick) => void;
 }) {
-  const selectedUnit = useStore((s) => s.selectedUnit);
   const selectedPlan = useStore((s) => s.selectedPlan);
   const setFloorRange = useStore((s) => s.setFloorRange);
   const floorMin = useStore((s) => s.floorMin);
   const floorMax = useStore((s) => s.floorMax);
+  const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
+  const { building, ring, center } = site;
   const g = building.geometry;
 
-  const placement = useMemo(
-    () =>
-      selectedUnit
-        ? placeUnit(selectedUnit, building.unitMapping, g, model.ring, exactFor(selectedUnit))
-        : null,
-    [selectedUnit, building, g, model.ring, exactFor],
+  // The static city. It is disposed from an effect of THIS component, inside
+  // the canvas: by the time that cleanup runs, r3f has taken the old city out
+  // of the scene, so no later frame can draw (and thereby re-upload) it.
+  const city = useMemo(() => createCity(site, skyline), [site, skyline]);
+  useEffect(() => () => city.dispose(), [city]);
+
+  // The atmosphere drives every light, sky uniform, the fog and the exposure.
+  // A layout effect, so that no frame is drawn with the previous look.
+  useLayoutEffect(() => {
+    city.setAtmosphere(atmosphere);
+    city.setAccent(theme.accent);
+    gl.toneMappingExposure = atmosphere.exposure;
+    gl.shadowMap.needsUpdate = true;
+    invalidate();
+  }, [city, atmosphere, theme.accent, gl, invalidate]);
+
+  // Nothing redraws by itself here, so a restored WebGL context has to be
+  // asked for a fresh frame and a fresh shadow map.
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onRestored = () => {
+      gl.shadowMap.needsUpdate = true;
+      invalidate();
+    };
+    canvas.addEventListener("webglcontextrestored", onRestored);
+    return () => canvas.removeEventListener("webglcontextrestored", onRestored);
+  }, [gl, invalidate]);
+
+  const railGeometry = useDisposable(
+    () => (skyline ? buildRailGeometry(skyline.features) : null),
+    [skyline],
   );
 
   // Full-height band when a floorplan-as-stack is selected (Stead 220).
-  const bandGeometry = useMemo(() => {
+  const bandGeometry = useDisposable(() => {
     if (!selectedPlan || !building.unitMapping) return null;
     const stack = stackFromPlan(selectedPlan, building.unitMapping);
     if (!stack) return null;
-    const band = placeStackBand(stack, building.unitMapping, g, model.ring);
+    const band = placeStackBand(stack, building.unitMapping, g, ring);
     if (!band) return null;
     return extrudeRing(orientedBoxRing(band.point, band.normal, 9, 5), band.zMin, band.zMax);
-  }, [selectedPlan, building, g, model.ring]);
+  }, [selectedPlan, building, g, ring]);
 
   // Clicking the tower: tune mode emits a stacks-config snippet; otherwise
   // filter the table to the clicked floor.
@@ -302,7 +266,7 @@ function SceneContent({
     const z = e.point.y; // three y == height
     const floor = Math.floor((z - g.groundFloorOffsetM) / g.floorHeightM) + 1;
     if (onTuneClick) {
-      const fp = facadeParam(model.ring, [e.point.x, -e.point.z]);
+      const fp = facadeParam(ring, [e.point.x, -e.point.z]);
       if (fp) {
         onTuneClick({
           facing: fp.facing,
@@ -318,147 +282,59 @@ function SceneContent({
     }
   };
 
-  const slabGeometry = useMemo(() => {
-    if (!placement?.floorSlab) return null;
-    return extrudeRing(
-      model.ring.map(([x, y]): Vec2 => {
-        // Slightly outset so the slab reads through the tower walls.
-        const [cx, cy] = model.center;
-        const dx = x - cx;
-        const dy = y - cy;
+  // Floor bands wrap the tower just outside its walls, which are opaque.
+  const bandRing = useMemo(
+    () =>
+      ring.map(([x, y]): Vec2 => {
+        const dx = x - center[0];
+        const dy = y - center[1];
         const len = Math.hypot(dx, dy) || 1;
         return [x + (dx / len) * 0.6, y + (dy / len) * 0.6];
       }),
-      placement.floorSlab.zMin,
-      placement.floorSlab.zMax,
-    );
-  }, [placement, model]);
+    [ring, center],
+  );
 
-  const filterSlabGeometry = useMemo(() => {
+  const slabGeometry = useDisposable(
+    () =>
+      placement?.floorSlab
+        ? extrudeRing(bandRing, placement.floorSlab.zMin, placement.floorSlab.zMax)
+        : null,
+    [placement, bandRing],
+  );
+
+  const filterSlabGeometry = useDisposable(() => {
     if (floorMin === null && floorMax === null) return null;
     if (placement) return null; // selected-unit slab wins
     const lo = floorMin ?? 1;
     const hi = floorMax ?? g.floors;
     return extrudeRing(
-      model.ring,
+      bandRing,
       g.groundFloorOffsetM + (lo - 1) * g.floorHeightM,
       g.groundFloorOffsetM + hi * g.floorHeightM,
     );
-  }, [floorMin, floorMax, placement, model, g]);
-
-  const sunPos = useMemo(() => sunVector(building), [building]);
-  const outlineGeometry = useMemo(
-    () => new THREE.EdgesGeometry(model.trackedGeometry, 25),
-    [model.trackedGeometry],
-  );
-  const facadeMaterial = useMemo(
-    () => makeFacadeMaterial({ night: !theme.sky, vertexColors: true }),
-    [theme.sky],
-  );
-  const groundTexture = useMemo(
-    () => makeGroundTexture(theme.ground, theme.groundEdge),
-    [theme.ground, theme.groundEdge],
-  );
-
-  // The sun shadow camera must track the building (scenes sit far from the
-  // world origin — Stead is ~2.5 km from the Wells corridor).
-  const sunRef = useRef<THREE.DirectionalLight>(null);
-  const [cx, cy] = model.center;
-  useEffect(() => {
-    const light = sunRef.current;
-    if (!light) return;
-    light.target.position.set(...planToThree(cx, cy, 0));
-    light.target.updateMatrixWorld();
-  }, [cx, cy]);
+  }, [floorMin, floorMax, placement, bandRing, g]);
 
   return (
     <>
-      <fog attach="fog" args={[theme.fog, 700, 3600]} />
-      {theme.sky && (
-        <Sky sunPosition={sunPos} turbidity={6} rayleigh={1.2} distance={45000} />
-      )}
-      <ambientLight intensity={theme.sky ? 0.7 : 0.85} />
-      <directionalLight
-        ref={sunRef}
-        position={[sunPos[0] + cx, sunPos[1], sunPos[2] - cy]}
-        intensity={theme.sky ? 1.7 : 1.0}
-        color="#fff4e0"
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-900}
-        shadow-camera-right={900}
-        shadow-camera-top={900}
-        shadow-camera-bottom={-900}
-        shadow-camera-near={10}
-        shadow-camera-far={2600}
-        shadow-bias={-0.0004}
-      />
-      <directionalLight position={[-300, 200, -400]} intensity={0.3} />
+      <fog attach="fog" color={atmosphere.horizon} near={FOG_NEAR} far={FOG_FAR} />
+      <primitive object={city.group} />
+      <primitive object={city.hero} onClick={onBuildingClick} />
 
-      {/* ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
-        <circleGeometry args={[3800, 48]} />
-        <meshLambertMaterial map={groundTexture} />
-      </mesh>
-
-      {/* water + parks */}
-      {model.waterGeometry && (
-        <mesh geometry={model.waterGeometry} receiveShadow>
-          <meshPhongMaterial color={theme.water} shininess={90} specular="#ffffff" />
-        </mesh>
-      )}
-      {model.parkGeometry && (
-        <mesh geometry={model.parkGeometry} receiveShadow>
-          <meshLambertMaterial color={theme.park} />
-        </mesh>
-      )}
-
-      {/* merged skyline context (vertex colors + procedural windows) */}
-      {model.contextGeometry && (
-        <mesh geometry={model.contextGeometry} material={facadeMaterial} castShadow receiveShadow />
-      )}
-
-      {/* streets + rail */}
-      {model.roadRibbonGeometry && (
-        <mesh geometry={model.roadRibbonGeometry} receiveShadow>
-          <meshLambertMaterial color={theme.roadRibbon} />
-        </mesh>
-      )}
-      {model.roadGeometry && (
-        <lineSegments geometry={model.roadGeometry}>
-          <lineBasicMaterial color={theme.road} />
-        </lineSegments>
-      )}
-      {model.railGeometry && (
-        <lineSegments geometry={model.railGeometry}>
+      {railGeometry && (
+        <lineSegments geometry={railGeometry}>
           <lineBasicMaterial color={theme.rail} />
         </lineSegments>
       )}
 
-      {/* station markers + landmark labels */}
-      {model.skyline && (
+      {/* station markers, landmark and street labels */}
+      {skyline && (
         <Landmarks
-          skyline={model.skyline}
-          center={model.center}
+          skyline={skyline}
+          center={center}
           theme={theme}
-          excludeOsmIds={model.trackedOsmIds}
+          excludeOsmIds={site.trackedOsmIds}
         />
       )}
-
-      {/* the tracked building — glassy hero material */}
-      <mesh geometry={model.trackedGeometry} onClick={onBuildingClick} castShadow>
-        <meshPhongMaterial
-          color={theme.accent}
-          transparent
-          opacity={0.58}
-          shininess={70}
-          specular="#dfeeff"
-          flatShading
-        />
-      </mesh>
-      <lineSegments geometry={outlineGeometry}>
-        <lineBasicMaterial color={theme.outline} transparent opacity={0.5} />
-      </lineSegments>
 
       {/* selected unit floor slab */}
       {slabGeometry && (
@@ -481,24 +357,31 @@ function SceneContent({
         </mesh>
       )}
 
-      {/* unit marker beacon */}
+      {/* unit marker beacon: sits just inside the facade, so it is drawn over everything */}
       {placement?.marker && (
         <group position={planToThree(...placement.marker)}>
-          <mesh>
+          <mesh renderOrder={10}>
             <sphereGeometry args={[2.4, 20, 20]} />
-            <meshBasicMaterial color={theme.marker} />
+            <meshBasicMaterial color={theme.marker} depthTest={false} toneMapped={false} />
           </mesh>
-          <mesh>
+          <mesh renderOrder={10}>
             <sphereGeometry args={[4.2, 20, 20]} />
-            <meshBasicMaterial color={theme.marker} transparent opacity={0.25} />
+            <meshBasicMaterial
+              color={theme.marker}
+              transparent
+              opacity={0.25}
+              depthTest={false}
+              toneMapped={false}
+            />
           </mesh>
         </group>
       )}
 
       <CameraRig
         placement={placement}
-        center={model.center}
-        buildingHeight={model.buildingHeight}
+        city={city}
+        sunAzDeg={atmosphere.azDeg}
+        night={atmosphere.night}
       />
     </>
   );
@@ -522,8 +405,11 @@ export default function Scene3D({
   const cameraMode = useStore((s) => s.cameraMode);
   const setCameraMode = useStore((s) => s.setCameraMode);
   // HashRouter reconciles this component across /b/:id routes — the query
-  // must come from the router so ?tune=1 applies without a full reload.
-  const tuneMode = new URLSearchParams(useLocation().search).has("tune");
+  // must come from the router so ?tune=1 and ?t= apply without a full reload.
+  const { search } = useLocation();
+  const query = useMemo(() => new URLSearchParams(search), [search]);
+  const tuneMode = query.has("tune");
+  const hours = parseHourOfDay(query.get("t")) ?? theme.defaultHour;
 
   useEffect(() => {
     void loadSkyline().then(setSkyline);
@@ -533,11 +419,22 @@ export default function Scene3D({
     void loadUnitMap(building.id).then(setUnitMap);
   }, [building.id]);
 
-  const model = useMemo(
-    () =>
-      skyline === undefined ? null : buildModel(building, allBuildings, skyline, theme.context),
-    [building, allBuildings, skyline, theme.context],
+  // undefined while the skyline loads; a null skyline (none generated) still
+  // gives a site: the tower alone, on its fallback box.
+  const site = useMemo(
+    () => (skyline === undefined ? null : resolveSite(building, allBuildings, skyline)),
+    [building, allBuildings, skyline],
   );
+
+  // The scene is lit for today at `hours` on Chicago's clocks.
+  const litAt = useMemo(
+    () => wallClockInstant(chicagoDate(new Date()), hours, CHICAGO_TZ),
+    [hours],
+  );
+  const atmosphere = useMemo(() => {
+    const sun = sunPosition(litAt, building.lat, building.lon);
+    return atmosphereAt(sun.altitudeDeg, sun.azimuthDeg);
+  }, [litAt, building.lat, building.lon]);
 
   // Exact sidecar position (projected into scene-local meters) for a unit.
   const exactFor = useMemo(() => {
@@ -553,16 +450,16 @@ export default function Scene3D({
 
   const placement = useMemo(
     () =>
-      model && selectedUnit
+      site && selectedUnit
         ? placeUnit(
             selectedUnit,
             building.unitMapping,
             building.geometry,
-            model.ring,
+            site.ring,
             exactFor(selectedUnit),
           )
         : null,
-    [model, selectedUnit, building, exactFor],
+    [site, selectedUnit, building, exactFor],
   );
 
   useEffect(() => {
@@ -592,7 +489,7 @@ export default function Scene3D({
     return null;
   }, [selectedUnit, selectedPlan, mapping]);
 
-  if (!model) {
+  if (!site || skyline === undefined) {
     return (
       <div className="scene-wrap">
         <div className="scene-empty">Loading 3D scene…</div>
@@ -616,20 +513,23 @@ export default function Scene3D({
     <div className="scene-wrap">
       <Canvas
         dpr={[1, 2]}
-        shadows
-        camera={{ fov: 45, near: 1, far: 8000 }}
+        frameloop="demand"
+        shadows={SHADOWS}
+        gl={RENDERER}
+        camera={CAMERA}
         style={{ background: theme.background }}
       >
         <SceneContent
-          building={building}
-          model={model}
+          site={site}
+          skyline={skyline}
           theme={theme}
-          exactFor={exactFor}
+          atmosphere={atmosphere}
+          placement={placement}
           {...(tuneMode ? { onTuneClick: setTuneClick } : {})}
         />
         <AzimuthBridge discRef={discRef} />
       </Canvas>
-      <CompassHud building={building} facing={facing} discRef={discRef} />
+      <CompassHud building={building} facing={facing} discRef={discRef} at={litAt} />
       {tuneMode && (
         <TuneOverlay mapping={mapping} lastClick={tuneClick} selectedStack={selectedStack} />
       )}

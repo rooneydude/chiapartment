@@ -71,6 +71,20 @@ export function ringCentroid(ring: Vec2[]): Vec2 {
   return [cx / (6 * area), cy / (6 * area)];
 }
 
+/** Even-odd test: is `point` inside the ring? Works for either winding. */
+export function pointInRing(point: Vec2, ring: Vec2[]): boolean {
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!;
+    const b = ring[j]!;
+    if (a[1] > y !== b[1] > y && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 /** Axis-aligned box ring (CCW) centered at [cx, cy]. */
 export function makeBoxRing(cx: number, cy: number, width: number, depth: number): Vec2[] {
   const hw = width / 2;

@@ -20,19 +20,22 @@ export default function CompassHud({
   building,
   facing,
   discRef,
+  at,
 }: {
   building: BuildingConfig;
   facing: Facing | null;
   discRef: MutableRefObject<HTMLDivElement | null>;
+  /** The moment the scene is lit for, so that ☀ sits where its shadows come from. Default: now. */
+  at?: Date;
 }) {
   const sun = useMemo(() => {
-    const now = new Date();
-    const pos = sunPosition(now, building.lat, building.lon);
-    const riseSet = sunriseSunsetAzimuths(now, building.lat, building.lon);
+    const when = at ?? new Date();
+    const pos = sunPosition(when, building.lat, building.lon);
+    const riseSet = sunriseSunsetAzimuths(when, building.lat, building.lon);
     return { pos, riseSet };
-  }, [building]);
+  }, [building, at]);
 
-  const sunNow = sun.pos.altitudeDeg > 0 ? pt(sun.pos.azimuthDeg, R - 10) : null;
+  const sunMark = sun.pos.altitudeDeg > 0 ? pt(sun.pos.azimuthDeg, R - 10) : null;
   const rise = sun.riseSet ? pt(sun.riseSet.sunriseAz, R - 4) : null;
   const set = sun.riseSet ? pt(sun.riseSet.sunsetAz, R - 4) : null;
   const facingPt = facing !== null ? pt(facingBearingDeg(facing), R - 14) : null;
@@ -56,8 +59,8 @@ export default function CompassHud({
               <circle cx={set.x} cy={set.y} r={2.5} className="compass-sunmark" />
             </>
           )}
-          {sunNow && (
-            <text x={sunNow.x} y={sunNow.y + 4} textAnchor="middle" fontSize={11}>
+          {sunMark && (
+            <text x={sunMark.x} y={sunMark.y + 4} textAnchor="middle" fontSize={11}>
               ☀
             </text>
           )}
