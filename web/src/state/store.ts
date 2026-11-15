@@ -2,6 +2,8 @@ import { create } from "zustand";
 
 export type ChartMode = "floorplans" | "units";
 export type CameraMode = "orbit" | "unit-view";
+/** null = any move-in date; 0 = available now; N = within N days. */
+export type MoveInWithin = number | null;
 
 interface AppState {
   selectedUnit: string | null;
@@ -11,6 +13,13 @@ interface AppState {
   chartMode: ChartMode;
   cameraMode: CameraMode;
   bedsFilter: number[] | null; // null = all; 3 means "3+"
+  /** Move-in filter. Defaults to null (no restriction) on every building. */
+  moveInWithin: MoveInWithin;
+  /**
+   * Lease length to price the table at, where a site publishes a lease-term
+   * table. null = the price and term the site itself advertises.
+   */
+  leaseTerm: number | null;
   floorMin: number | null;
   floorMax: number | null;
   selectUnit(unit: string | null): void;
@@ -19,6 +28,9 @@ interface AppState {
   setChartMode(mode: ChartMode): void;
   setCameraMode(mode: CameraMode): void;
   toggleBeds(beds: number): void;
+  setBedsFilter(beds: number[] | null): void;
+  setMoveInWithin(within: MoveInWithin): void;
+  setLeaseTerm(months: number | null): void;
   setFloorRange(min: number | null, max: number | null): void;
   resetForBuilding(focusBeds?: number[] | null): void;
 }
@@ -30,6 +42,8 @@ export const useStore = create<AppState>((set) => ({
   chartMode: "floorplans",
   cameraMode: "orbit",
   bedsFilter: null,
+  moveInWithin: null,
+  leaseTerm: null,
   floorMin: null,
   floorMax: null,
   selectUnit: (unit) =>
@@ -52,6 +66,9 @@ export const useStore = create<AppState>((set) => ({
         : [...current, beds];
       return { bedsFilter: next.length === 0 ? null : next };
     }),
+  setBedsFilter: (beds) => set({ bedsFilter: beds && beds.length > 0 ? beds : null }),
+  setMoveInWithin: (moveInWithin) => set({ moveInWithin }),
+  setLeaseTerm: (leaseTerm) => set({ leaseTerm }),
   setFloorRange: (floorMin, floorMax) => set({ floorMin, floorMax }),
   resetForBuilding: (focusBeds) =>
     set({
@@ -61,6 +78,9 @@ export const useStore = create<AppState>((set) => ({
       cameraMode: "orbit",
       // Buildings open pre-filtered to the beds the user shops for.
       bedsFilter: focusBeds && focusBeds.length > 0 ? focusBeds : null,
+      // Never restrict by move-in date or lease length unless asked to.
+      moveInWithin: null,
+      leaseTerm: null,
       floorMin: null,
       floorMax: null,
     }),

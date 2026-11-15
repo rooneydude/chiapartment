@@ -107,7 +107,7 @@ button {
 
 /* ---- shell ---- */
 .shell {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px 48px;
 }
@@ -371,7 +371,10 @@ table.units td.num.price-cell {
 
 .bldg-grid {
   display: grid;
-  grid-template-columns: minmax(430px, 1fr) minmax(380px, 1fr);
+  /* The listing table carries rent, lease and move-in columns — it gets the
+     wider share; minmax(0, …) lets it shrink and scroll instead of
+     overflowing its panel. */
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -454,7 +457,7 @@ table.units td.num.price-cell {
 /* ---- table ---- */
 .tbl-wrap {
   overflow-x: auto;
-  max-height: 460px;
+  max-height: 560px;
   overflow-y: auto;
 }
 
@@ -521,6 +524,222 @@ table.units tbody tr.sel {
 }
 
 .removed-block s {
+  color: var(--text-secondary);
+}
+
+/* ---- listing table: lease terms, move-in, detail rows ---- */
+.muted {
+  color: var(--text-muted);
+}
+
+table.units .caret {
+  display: inline-block;
+  width: 1.1em;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+table.units .plan-name {
+  display: inline-block;
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+table.units .lease-col {
+  line-height: 1.25;
+}
+
+table.units .lease-term {
+  font-variant-numeric: tabular-nums;
+}
+
+table.units .lease-compare {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+table.units .price-fallback {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+table.units .special-mark {
+  margin-left: 4px;
+  cursor: help;
+}
+
+.badge.now {
+  color: var(--delta-good);
+  border-color: color-mix(in srgb, var(--delta-good) 45%, transparent);
+  background: color-mix(in srgb, var(--delta-good) 9%, transparent);
+}
+
+table.units tbody tr.open td {
+  border-bottom-color: transparent;
+}
+
+table.units tbody tr.detail-row,
+table.units tbody tr.empty-row {
+  cursor: default;
+}
+
+table.units tbody tr.detail-row:hover,
+table.units tbody tr.empty-row:hover {
+  background: none;
+}
+
+table.units tbody tr.detail-row td {
+  padding: 0 10px 12px 28px;
+  white-space: normal;
+  box-shadow: inset 3px 0 0 var(--series-1);
+  background: var(--accent-soft);
+}
+
+table.units tbody tr.empty-row td {
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.unit-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.unit-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.unit-detail-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.unit-detail-note {
+  max-width: 68ch;
+}
+
+.lease-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.lease-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.lease-cell .lease-months {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lease-cell .lease-price {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.lease-cell .lease-extra {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lease-cell.cheapest .lease-price,
+.lease-cell.cheapest .lease-extra {
+  color: var(--delta-good);
+}
+
+.lease-cell.advertised {
+  border-color: var(--series-1);
+  box-shadow: inset 0 0 0 1px var(--series-1);
+}
+
+.lease-cell.compare .lease-months::after {
+  content: " ★";
+  color: var(--status-warning);
+}
+
+.unit-link {
+  align-self: flex-start;
+  color: var(--series-1);
+  font-weight: 600;
+}
+
+.unit-link:hover,
+.also-listed a:hover {
+  text-decoration: underline;
+}
+
+.also-listed {
+  padding: 10px 16px 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--grid-line);
+}
+
+.also-listed-title {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.also-listed ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.also-listed a {
+  color: var(--series-1);
+  font-weight: 600;
+}
+
+.also-listed .also-bits {
+  color: var(--text-muted);
+}
+
+.filters select {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.stat-term {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.card-movein {
+  font-size: 12.5px;
   color: var(--text-secondary);
 }
 
