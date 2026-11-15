@@ -22,7 +22,7 @@ on:
   schedule:
     # Every morning, Chicago time (14:17 UTC ≈ 8/9am depending on DST).
     # Deliberately NOT on the hour: GitHub queues scheduled runs at :00 for
-    # hours (the 14:00 runs of Nov 2026 actually started 18:00–21:20 UTC).
+    # hours (the 14:00 runs of Nov 2026 actually started 18:30–23:20 UTC).
     - cron: "17 14 * * *"
 
 permissions:

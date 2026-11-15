@@ -1,4 +1,239 @@
-# chiapartment audit — 8 Sep 2026
+# chiapartment audit — 15 Nov 2026
+
+Full audit of the tracker against the live leasing sites, prompted by the
+owner's worry that it "isn't working properly", plus the fixes it led to.
+Every building's site was read live on 15 Nov 2026 and compared, unit by
+unit, with what the tracker had stored and published. The previous audit
+(8 Sep 2026) is kept below for the record; where the two disagree, this one
+wins — in particular the 14-month lease filter that audit endorsed is gone.
+
+## Verdict
+
+The tracker was running every day and its history is intact, but **what it
+showed was materially wrong for five of the six buildings**:
+
+| Building | What the site listed on 15 Nov | What the tracker showed | Why |
+|---|---|---|---|
+| 1225 Old Town | 15 units | **7** — and 4 of those 7 at a different price than the site | A 14-month lease filter dropped every future-move-in unit and re-priced the rest |
+| Old Town Park I–III | 58 units, 32 with a future move-in date | 58 units, **no future move-in date** on any of them | The date format the site prints (`12/10/2026`) was not understood |
+| The Leo | 2 units | 2 units, but the cheaper one filed as a 1-bedroom, so the studio view showed **nothing** | "JR 1 Bedroom" read as "1" |
+| Stead 220 | 14 priced plans | 13, **4 at stale prices**, 1 missing | The page the tracker reads is a 1–5 day delayed copy of the building's price list |
+| every building | — | every move-in date **one day early** ("Sep 21" for 22 Sep) | Calendar dates were formatted through a time zone |
+
+Lease terms — the thing the owner most wanted to see — were recorded for no
+unit at all in a usable form: 1225 publishes a full lease-length price table
+per unit and the tracker threw it away; the other three sites do not publish
+lease lengths, and the tracker did not say so.
+
+All of this is fixed on this branch, verified against the live sites the same
+day, and covered by tests built from that day's real pages. **It goes live
+when this branch is merged into the default branch** — the scheduled refresh
+runs the default branch's code.
+
+## What was wrong, building by building
+
+### 1225 Old Town (SightMap)
+
+- `focus.maxLeaseTermMonths: 14` was meant to hide "teaser" 18-month prices.
+  In practice every unit on this site is advertised with "18 Months" (it is
+  simply the longest lease at the lowest price — for 9 of 15 units a 12- or
+  13-month lease costs the same), so the filter put **every** unit through a
+  re-pricing path each day.
+- That path asked SightMap's lease-price API without a move-in date. For a
+  unit that is not vacant yet the API then answers with an empty table, and
+  the unit was dropped as "over the cap". Result: **every future-move-in unit
+  was missing from all 64 daily snapshots from 12 Sep to 14 Nov** (424
+  omitted unit-rows since the filter went in on 8 Sep), including 2 of the 3
+  two-bedrooms on 14 Nov — the dashboard's "cheapest 2 BR" read $5,071 while
+  the site offered $4,874.
+- Units that survived were stored at the cheapest price within 14 months,
+  and which lease length that was hopped between 8 and 14 months from day to
+  day. 49 of the 122 price changes recorded for this building since 8 Sep
+  coincide with such a switch — false drops and rises, some of them alerted
+  on.
+- Not stored at all: the lease-length price table (17 lengths, 2–18 months,
+  different for each move-in date), the mandatory $100–$230 monthly utility
+  bundle the site adds to its headline price, the site-wide special, and the
+  day a vacant unit actually became vacant.
+- 7 of the 250 apartments on the site's floor plate are drawn as rectangles
+  rather than polygons and were skipped by the 3D position map (one of
+  them, 0509, is listed today).
+
+### Old Town Park I, II, III
+
+- Future move-in dates are printed as `M/D/YYYY`. The parser only understood
+  "Available" and month names, so **not one future date was recorded** in
+  any snapshot through 14 Nov (8,085 unit rows).
+- For five floor plans the site alternates between two prices — a range
+  (`$3,355 – $3,709`) one minute, a single different figure the next. Each
+  flip was recorded as a price change: 108 of them so far. The underlying
+  per-lease-length prices live in the leasing portal, which sits behind a
+  Cloudflare challenge the tracker does not try to pass, so neither state can
+  be called the true one.
+- Penthouse and townhome rows (no bed count on the page) were dropped without
+  a trace; square footage silently included the terrace; "Jr. 2 Bed",
+  "1 Bed + Flex" and "Convertible" were flattened to a bed count.
+
+### The Leo
+
+- Unit 602 is a "JR 1 Bedroom" (508 sq ft, the cheapest apartment in the
+  building; the site's own structured data counts it as 0 bedrooms). The
+  tracker took the digit in the label and filed it as a 1-bedroom, so with
+  the owner's studio + 2-bedroom focus the building showed "0 of 2".
+- Both units say "Available Now" on the site; the tracker showed "Sep 21"
+  and "Nov 9" — the day each became vacant, shifted a day early.
+- On 12 Nov both rents fell by exactly the same ratio (×17/18) the day a
+  "half a month free" banner went up; the site says its prices "may include
+  concessions". The tracker reported two ordinary price drops and recorded no
+  special.
+- The scrape failed on 16 of 115 runs — almost certainly the site's bot
+  protection, though the old error messages did not record what was served.
+  On each failure the old code made six more attempts with a headless
+  browser; that rescued no run since early September. A sold-out building
+  would have been recorded as a permanent scrape failure.
+
+### Stead 220
+
+- The site lists floor-plan stacks ("Unit 01" … "Unit 13") with a "starting
+  from" price, not apartments; it publishes no square footage, no lease
+  lengths and no move-in dates (every active plan carries the same
+  "Available Now" label). That part was handled correctly.
+- But the page the tracker reads is a **delayed copy** of the building's own
+  price list. Twelve dated price edits reached the snapshots 21–118 hours
+  late (median about 68). On 15 Nov four of thirteen tracked prices differed
+  from what a visitor's browser shows, and a re-listed $2,450 studio — the
+  cheapest in the building — was missing.
+- Plans switched to "Contact for Pricing" (two studios today) were dropped
+  and then reported as "removed"; when a price came back they were announced
+  as new — seven such events for studios so far.
+- Eleven requests per run, ten of them to plan pages that hold nothing the
+  tracker can use (and, before the browser fills them in, placeholder prices).
+
+### Everything downstream
+
+- Calendar dates were formatted in Chicago time from midnight UTC, so every
+  move-in date on the site showed the previous day.
+- A building page opened pre-filtered to the owner's sizes even when that
+  left it empty.
+- The alert job created its issue before the snapshot was pushed, alerted on
+  every single-day bot refusal, and re-announced other buildings' changes on
+  a single-building refresh.
+- The scheduled run is set for 14:00 UTC, but in November GitHub started it
+  between 18:30 and 23:20 UTC (4½–9 hours late; verified in the run history).
+
+## What changed
+
+**Nothing is filtered at scrape time any more.** Every unit a site lists is
+stored at the price the site itself advertises, so any number can be checked
+against the website at a glance. The lease length the owner compares at
+(`focus.compareLeaseTermMonths`, default 12) is a view setting.
+
+Scrapers
+- 1225: every unit, with its advertised lease length, the **full lease-length
+  price table** for its own move-in date, the move-in date, mandatory monthly
+  fees, an apply link, the site special and (when the marketing page answers)
+  the day a vacant unit became vacant. 15/15 units, 17 lease lengths each.
+- Old Town Park: move-in dates for every unit; interior and outdoor area kept
+  apart; the printed price wins over hidden attributes; unit types kept;
+  penthouse / townhome rows listed separately; a deep link per unit into the
+  leasing portal; a second look, 75 seconds later, whenever a plan appears to
+  have flipped between its two pricing states. One tower with an empty page
+  is recorded as fully leased; all three empty in the same run (as on 1 Oct)
+  is recorded as a site outage, not three sell-outs.
+- The Leo: junior one-beds classified as the site classifies them and shown
+  under their own name; "available now" with the vacancy date; the special
+  and the concession disclaimer recorded; an empty building is an empty
+  building; a refusal by the bot protection is recorded as exactly that and
+  left alone — one request, no browser, no retry.
+- Stead 220: one request; "Contact for Pricing" and switched-off plans kept
+  on the record; each price carries the day the building last edited it.
+
+Pipeline
+- Price changes are like for like: the same lease length where the site
+  publishes one, never a range against a single figure. What cannot be
+  compared is recorded as such and never alerted on.
+- Move-in date changes are tracked. A plan whose price is withdrawn is still
+  listed (with the price it last carried); a unit that leaves and returns is
+  "back", not "new".
+- Warnings for a collapsed scrape (missing lease tables or dates), for every
+  unit repricing by the same ratio (a concession, not a rent change), and for
+  snapshot files that no longer parse.
+- `brief.json` carries every focus-size listing with lease terms and move-in
+  dates.
+
+Dashboard
+- Columns for lease length and move-in date; a row opens into the lease-length
+  price table, the fees, and a link to the unit on the leasing site.
+- Filters for move-in window and lease length that default to "everything";
+  hidden rows are counted, never silent.
+- Each building page says in plain words what its site does and does not
+  publish, and a dash is footnoted as "the site does not say".
+- Dates are calendar dates. Stale or failed data is banner-flagged.
+
+Operations
+- Refresh is scheduled at :17 rather than on the hour (GitHub's documented
+  remedy for late scheduled runs), pushes data before alerting, survives a
+  concurrent commit, lists each building's result on the run page and turns
+  red when nothing at all could be read.
+
+History is untouched: no committed snapshot was changed or removed, and all
+117 still load. Units the old filter hid are restored to the per-unit history
+at build time from the `omitted` records those snapshots already carried.
+
+## What each site publishes — and what cannot be had
+
+| | Units | Lease lengths | Move-in dates | Not obtainable |
+|---|---|---|---|---|
+| 1225 Old Town | every unit | ✅ full table per unit and move-in date | ✅ | — |
+| Old Town Park | every unit | ❌ a price or range only | ✅ | per-term prices (leasing portal, Cloudflare-protected) |
+| The Leo | every unit | ❌ one "starting at" rent | ✅ | lease lengths, gross rent before concessions |
+| Stead 220 | floor-plan stacks | ❌ | ❌ ("Available Now" on everything) | sq ft, dates, lease lengths, true inventory (RentCafe, Cloudflare-protected) |
+
+Bot protection was met at three places (Old Town Park's SecureCafe portal,
+RentCafe for Stead, and intermittently The Leo). In each case it was recorded
+and left alone.
+
+## Decisions for the owner
+
+1. **Merge this branch** to make any of it live. Until then the scheduled
+   refresh keeps running the old scraper on the default branch.
+2. **Stead 220's live prices.** The current, per-floor rents are served by
+   the site's own JSON endpoint under `/api/`, which every visitor's browser
+   calls — and which the site's `robots.txt` asks robots not to fetch. The
+   tracker does not use it. Using it would fix the 1–5 day lag and give
+   per-floor rents (up to three per stack); it is the owner's call, not an
+   implementation detail. (During this audit one automated check made five
+   requests to that endpoint before reading `robots.txt`; none since.)
+3. **Junior one-beds count as studios.** The Leo's site counts them as 0
+   bedrooms, so they now appear in the studio view, labelled "Jr 1 Bedroom".
+
+## What to expect on the first run after merging
+
+- 1225 goes from 7 to all listed units. They are not announced as new — the
+  old snapshots recorded them as omitted — and their prices are compared with
+  the old ones at the same lease length.
+- Old Town Park units gain move-in dates; that is not reported as a date
+  change.
+- The Leo's "1 BR" line in the floor-plan chart steps up on 15 Nov because
+  the junior one-bed now has a line of its own.
+
+## How it was verified
+
+- Each site read live on 15 Nov 2026 and compared field by field with the
+  adapter's output: 1225 15/15 units, Old Town Park 19/19/20 (+2 penthouse /
+  townhome rows), The Leo 2/2, Stead 13 priced plans + 2 unpriced — matching
+  the page the tracker is allowed to read.
+- 196 automated tests, most of them run against pages captured that day
+  (kept under `scraper/fixtures/`, with the August captures as a second set),
+  plus `tsc` and a production build.
+- The CI changes were simulated locally (run summary, health gate, push
+  rebase-and-retry against a concurrent commit).
+
+---
+
+# Previous audit — 8 Sep 2026
+
+> Kept for the record. Superseded by the 15 Nov 2026 audit above wherever the two disagree — in particular, the 14-month lease filter described here has been removed.
 
 Audit of [rooneydude/chiapartment](https://github.com/rooneydude/chiapartment) (live: https://rooneydude.github.io/chiapartment/#/). Default / Pages production branch is `claude/repo-reset-4my0gv`.
 
