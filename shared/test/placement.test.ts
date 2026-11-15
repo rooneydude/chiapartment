@@ -8,6 +8,7 @@ import {
   orientedBoxRing,
   placeStackBand,
   placeUnit,
+  pointInRing,
   ringCentroid,
   ringSignedArea,
   type Vec2,
@@ -38,6 +39,34 @@ describe("ring helpers", () => {
     const n = normalizeRing(closedCW);
     expect(n).toHaveLength(4);
     expect(ringSignedArea(n)).toBeGreaterThan(0);
+  });
+});
+
+describe("pointInRing", () => {
+  const notch: Vec2[] = [
+    [0, 0],
+    [20, 0],
+    [20, 20],
+    [10, 20],
+    [10, 10],
+    [0, 10],
+  ];
+
+  it("tells inside from outside, concave corners included", () => {
+    expect(pointInRing([5, 5], notch)).toBe(true);
+    expect(pointInRing([15, 15], notch)).toBe(true);
+    expect(pointInRing([5, 15], notch)).toBe(false); // the cut-out corner
+    expect(pointInRing([25, 5], notch)).toBe(false);
+    expect(pointInRing([-1, 5], notch)).toBe(false);
+  });
+
+  it("does not care about winding or a repeated closing point", () => {
+    const clockwise = [...notch].reverse();
+    const closed: Vec2[] = [...notch, notch[0]!];
+    for (const ring of [clockwise, closed]) {
+      expect(pointInRing([5, 5], ring)).toBe(true);
+      expect(pointInRing([5, 15], ring)).toBe(false);
+    }
   });
 });
 

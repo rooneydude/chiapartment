@@ -82,3 +82,58 @@ export function sunriseSunsetAzimuths(
   if (sunriseAz === null || sunsetAz === null) return null; // polar day/night
   return { sunriseAz, sunsetAz };
 }
+
+// ---------------------------------------------------------------------------
+// Wall-clock time → instant ("where is the sun at 13:00 in Chicago today?")
+// ---------------------------------------------------------------------------
+
+const wallClockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** UTC offset (ms, east positive) of `timeZone` at `instant`, to the minute. */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  let fmt = wallClockFormatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    wallClockFormatters.set(timeZone, fmt);
+  }
+  const minute = Math.floor(instant / 60e3) * 60e3;
+  const parts = fmt.formatToParts(new Date(minute));
+  const part = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((p) => p.type === type)?.value);
+  const wallAsUtc = Date.UTC(
+    part("year"),
+    part("month") - 1,
+    part("day"),
+    part("hour"),
+    part("minute"),
+  );
+  return wallAsUtc - minute;
+}
+
+/**
+ * The instant at which clocks in `timeZone` (IANA name) read `hours`
+ * (0–24, fractional: 16.5 = 16:30) on calendar day `day` (YYYY-MM-DD) — the
+ * `Date` to hand to `sunPosition` for a local time of day.
+ *
+ * DST-safe: the zone's offset is looked up for the instant itself rather
+ * than assumed. A time that a spring-forward switch skips (it never appears
+ * on the clock) resolves to within an hour of it; a time a fall-back switch
+ * repeats resolves to its first occurrence.
+ */
+export function wallClockInstant(day: string, hours: number, timeZone: string): Date {
+  const [y = NaN, m = NaN, d = NaN] = day.split("-").map(Number);
+  const wallAsUtc = Date.UTC(y, m - 1, d, 0, Math.round(hours * 60));
+  // The offset depends on the instant and the instant on the offset: the
+  // first pass is right except within hours of a DST switch, the second
+  // settles those.
+  const firstPass = wallAsUtc - zoneOffsetMs(wallAsUtc, timeZone);
+  return new Date(wallAsUtc - zoneOffsetMs(firstPass, timeZone));
+}
