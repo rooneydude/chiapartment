@@ -478,7 +478,11 @@ export function parseLeoCards(html: string, baseUrl: string): UnitListing[] {
       ctx.catalogue.get(title)?.beds ??
       (/studio/i.test(info) ? 0 : coerceBeds(/(\d+)\s*bed/i.exec(info)?.[1]));
     if (beds === null || beds === undefined) return;
-    const typeLabel = /[a-z]/i.test(label) && plainBeds(label) === null && label.length <= 40 ? label : null;
+    // Only a real unit-type wording becomes a label — never stray card text.
+    const typeLabel =
+      /bed|studio|den|loft|penthouse|convertible/i.test(label) && plainBeds(label) === null && label.length <= 40
+        ? label
+        : null;
 
     const bathsM = /(\d+(?:\.\d+)?)\s*bath/i.exec(info);
     const sqftM = /([\d,]{3,})\s*sq/i.exec(info);
