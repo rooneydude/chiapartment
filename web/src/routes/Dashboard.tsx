@@ -149,7 +149,12 @@ export default function Dashboard() {
             const lastGood = history.latest?.timestamp;
             return (
               <div key={building.id}>
-                ⚠ <strong>{building.name}</strong> scrape failed {ageLabel(attempt.timestamp)}
+                ⚠ <strong>{building.name}</strong>{" "}
+                {attempt.blocked
+                  ? "— the leasing site’s bot protection refused the last scrape"
+                  : "scrape failed"}{" "}
+                {ageLabel(attempt.timestamp)}
+                {(attempt.failedRuns ?? 0) > 1 ? ` (${attempt.failedRuns} runs in a row)` : ""}
                 {lastGood ? ` · showing last good data from ${longDate(lastGood)}` : ""}
               </div>
             );
@@ -228,9 +233,15 @@ export default function Dashboard() {
 
         // Min price per focus bedroom count.
         const minByBeds = new Map<number, number>();
+        // The cheapest listing of each size, kept whole so a junior /
+        // convertible plan can be named as what it is.
+        const cheapestByBeds = new Map<number, (typeof units)[number]>();
         for (const u of units) {
           const cur = minByBeds.get(u.beds);
-          if (cur === undefined || u.price < cur) minByBeds.set(u.beds, u.price);
+          if (cur === undefined || u.price < cur) {
+            minByBeds.set(u.beds, u.price);
+            cheapestByBeds.set(u.beds, u);
+          }
         }
         const bedsSorted = [...minByBeds.keys()].sort((a, b) => a - b);
 
@@ -301,11 +312,18 @@ export default function Dashboard() {
                     : ""}
                 </span>
               )}
-              {bedsSorted.map((b) => (
-                <span key={b}>
-                  {bedsLabel(b)} <strong>{money(minByBeds.get(b)!)}</strong>
-                </span>
-              ))}
+              {bedsSorted.map((b) => {
+                const type = cheapestByBeds.get(b)?.planType;
+                return (
+                  <span
+                    key={b}
+                    title={type ? `The cheapest ${bedsLabel(b)} listing is a “${type}”` : undefined}
+                  >
+                    {bedsLabel(b)} <strong>{money(minByBeds.get(b)!)}</strong>
+                    {type ? <span className="plan-name"> {type}</span> : null}
+                  </span>
+                );
+              })}
             </div>
             {units.length > 0 && (
               <div className="card-movein">
@@ -320,7 +338,7 @@ export default function Dashboard() {
             <div className="badges">
               {history.warnings?.length > 0 && (
                 <span className="badge bad" title={history.warnings.map((w) => w.message).join("\n")}>
-                  {failed ? "⚠ scrape failed" : "⚠ data"}
+                  {failed ? (history.lastAttempt?.blocked ? "⚠ site refused scrape" : "⚠ scrape failed") : "⚠ data"}
                 </span>
               )}
               {units.length > 0 && (
@@ -369,7 +387,7 @@ export default function Dashboard() {
             <div className="card-foot">
               <span>
                 {failed
-                  ? `scrape failed ${longDate(history.lastAttempt!.timestamp)}${
+                  ? `${history.lastAttempt!.blocked ? "site refused the scrape" : "scrape failed"} ${longDate(history.lastAttempt!.timestamp)}${
                       history.latest ? ` · last good ${longDate(history.latest.timestamp)}` : ""
                     }`
                   : history.latest

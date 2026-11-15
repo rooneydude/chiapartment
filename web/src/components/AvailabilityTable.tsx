@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AlsoListed,
+  AlsoListedCompiled,
   BuildingHistory,
   SnapshotDelta,
   UnitListing,
@@ -199,7 +199,7 @@ function UnitDetail({
   );
 }
 
-function AlsoListedBlock({ rows, asOf }: { rows: AlsoListed[]; asOf: string }) {
+function AlsoListedBlock({ rows, asOf }: { rows: AlsoListedCompiled[]; asOf: string }) {
   if (rows.length === 0) return null;
   return (
     <div className="also-listed">
@@ -231,6 +231,12 @@ function AlsoListedBlock({ rows, asOf }: { rows: AlsoListed[]; asOf: string }) {
               )}
               <span className="also-note"> — {a.note}</span>
               {bits.length > 0 && <span className="also-bits"> · {bits.join(" · ")}</span>}
+              {a.lastPrice !== undefined && a.lastPricedAt && (
+                <span className="also-bits">
+                  {" "}
+                  · last listed with a price on {shortDate(a.lastPricedAt)}: {money(a.lastPrice)}
+                </span>
+              )}
             </li>
           );
         })}
@@ -256,7 +262,7 @@ export default function AvailabilityTable({
   asOf: string;
   /** Lease length shown as a comparison next to the advertised one. */
   compareTerm: number;
-  alsoListed: AlsoListed[];
+  alsoListed: AlsoListedCompiled[];
 }) {
   const selectedUnit = useStore((s) => s.selectedUnit);
   const selectedPlan = useStore((s) => s.selectedPlan);
@@ -272,6 +278,8 @@ export default function AvailabilityTable({
 
   const m = mapping ?? FALLBACK_MAPPING;
   const newSet = useMemo(() => new Set(delta?.newUnits.map(listingKey)), [delta]);
+  // New against the previous scrape, but listed before: back, not new.
+  const relistedSet = useMemo(() => new Set(delta?.relistedKeys ?? []), [delta]);
   const changeByKey = useMemo(() => {
     const map = new Map<string, SnapshotDelta["priceChanges"][number]>();
     for (const c of delta?.priceChanges ?? []) {
@@ -342,6 +350,9 @@ export default function AvailabilityTable({
   );
 
   const COLS = 9;
+  // "—" must not read as a tracker gap: say when the site simply does not publish it.
+  const noTerm = units.filter((u) => u.leaseTermMonths == null && leaseTermTable(u).length === 0).length;
+  const noDate = units.filter((u) => moveIn(u, asOf).kind === "unknown").length;
 
   return (
     <>
@@ -432,7 +443,19 @@ export default function AvailabilityTable({
                       </span>
                       {/* A floorplan-level listing is identified by its plan name. */}
                       {u.unitNumber ?? <span className="plan-as-unit">{u.floorplanName}</span>}{" "}
-                      {newSet.has(listingKey(u)) && <span className="badge new">NEW</span>}
+                      {newSet.has(listingKey(u)) &&
+                        (relistedSet.has(listingKey(u)) ? (
+                          <span
+                            className="badge back"
+                            title={`Back on the leasing site${first ? ` — first listed ${shortDate(first.firstSeen)}` : ""}`}
+                          >
+                            BACK
+                          </span>
+                        ) : (
+                          <span className="badge new" title="Not listed at the previous scrape">
+                            NEW
+                          </span>
+                        ))}
                     </td>
                     <td className="num">{floor ?? "—"}</td>
                     <td
@@ -443,7 +466,7 @@ export default function AvailabilityTable({
                       }
                     >
                       {u.planType ?? bedsLabel(u.beds)}
-                      {u.unitNumber !== null && (
+                      {u.unitNumber !== null && u.floorplanName !== (u.planType ?? bedsLabel(u.beds)) && (
                         <>
                           {" "}
                           <span className="plan-name">{u.floorplanName}</span>
@@ -511,7 +534,7 @@ export default function AvailabilityTable({
                       {change && !change.notComparable && (
                         <span
                           className={change.to < change.from ? "delta-down" : "delta-up"}
-                          title={`${money(change.from)} → ${money(change.to)}${change.fromTerm ? ` for a ${change.fromTerm}-month lease` : ""} since the previous scrape`}
+                          title={`${money(change.from)} → ${money(change.to)}${change.fromTerm ? ` for a ${change.fromTerm}-month lease` : ""} since the previous scrape${change.sourceUpdatedAt ? ` — the building set this price on ${shortDate(change.sourceUpdatedAt)}` : ""}`}
                         >
                           {change.to < change.from ? "▼" : "▲"} {money(Math.abs(change.to - change.from))}
                         </span>
@@ -563,6 +586,18 @@ export default function AvailabilityTable({
           </tbody>
         </table>
       </div>
+      {(noTerm > 0 || noDate > 0) && (
+        <div className="table-footnote">
+          {noTerm > 0 &&
+            (noTerm === units.length
+              ? "Lease “—”: this leasing site does not publish lease lengths. "
+              : `Lease “—”: the site publishes no lease length for ${noTerm} of these listings. `)}
+          {noDate > 0 &&
+            (noDate === units.length
+              ? "Move-in “—”: the site publishes no move-in dates."
+              : `Move-in “—”: no date published for ${noDate} of these listings.`)}
+        </div>
+      )}
       <AlsoListedBlock rows={alsoListed} asOf={asOf} />
       {delta && delta.removedUnits.length > 0 && (
         <div className="removed-block">

@@ -45,6 +45,16 @@ interface PlanRecord {
   updatedAt: string | null;
   /** The site's own "is this plan on offer" switch; null when not stated. */
   active: boolean | null;
+  /** The site's bedroom label when it says more than the count ("1 Bed + Den"). */
+  typeLabel: string | null;
+}
+
+/** A bedroom label that carries more than a bed count, tidied; else null. */
+function typeLabelOf(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const label = raw.replace(/\s+/g, " ").trim();
+  if (!label || label.length > 40) return null;
+  return /^(studio|\d+\s*(bed(room)?s?|br))$/i.test(label) ? null : label;
 }
 
 const NO_PRICE_TEXT = /contact for pricing|call for pricing|pricing upon request|inquire/i;
@@ -97,6 +107,7 @@ function plansFromSsr(html: string): Map<string, PlanRecord> {
       href: null,
       updatedAt: typeof r["updatedAt"] === "string" ? r["updatedAt"] : null,
       active: typeof r["isActive"] === "boolean" ? r["isActive"] : null,
+      typeLabel: typeLabelOf(r["bedrooms"]),
     });
   }
   return out;
@@ -130,6 +141,8 @@ function plansFromCards(html: string): Map<string, PlanRecord> {
       href: $(el).find('a[href^="/floorplans/"]').first().attr("href") ?? null,
       updatedAt: null,
       active: null,
+      // Card headings are upper-case ("1 BED + DEN"); the data blob's label is preferred.
+      typeLabel: null,
     });
   });
   return out;
@@ -198,6 +211,7 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
       unitNumber,
       floorplanName: name,
       beds,
+      ...(s?.typeLabel ? { planType: s.typeLabel } : {}),
       baths,
       sqft: null,
       price,

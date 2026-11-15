@@ -14,7 +14,10 @@ export default function DeltaSummary({ delta }: { delta: SnapshotDelta | null })
   const hikes = real.length - drops;
   const dates = delta.dateChanges?.length ?? 0;
   const parts: string[] = [];
-  if (delta.newUnits.length) parts.push(`${delta.newUnits.length} new`);
+  const back = delta.relistedKeys?.length ?? 0;
+  const brandNew = delta.newUnits.length - back;
+  if (brandNew > 0) parts.push(`${brandNew} new`);
+  if (back > 0) parts.push(`${back} back on the site`);
   if (delta.removedUnits.length) parts.push(`${delta.removedUnits.length} removed`);
   if (drops) parts.push(plural(drops, "price drop"));
   if (hikes) parts.push(plural(hikes, "increase"));

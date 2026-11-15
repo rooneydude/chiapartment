@@ -24,6 +24,8 @@ export default function BuildingPage() {
   const [config, setConfig] = useState<BuildingsConfig | null>(null);
   const [history, setHistory] = useState<BuildingHistory | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The building lists units, but none in the sizes being shopped for. */
+  const [focusEmpty, setFocusEmpty] = useState(false);
   const resetForBuilding = useStore((s) => s.resetForBuilding);
   const bedsFilter = useStore((s) => s.bedsFilter);
   const moveInWithin = useStore((s) => s.moveInWithin);
@@ -36,7 +38,13 @@ export default function BuildingPage() {
       .then(([c, h]) => {
         // Map focus beds into filter buckets (3 = "3+").
         const focus = c.focus?.beds.map((b) => Math.min(b, 3)) ?? null;
-        resetForBuilding(focus);
+        // Never open on an empty table: when nothing listed here matches the
+        // sizes being shopped for, show everything that is listed instead.
+        const units = h.latest?.units ?? [];
+        const noneInFocus =
+          focus !== null && units.length > 0 && !units.some((u) => focus.includes(Math.min(u.beds, 3)));
+        resetForBuilding(noneInFocus ? null : focus);
+        setFocusEmpty(noneInFocus);
         setConfig(c);
         setHistory(h);
       })
@@ -109,7 +117,7 @@ export default function BuildingPage() {
         <span className="meta">
           {building.address} · {building.geometry.floors} floors
           {history.lastAttempt?.status === "error"
-            ? ` · scrape failed ${longDate(history.lastAttempt.timestamp)}${
+            ? ` · ${history.lastAttempt.blocked ? "site refused the scrape" : "scrape failed"} ${longDate(history.lastAttempt.timestamp)}${
                 history.latest ? ` · last good ${longDate(history.latest.timestamp)}` : ""
               }`
             : history.latest
@@ -117,7 +125,8 @@ export default function BuildingPage() {
               : ""}
         </span>
       </div>
-      {history.latest && isStale(history.latest.timestamp) && (
+      {/* A failed latest scrape explains itself in the warnings below. */}
+      {history.latest && isStale(history.latest.timestamp) && history.lastAttempt?.status !== "error" && (
         <div className="warning-banner" role="status">
           <div>
             ⚠ These prices are from {longDate(history.latest.timestamp)} (
@@ -185,6 +194,23 @@ export default function BuildingPage() {
             compareTerm={config.focus?.compareLeaseTermMonths ?? 12}
             alsoListed={history.alsoListed ?? []}
           />
+          {focusEmpty && bedsFilter === null && (
+            <div className="table-footnote">
+              Nothing listed here in the sizes you shop for (
+              {(config.focus?.beds ?? []).map((b) => (b === 0 ? "Studio" : `${b} BR`)).join(", ")}) — showing
+              every listed unit instead.
+            </div>
+          )}
+          {(building.dataNotes?.length ?? 0) > 0 && (
+            <div className="data-notes">
+              <div className="data-notes-title">What this building’s leasing site publishes</div>
+              <ul>
+                {building.dataNotes!.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="panel">
           <Scene3D building={building} allBuildings={config.buildings} history={history} />

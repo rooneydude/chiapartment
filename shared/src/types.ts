@@ -63,6 +63,12 @@ export const BuildingConfigSchema = z.object({
   group: z.string().optional(),
   /** Display-only neighborhood tag (e.g. "Old Town"). */
   neighborhood: z.string().optional(),
+  /**
+   * Plain-language notes on what this building's leasing site does and does
+   * not publish (shown under its table), so a "—" reads as "the site does
+   * not say" rather than as a tracker gap. Audited facts, not marketing.
+   */
+  dataNotes: z.array(z.string()).optional(),
   geometry: BuildingGeometrySchema,
   unitMapping: UnitMappingSchema.optional(),
 });

@@ -1054,6 +1054,12 @@ describe("stead220 adapter (captured 2026-11-15)", () => {
       baths: 2,
       price: 4670,
     });
+    // A one-bed with a den is labelled as the site labels it.
+    expect(listings.find((l) => l.floorplanName === "Large 1BR + Den - Unit 02")).toMatchObject({
+      beds: 1,
+      planType: "1 Bed + Den",
+    });
+    expect(listings.filter((l) => l.planType !== undefined)).toHaveLength(1);
     // "Contact for Pricing" plans are reported, not dropped.
     expect(alsoListed.map((a) => [a.floorplanName, a.note, a.beds])).toEqual([
       ["Medium Studio - Unit 05", "Contact for Pricing", 0],
@@ -1096,6 +1102,40 @@ describe("stead220 adapter (captured 2026-11-15)", () => {
       full.listings.map((l) => [l.floorplanName, l.price, l.beds]),
     );
     expect(parseSteadFloorplans("<html></html>", "https://stead220.com/", CAPTURED).planCount).toBe(0);
+  });
+
+  it("keeps a plan the site has switched off on the record as unavailable", () => {
+    const html = `<script>window.__SSR_DATA__=${JSON.stringify({
+      "units.list": [
+        { id: 1, unitNumber: 1, unitName: "Large Studio - Unit 01", bedrooms: "Studio", bathrooms: 1, startingPrice: 2475, priceDisplay: "$2,475", isActive: true, updatedAt: "2026-09-17T20:57:40.000Z" },
+        { id: 18, unitNumber: 2805, unitName: "PH Large 1BR - Unit 2805", bedrooms: "1 Bed", bathrooms: 1, startingPrice: 4150, priceDisplay: "$4,150", isPenthouse: true, isActive: false, updatedAt: "2026-05-29T23:10:50.000Z" },
+      ],
+    })};</script>`;
+    const page = parseSteadFloorplans(html, "https://stead220.com/", CAPTURED);
+    expect(page.planCount).toBe(2);
+    expect(page.listings.map((l) => l.floorplanName)).toEqual(["Large Studio - Unit 01"]);
+    expect(page.alsoListed).toEqual([
+      expect.objectContaining({ unitNumber: "2805", beds: 1, price: 4150, note: "Unavailable" }),
+    ]);
+  });
+
+  it("reads the first dollar amount of a card price, never the digits run together", () => {
+    const card = (price: string): string =>
+      `<div class="floorplan-card"><div aria-label="Large Studio - Unit 01 preview gallery"></div>
+       <span class="fp-availability-label">Available Now</span><h3 class="fp-card-name">STUDIO</h3>
+       <p class="fp-card-meta">LARGE · UNIT 01 · 1 BATH</p>${price}<a href="/floorplans/1">View</a></div>`;
+    const priceOf = (price: string) =>
+      parseSteadFloorplans(card(price), "https://stead220.com/", CAPTURED).listings[0]?.price;
+    expect(priceOf('<span class="fp-card-price-amount">$2,475</span>')).toBe(2475);
+    expect(priceOf('<span class="fp-card-price-amount">$2,475 - $2,700</span>')).toBe(2475);
+    expect(priceOf('<span class="fp-card-price-amount">$2,475.50</span>')).toBe(2475);
+    const unpriced = parseSteadFloorplans(
+      card('<p class="fp-card-price-contact">Contact for Pricing</p>'),
+      "https://stead220.com/",
+      CAPTURED,
+    );
+    expect(unpriced.listings).toEqual([]);
+    expect(unpriced.alsoListed).toEqual([expect.objectContaining({ note: "Contact for Pricing", beds: 0 })]);
   });
 
   it("reports waitlist plans as not available instead of listing them", () => {
