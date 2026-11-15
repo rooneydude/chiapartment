@@ -1,6 +1,6 @@
 import { comparePrices, isAvailableNow } from "./listing";
 import { CHICAGO_TZ, chicagoDate } from "./time";
-import type { FocusDelta, SnapshotDelta, UnitListing } from "./types";
+import type { AlsoListed, FocusDelta, OmittedListing, SnapshotDelta, UnitListing } from "./types";
 
 export { CHICAGO_TZ, chicagoDate };
 
@@ -10,6 +10,74 @@ export function listingKey(
 ): string {
   if (u.unitNumber) return `u:${u.unitNumber}`;
   return `fp:${u.beds}:${u.floorplanName}`;
+}
+
+/**
+ * Identities of rows a site lists without a price or bed count, in the same
+ * key space as `listingKey` (rows whose bed count is unknown and that have no
+ * unit number cannot be keyed and are skipped).
+ */
+export function alsoListedKeys(rows: readonly AlsoListed[] | undefined): string[] {
+  const keys: string[] = [];
+  for (const r of rows ?? []) {
+    if (r.unitNumber) keys.push(`u:${r.unitNumber}`);
+    else if (r.beds !== null) keys.push(`fp:${r.beds}:${r.floorplanName}`);
+  }
+  return keys;
+}
+
+/** What a diff may know about the runs beyond their two unit lists. */
+export interface DeltaContext {
+  /**
+   * Identities that were on the site in the previous run without being in
+   * its unit list: units the old lease cap omitted, rows listed without a
+   * price. They are not "new" when they appear in the list now.
+   */
+  prevAlsoKnown?: Iterable<string>;
+  /**
+   * Identities still on the site in this run without being in its unit list
+   * (still listed, price withdrawn). They are not "removed".
+   */
+  currStillListed?: Iterable<string>;
+  /**
+   * Identities listed in ANY earlier run. A unit that is new against the
+   * previous run but known from before is a re-listing: it stays in
+   * `newUnits` and its key is also reported in `relistedKeys`.
+   */
+  seenBefore?: Iterable<string>;
+}
+
+/** One successful scrape of a building, as far as a diff is concerned. */
+export interface DeltaRun {
+  timestamp: string;
+  units: UnitListing[];
+  /** Historical: units the old lease cap left out of `units`. */
+  omitted?: OmittedListing[];
+  alsoListed?: AlsoListed[];
+}
+
+/**
+ * Everything a diff between `prev` and `curr` should know from the building's
+ * run history (`runs` = its successful scrapes, any order).
+ */
+export function deltaContextFor(
+  runs: readonly DeltaRun[],
+  prev: DeltaRun | null,
+  curr: DeltaRun,
+): DeltaContext {
+  if (!prev) return {};
+  const seenBefore = new Set<string>();
+  for (const r of runs) {
+    if (r.timestamp >= prev.timestamp) continue;
+    for (const u of r.units) seenBefore.add(listingKey(u));
+    for (const o of r.omitted ?? []) seenBefore.add(listingKey(o));
+    for (const k of alsoListedKeys(r.alsoListed)) seenBefore.add(k);
+  }
+  return {
+    prevAlsoKnown: [...(prev.omitted ?? []).map(listingKey), ...alsoListedKeys(prev.alsoListed)],
+    currStillListed: alsoListedKeys(curr.alsoListed),
+    seenBefore,
+  };
 }
 
 /** Human label for briefs/alerts: "#0624" or the floorplan/stack name. */
@@ -46,16 +114,17 @@ export function priorChicagoDayRun<T extends { timestamp: string }>(
  * and a single price, the entry carries `notComparable` instead of
  * masquerading as a price move.
  *
- * `prevExtraKeys` lists identities that existed in the previous run but were
- * not in its unit list (historically: units the lease cap omitted). They are
- * not "new" when they show up now.
+ * `ctx` carries what the two unit lists alone cannot say — see DeltaContext:
+ * rows that were / still are on the site outside the unit list (never "new",
+ * never "removed"), and which identities have been listed before (a
+ * re-listing is not a first appearance).
  */
 export function computeDelta(
   prevUnits: UnitListing[] | null,
   currUnits: UnitListing[],
   from: string | null,
   to: string,
-  prevExtraKeys?: Iterable<string>,
+  ctx: DeltaContext = {},
 ): SnapshotDelta {
   const delta: SnapshotDelta = {
     from,
@@ -69,7 +138,10 @@ export function computeDelta(
 
   const prevByKey = new Map<string, UnitListing>();
   for (const u of prevUnits) prevByKey.set(listingKey(u), u);
-  const knownBefore = new Set<string>(prevExtraKeys ?? []);
+  const knownBefore = new Set<string>(ctx.prevAlsoKnown ?? []);
+  const stillListed = new Set<string>(ctx.currStillListed ?? []);
+  const seenBefore = new Set<string>(ctx.seenBefore ?? []);
+  const relisted: string[] = [];
 
   const seen = new Set<string>();
   for (const u of currUnits) {
@@ -77,7 +149,10 @@ export function computeDelta(
     seen.add(key);
     const prev = prevByKey.get(key);
     if (!prev) {
-      if (!knownBefore.has(key)) delta.newUnits.push(u);
+      if (!knownBefore.has(key)) {
+        delta.newUnits.push(u);
+        if (seenBefore.has(key)) relisted.push(key);
+      }
       continue;
     }
     const cmp = comparePrices(prev, u);
@@ -93,6 +168,7 @@ export function computeDelta(
         ...(cmp.fromTerm !== undefined ? { fromTerm: cmp.fromTerm } : {}),
         ...(cmp.toTerm !== undefined ? { toTerm: cmp.toTerm } : {}),
         ...(cmp.notComparable ? { notComparable: cmp.notComparable } : {}),
+        ...(u.sourceUpdatedAt ? { sourceUpdatedAt: u.sourceUpdatedAt } : {}),
       });
     }
     const dateMoved = movedDate(prev, u, from, to);
@@ -107,9 +183,15 @@ export function computeDelta(
     }
   }
   for (const [key, u] of prevByKey) {
-    if (!seen.has(key)) delta.removedUnits.push(u);
+    if (!seen.has(key) && !stillListed.has(key)) delta.removedUnits.push(u);
   }
+  if (relisted.length > 0) delta.relistedKeys = relisted;
   return delta;
+}
+
+/** Is this unit of `delta.newUnits` a re-listing rather than a first appearance? */
+export function isRelisted(delta: Pick<SnapshotDelta, "relistedKeys">, u: UnitListing): boolean {
+  return delta.relistedKeys?.includes(listingKey(u)) ?? false;
 }
 
 /**
@@ -156,6 +238,14 @@ export function filterFocusDelta(
   return {
     ...delta,
     newUnits: delta.newUnits.filter((u) => inFocus(u.beds)),
+    ...(delta.relistedKeys
+      ? {
+          relistedKeys: delta.newUnits
+            .filter((u) => inFocus(u.beds))
+            .map(listingKey)
+            .filter((k) => delta.relistedKeys!.includes(k)),
+        }
+      : {}),
     removedUnits: delta.removedUnits.filter((u) => inFocus(u.beds)),
     priceChanges: delta.priceChanges.filter((c) => inFocus(c.beds)),
     ...(delta.dateChanges
@@ -170,9 +260,9 @@ export function computeFocusDelta(
   from: string | null,
   to: string,
   focusBeds: number[] | null,
-  prevExtraKeys?: Iterable<string>,
+  ctx: DeltaContext = {},
 ): FocusDelta {
-  const raw = computeDelta(prevUnits, currUnits, from, to, prevExtraKeys);
+  const raw = computeDelta(prevUnits, currUnits, from, to, ctx);
   const filtered = filterFocusDelta(raw, focusBeds);
   return {
     ...filtered,

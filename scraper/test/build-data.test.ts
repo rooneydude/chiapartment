@@ -104,6 +104,7 @@ describe("buildData metrics and warnings", () => {
       timestamp: "2026-07-08T12:00:00Z",
       status: "error",
       error: "HTTP 503",
+      failedRuns: 1,
     });
     // Latest good data still served.
     expect(h.latest?.units).toHaveLength(1);
@@ -356,5 +357,140 @@ describe("buildData metrics and warnings", () => {
     expect(brief.buildings[0]!.status).toBe("ok");
     expect(brief.chicagoFrom).toBe("2026-09-07");
     expect(brief.chicagoTo).toBe("2026-09-08");
+  });
+});
+
+describe("buildData: what the two latest unit lists alone cannot say", () => {
+  const write = (ts: string, building: object): void =>
+    writeFileSync(
+      join(ROOT, "data", "snapshots", `${ts.replaceAll(":", "-")}.json`),
+      JSON.stringify({
+        schemaVersion: 1,
+        timestamp: ts,
+        buildings: [
+          {
+            buildingId: "test-bldg",
+            status: "ok",
+            source: { adapter: "generic", fetchedUrl: "https://example.com/" },
+            units: [],
+            ...building,
+          },
+        ],
+      }),
+    );
+  const plan = (name: string, price: number) => ({
+    unitNumber: null,
+    floorplanName: name,
+    beds: 0,
+    baths: 1,
+    sqft: null,
+    price,
+    availableDate: null,
+  });
+  const brief = (): WeekdayBrief =>
+    JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "brief.json"), "utf8")) as WeekdayBrief;
+
+  it("a plan whose price is withdrawn is still listed — not removed, and not new when the price returns", () => {
+    setup();
+    write("2026-10-27T18:00:00Z", { units: [plan("Studio - Unit 05", 2250), plan("Studio - Unit 01", 2475)] });
+    // The site now says "Contact for Pricing" for Unit 05.
+    write("2026-10-28T18:00:00Z", {
+      units: [plan("Studio - Unit 01", 2475)],
+      alsoListed: [{ unitNumber: null, floorplanName: "Studio - Unit 05", beds: 0, note: "Contact for Pricing" }],
+    });
+    buildData(ROOT);
+    let h = readHistory();
+    expect(h.delta!.removedUnits).toEqual([]);
+    expect(h.focusDelta!.removedUnits).toEqual([]);
+    // …and the dashboard can say what it last cost, and when.
+    expect(h.alsoListed).toEqual([
+      expect.objectContaining({
+        floorplanName: "Studio - Unit 05",
+        note: "Contact for Pricing",
+        lastPrice: 2250,
+        lastPricedAt: "2026-10-27T18:00:00Z",
+      }),
+    ]);
+
+    // The price comes back: the plan was on the site all along.
+    write("2026-10-29T18:00:00Z", { units: [plan("Studio - Unit 01", 2475), plan("Studio - Unit 05", 2300)] });
+    buildData(ROOT);
+    h = readHistory();
+    expect(h.delta!.newUnits).toEqual([]);
+    expect(h.alsoListed).toEqual([]);
+    expect(brief().buildings[0]!.new).toEqual([]);
+  });
+
+  it("marks a unit that left and came back as a re-listing, not a first appearance", () => {
+    setup();
+    write("2026-08-25T18:00:00Z", { units: [unit("705", 3275), unit("602", 2790)] });
+    write("2026-09-17T18:00:00Z", { units: [unit("602", 2790)] });
+    write("2026-09-24T18:00:00Z", { units: [unit("602", 2790), unit("705", 3275), unit("910", 4185)] });
+    buildData(ROOT);
+    const h = readHistory();
+    expect(h.delta!.newUnits.map((u) => u.unitNumber).sort()).toEqual(["705", "910"]);
+    // 705 was listed in August; 910 is genuinely new.
+    expect(h.delta!.relistedKeys).toEqual(["u:705"]);
+    expect(h.focusDelta!.relistedKeys).toEqual(["u:705"]);
+    expect(h.perUnitMeta["705"]!.firstSeen).toBe("2026-08-25T18:00:00Z");
+    const fresh = brief().buildings[0]!.new;
+    expect(fresh.find((l) => l.unitNumber === "705")).toMatchObject({
+      relisted: true,
+      firstSeen: "2026-08-25T18:00:00Z",
+    });
+    expect(fresh.find((l) => l.unitNumber === "910")!.relisted).toBeUndefined();
+  });
+
+  it("says so when the site's bot protection refused the scrape, and counts the streak", () => {
+    setup();
+    write("2026-11-09T18:00:00Z", { units: [unit("705", 3275)] });
+    const refused = { status: "error", error: "the site's bot protection refused the request (HTTP 403)", blocked: true };
+    write("2026-11-10T18:00:00Z", refused);
+    write("2026-11-11T18:00:00Z", refused);
+    buildData(ROOT);
+    const h = readHistory();
+    expect(h.lastAttempt).toEqual({
+      timestamp: "2026-11-11T18:00:00Z",
+      status: "error",
+      error: refused.error,
+      blocked: true,
+      failedRuns: 2,
+    });
+    expect(h.warnings).toEqual([
+      {
+        code: "scrape-error",
+        message:
+          "The leasing site's bot protection refused the last scrape, so nothing new could be read. Showing data from 2026-11-09. The next scheduled run will ask again.",
+      },
+    ]);
+    // The last good inventory is still served, dated.
+    expect(h.latest!.timestamp).toBe("2026-11-09T18:00:00Z");
+    expect(brief().buildings[0]).toMatchObject({ status: "error", blocked: true, listingsAsOf: "2026-11-09T18:00:00Z" });
+  });
+
+  it("explains a same-ratio repricing of every unit as a concession, not a rent cut", () => {
+    setup();
+    // The Leo, 10 → 12 Nov 2026: both units ×17/18 the day "half a month free" went up.
+    write("2026-11-10T18:00:00Z", { units: [unit("705", 3275), unit("602", 2790)] });
+    write("2026-11-12T18:00:00Z", { units: [unit("705", 3093), unit("602", 2635)] });
+    buildData(ROOT);
+    const w = readHistory().warnings;
+    expect(w.map((x) => x.code)).toEqual(["uniform-reprice"]);
+    expect(w[0]!.message).toContain("All 2 units listed in both runs were repriced by the same −5.6% at once");
+    expect(w[0]!.message).toContain("netted into");
+
+    // Ordinary, different moves are just price changes.
+    setup();
+    write("2026-11-10T18:00:00Z", { units: [unit("705", 3275), unit("602", 2790)] });
+    write("2026-11-12T18:00:00Z", { units: [unit("705", 3200), unit("602", 2790)] });
+    buildData(ROOT);
+    expect(readHistory().warnings).toEqual([]);
+
+    // Two units that shared a price and got the same cut are not "every unit by the same ratio".
+    setup();
+    write("2026-11-10T18:00:00Z", { units: [unit("705", 3000), unit("602", 3000)] });
+    write("2026-11-12T18:00:00Z", { units: [unit("705", 2950), unit("602", 2950)] });
+    buildData(ROOT);
+    expect(readHistory().warnings).toEqual([]);
   });
 });

@@ -1,9 +1,12 @@
 import {
   chicagoDate,
   computeFocusDelta,
+  deltaContextFor,
+  isRelisted,
   listingKey,
   listingLabel,
   priorChicagoDayRun,
+  type DeltaRun,
 } from "./delta";
 import { isAvailableNow } from "./listing";
 import type {
@@ -88,6 +91,7 @@ export function briefBuilding(
       name,
       status: "error",
       error: history.lastAttempt.error ?? "unknown error",
+      ...(history.lastAttempt.blocked ? { blocked: true } : {}),
       from: null,
       to: history.lastAttempt.timestamp,
       chicagoFrom: null,
@@ -158,7 +162,12 @@ export function briefBuilding(
     chicagoFrom: fd.chicagoFrom,
     chicagoTo: fd.chicagoTo,
     focusAvailable: listings.length,
-    new: fd.newUnits.map((u) => toBriefListing(u, fd.to)),
+    new: fd.newUnits.map((u) => {
+      const row = toBriefListing(u, fd.to);
+      if (!isRelisted(fd, u)) return row;
+      const firstSeen = history.perUnitMeta[u.unitNumber ?? listingKey(u)]?.firstSeen;
+      return { ...row, relisted: true, ...(firstSeen ? { firstSeen } : {}) };
+    }),
     removed: fd.removedUnits.map((u) => toBriefListing(u, fd.from ?? fd.to)),
     drops,
     omitted: omitted.filter((o) => inFocus(o.beds)),
@@ -209,10 +218,7 @@ export function assembleWeekdayBrief(
   };
 }
 
-export function focusDeltaFromRuns(
-  okRuns: { timestamp: string; units: UnitListing[]; omitted?: OmittedListing[] }[],
-  focusBeds: number[] | null,
-) {
+export function focusDeltaFromRuns(okRuns: DeltaRun[], focusBeds: number[] | null) {
   const latest = okRuns[okRuns.length - 1];
   if (!latest) return null;
   const prev = priorChicagoDayRun(okRuns, latest);
@@ -222,8 +228,9 @@ export function focusDeltaFromRuns(
     prev ? prev.timestamp : null,
     latest.timestamp,
     focusBeds,
-    // Units the old lease cap hid on the comparison day were on the market
-    // then too — do not report them as new.
-    (prev?.omitted ?? []).map(listingKey),
+    // What the two unit lists cannot say: rows that were / are on the site
+    // without a price (not new, not removed), units the old lease cap hid on
+    // the comparison day, and which units have been listed before.
+    deltaContextFor(okRuns, prev, latest),
   );
 }

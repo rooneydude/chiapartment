@@ -13,7 +13,7 @@ import {
   type UnitListing,
 } from "../../shared/src/types";
 import { resolveAdapter } from "./adapters/index";
-import type { AdapterContext } from "./adapters/types";
+import { SiteBlockedError, type AdapterContext } from "./adapters/types";
 import { makeFixtureFetch, makeRecorder } from "./fixtures";
 import { httpFetch, sleep } from "./http";
 
@@ -50,8 +50,20 @@ async function scrapeOne(
   const recorder = opts.capture ? makeRecorder(fixtureDir) : null;
   const alsoListed: AlsoListed[] = [];
   const notices: string[] = [];
+  // What was actually requested, so a snapshot says where its numbers came from.
+  const requested: string[] = [];
+  const baseFetch = opts.fixtures ? makeFixtureFetch(fixtureDir) : httpFetch;
+  const trackedFetch: typeof fetch = (input, init) => {
+    requested.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    return baseFetch(input, init);
+  };
+  const source = (): BuildingSnapshot["source"] => ({
+    adapter: adapter.id,
+    fetchedUrl: requested[0] ?? building.url,
+    ...(requested.length > 0 ? { requests: requested.length } : {}),
+  });
   const ctx: AdapterContext = {
-    fetch: opts.fixtures ? makeFixtureFetch(fixtureDir) : httpFetch,
+    fetch: trackedFetch,
     log: (msg) => console.log(`  [${building.id}] ${msg}`),
     ...(recorder ? { record: recorder.record } : {}),
     // Fixture runs are offline — no need to be polite to a directory.
@@ -69,18 +81,20 @@ async function scrapeOne(
     );
     return {
       status: "ok",
-      source: { adapter: adapter.id, fetchedUrl: building.url },
+      source: source(),
       units,
       ...(alsoListed.length > 0 ? { alsoListed } : {}),
       ...(notices.length > 0 ? { notices } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`  → FAILED: ${message}`);
+    const blocked = err instanceof SiteBlockedError;
+    console.error(`  → ${blocked ? "BLOCKED" : "FAILED"}: ${message}`);
     return {
       status: "error",
       error: message,
-      source: { adapter: adapter.id, fetchedUrl: building.url },
+      ...(blocked ? { blocked: true } : {}),
+      source: source(),
       units: [],
     };
   } finally {
@@ -256,10 +270,18 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
   };
   reportOutage(flagGroupOutages(config.buildings, snapshot.buildings));
 
-  // One retry pass for buildings that failed (Leo's WAF is flaky from GH
-  // Actions IPs). Skip in fixture mode — fixtures are deterministic.
+  // One retry pass for buildings that failed for an ordinary reason (a
+  // timeout, a 5xx). A building whose site answered with its bot protection
+  // is NOT asked again — it said no; the next scheduled run will ask afresh.
+  // Skipped in fixture mode — fixtures are deterministic.
   if (!opts.fixtures) {
-    const failed = snapshot.buildings.filter((b) => b.status === "error");
+    const refused = snapshot.buildings.filter((b) => b.status === "error" && b.blocked);
+    if (refused.length > 0) {
+      console.log(
+        `Not retrying ${refused.map((b) => b.buildingId).join(", ")}: refused by the site's bot protection.`,
+      );
+    }
+    const failed = snapshot.buildings.filter((b) => b.status === "error" && !b.blocked);
     if (failed.length > 0) {
       console.log(`Retrying ${failed.length} failed building(s) after a pause...`);
       await sleep(8_000);

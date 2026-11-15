@@ -27,6 +27,19 @@ export interface AdapterContext {
   reportNotice?: (text: string) => void;
 }
 
+/**
+ * The site answered with its bot protection (a challenge / "access denied"
+ * page, or a flat 401 / 403 / 429) instead of the page. Thrown so the run
+ * records the refusal as such and does not ask again in the same run: a
+ * site that has said no is left alone until the next scheduled scrape.
+ */
+export class SiteBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SiteBlockedError";
+  }
+}
+
 export interface Adapter {
   id: string;
   scrape(building: BuildingConfig, ctx: AdapterContext): Promise<UnitListing[]>;

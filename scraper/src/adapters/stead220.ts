@@ -11,15 +11,26 @@ import type { Adapter } from "./types";
  * What the site publishes (and all it publishes): one hand-maintained record
  * per FLOORPLAN, where a floorplan is a riser/stack ("Unit 01".."Unit 13") or,
  * for penthouses, a single real unit ("Unit 2802"). Each record has a
- * "Starting from" price the building edits by hand (its own `updatedAt` often
- * lags by weeks), a bed/bath count and an availability label. There are no
- * unit numbers below the penthouse floor, no square footage, no move-in
- * dates beyond "Available Now", and no lease terms; the real per-unit
- * inventory lives in RentCafe behind a bot wall we do not go around.
+ * "Starting from" price, a bed/bath count and an availability label. There
+ * are no unit numbers below the penthouse floor, no square footage, no lease
+ * terms and no move-in dates: the card label "Available Now" is the same on
+ * every active plan (priced or not), i.e. the building's blanket statement.
+ * The real per-unit inventory lives in RentCafe behind a bot wall we do not
+ * go around.
  *
- * Two sources on /floorplans, merged by stack tag:
+ * Two sources on /floorplans, merged by stack tag — one request per scrape:
  *   - window.__SSR_DATA__["units.list"]  (structured: price, beds, updatedAt)
  *   - .floorplan-card markup             (availability label, links)
+ *
+ * Known limits of that page (audited 2026-11-15):
+ *   - It is a delayed copy of the building's CMS. Price edits reached it 1–5
+ *     days late (median ~3); each record's own `updatedAt` is kept as
+ *     `sourceUpdatedAt` so the age of a price is visible.
+ *   - The live values, and per-floor rents, exist only behind /api/, which
+ *     the site's robots.txt asks robots not to fetch. This adapter does not.
+ *   - The per-plan pages (/floorplans/<n>) are rendered with placeholder
+ *     numbers (floor 14, a prototype price table) before the browser loads
+ *     the real ones — never parse prices or floors from them.
  */
 
 interface PlanRecord {
@@ -32,6 +43,8 @@ interface PlanRecord {
   availability: string | null;
   href: string | null;
   updatedAt: string | null;
+  /** The site's own "is this plan on offer" switch; null when not stated. */
+  active: boolean | null;
 }
 
 const NO_PRICE_TEXT = /contact for pricing|call for pricing|pricing upon request|inquire/i;
@@ -70,7 +83,6 @@ function plansFromSsr(html: string): Map<string, PlanRecord> {
   for (const raw of list) {
     if (raw === null || typeof raw !== "object") continue;
     const r = raw as Record<string, unknown>;
-    if (r["isActive"] === false) continue;
     const num = r["unitNumber"];
     if (typeof num !== "number" && typeof num !== "string") continue;
     const tag = normTag(num);
@@ -84,6 +96,7 @@ function plansFromSsr(html: string): Map<string, PlanRecord> {
       availability: null,
       href: null,
       updatedAt: typeof r["updatedAt"] === "string" ? r["updatedAt"] : null,
+      active: typeof r["isActive"] === "boolean" ? r["isActive"] : null,
     });
   }
   return out;
@@ -98,7 +111,9 @@ function plansFromCards(html: string): Map<string, PlanRecord> {
     if (!name) return;
     const amount = $(el).find(".fp-card-price-amount").first().text();
     const contact = $(el).find(".fp-card-price-contact").first().text().trim();
-    const priceNum = Number.parseInt(amount.replace(/[^0-9]/g, ""), 10);
+    // The first dollar amount only — "$2,475 - $2,700" must not read as 24752700.
+    const amountM = /\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/.exec(amount);
+    const priceNum = amountM ? Number.parseInt(amountM[1]!.replace(/,/g, ""), 10) : Number.NaN;
     const bathsM = /(\d+(?:\.\d+)?)\s*BATH/i.exec(meta);
     const unitTagM = /UNIT\s*(\d+)/i.exec(meta);
     const aria = $(el).find("[aria-label]").first().attr("aria-label") ?? "";
@@ -114,6 +129,7 @@ function plansFromCards(html: string): Map<string, PlanRecord> {
       availability: $(el).find(".fp-availability-label").first().text().replace(/\s+/g, " ").trim() || null,
       href: $(el).find('a[href^="/floorplans/"]').first().attr("href") ?? null,
       updatedAt: null,
+      active: null,
     });
   });
   return out;
@@ -149,15 +165,18 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
     // (2802 = floor 28, stack 02).
     const unitNumber = /^\d{3,4}$/.test(tag) ? tag : null;
 
-    const notAvailable = availability !== null && NOT_AVAILABLE.test(availability);
+    // A plan the site has switched off, or labels unavailable / waitlist, is
+    // still listed — it is shown as such, never dropped.
+    const inactive = s?.active === false;
+    const notAvailable = inactive || (availability !== null && NOT_AVAILABLE.test(availability));
     const availableDate = availability && !notAvailable ? parseAvailableDate(availability, ref) : null;
     const availableNow = availableDate !== null ? availableDate <= today : undefined;
     const updated = s?.updatedAt ?? undefined;
 
     if (price === null || beds === null || notAvailable) {
       const why =
-        notAvailable && availability
-          ? availability
+        notAvailable
+          ? (availability && NOT_AVAILABLE.test(availability) ? availability : "Unavailable")
           : price === null
             ? (priceText && NO_PRICE_TEXT.test(priceText) ? priceText : "No price published")
             : "Bed count not published";

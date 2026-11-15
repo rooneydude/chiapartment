@@ -1,11 +1,12 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assembleWeekdayBrief, focusDeltaFromRuns } from "../../shared/src/brief";
-import { computeDelta, listingKey } from "../../shared/src/delta";
+import { alsoListedKeys, computeDelta, deltaContextFor, listingKey } from "../../shared/src/delta";
 import { comparePrices } from "../../shared/src/listing";
 import {
   SnapshotSchema,
   type AlsoListed,
+  type AlsoListedCompiled,
   type BuildingHistory,
   type BuildingSnapshot,
   type CompiledConfig,
@@ -36,6 +37,25 @@ export interface OkRun {
 const share = (units: UnitListing[], has: (u: UnitListing) => boolean): number =>
   units.length === 0 ? 0 : units.filter(has).length / units.length;
 
+/**
+ * For rows now listed without a price: the price the same plan / unit last
+ * carried on the site, and when — "Contact for Pricing" after $2,250 says
+ * more than "Contact for Pricing" alone.
+ */
+export function withLastPrices(rows: AlsoListed[], okRuns: OkRun[]): AlsoListedCompiled[] {
+  return rows.map((row) => {
+    if (row.price !== undefined) return row;
+    const key = alsoListedKeys([row])[0];
+    if (!key) return row;
+    for (let i = okRuns.length - 1; i >= 0; i--) {
+      const run = okRuns[i]!;
+      const was = run.units.find((u) => listingKey(u) === key);
+      if (was) return { ...row, lastPrice: was.price, lastPricedAt: run.timestamp };
+    }
+    return row;
+  });
+}
+
 /** Data-sanity alarms so a broken scrape never masquerades as market truth. */
 export function computeWarnings(
   lastAny: BuildingSnapshot | null,
@@ -50,7 +70,9 @@ export function computeWarnings(
       : "";
     warnings.push({
       code: "scrape-error",
-      message: `Last scrape failed: ${lastAny.error ?? "unknown error"}.${lastGoodBit}`,
+      message: lastAny.blocked
+        ? `The leasing site's bot protection refused the last scrape, so nothing new could be read.${lastGoodBit} The next scheduled run will ask again.`
+        : `Last scrape failed: ${lastAny.error ?? "unknown error"}.${lastGoodBit}`,
     });
   }
   const latest = okRuns[okRuns.length - 1];
@@ -68,11 +90,15 @@ export function computeWarnings(
   // so new/removed inventory and lease-term switches cannot fake a move.
   const prevByKey = new Map(prev.units.map((u) => [listingKey(u), u]));
   const ratios: number[] = [];
+  const comparedFrom = new Set<number>();
   for (const u of latest.units) {
     const before = prevByKey.get(listingKey(u));
     if (!before) continue;
     const cmp = comparePrices(before, u);
-    if (!cmp.notComparable && cmp.from > 0) ratios.push(cmp.to / cmp.from);
+    if (!cmp.notComparable && cmp.from > 0) {
+      ratios.push(cmp.to / cmp.from);
+      comparedFrom.add(cmp.from);
+    }
   }
   if (ratios.length >= 4) {
     const move = median(ratios) - 1;
@@ -80,6 +106,25 @@ export function computeWarnings(
       warnings.push({
         code: "price-jump",
         message: `Prices of the ${ratios.length} units listed in both runs moved ${move > 0 ? "+" : "−"}${Math.round(Math.abs(move) * 100)}% (median) in one run — verify before trusting.`,
+      });
+    }
+  }
+
+  // Every unit moving by the same ratio at once is the signature of a
+  // concession being netted into (or taken out of) the advertised rent — The
+  // Leo, 12 Nov 2026: both units ×17/18 the day a "half month free" banner
+  // went up. Base rent did not move; say so before anyone reads it as a cut.
+  // (Two units that merely shared a price and got the same cut do not count:
+  // the prices they moved from must differ.)
+  const moved = ratios.filter((r) => Math.abs(r - 1) > 0.002);
+  if (ratios.length >= 2 && moved.length === ratios.length && comparedFrom.size >= 2) {
+    const lo = Math.min(...moved);
+    const hi = Math.max(...moved);
+    if (hi - lo <= 0.0008) {
+      const pct = Math.abs((lo + hi) / 2 - 1) * 100;
+      warnings.push({
+        code: "uniform-reprice",
+        message: `All ${moved.length} units listed in both runs were repriced by the same ${lo < 1 ? "−" : "+"}${pct.toFixed(1)}% at once. That pattern usually means a concession (free rent) was ${lo < 1 ? "netted into" : "taken out of"} the advertised prices, not that base rent changed — check the site's current special.`,
       });
     }
   }
@@ -166,11 +211,13 @@ export function buildData(root: string): void {
     const okRuns: OkRun[] = [];
     let lastAny: BuildingSnapshot | null = null;
     let lastSnapTs: string | null = null;
+    let failedRuns = 0;
     for (const snap of snapshots) {
       const bs = snap.buildings.find((b) => b.buildingId === building.id);
       if (!bs) continue;
       lastAny = bs;
       lastSnapTs = snap.timestamp;
+      failedRuns = bs.status === "ok" ? 0 : failedRuns + 1;
       if (bs.status !== "ok") continue;
       okRuns.push({
         timestamp: snap.timestamp,
@@ -185,6 +232,8 @@ export function buildData(root: string): void {
         timestamp: lastSnapTs,
         status: lastAny.status,
         ...(lastAny.status === "error" && lastAny.error ? { error: lastAny.error } : {}),
+        ...(lastAny.status === "error" && lastAny.blocked ? { blocked: true } : {}),
+        ...(failedRuns > 0 ? { failedRuns } : {}),
       };
     }
 
@@ -255,12 +304,13 @@ export function buildData(root: string): void {
         latest.units,
         prev ? prev.timestamp : null,
         latest.timestamp,
-        // Units the old lease cap hid last run were on the market then too —
-        // they are not "new" when they appear in the list now.
-        (prev?.omitted ?? []).map(listingKey),
+        // Rows that were / are on the site outside the unit list (the old
+        // lease cap's omissions, plans listed without a price) are neither
+        // "new" nor "removed"; a unit seen in an earlier run is a re-listing.
+        deltaContextFor(okRuns, prev ?? null, latest),
       );
       history.omitted = latest.omitted ?? [];
-      history.alsoListed = latest.alsoListed ?? [];
+      history.alsoListed = withLastPrices(latest.alsoListed ?? [], okRuns);
       history.notices = latest.notices ?? [];
       history.focusDelta = focusDeltaFromRuns(okRuns, focusBeds);
     }

@@ -8,11 +8,11 @@ import {
   type AlsoListed,
   type UnitListing,
 } from "../../shared/src/types";
-import { leo, isWafPage, parseLeoInventory, parseLeoPage } from "../src/adapters/leo";
+import { leo, isWafPage, parseLeoCards, parseLeoInventory, parseLeoPage } from "../src/adapters/leo";
 import { oldtownpark, parseOldTownParkPage } from "../src/adapters/oldtownpark";
 import { leasingUrlForDate, parseLeaseTable, sightmap } from "../src/adapters/sightmap";
 import { extractSsrData, parseSteadFloorplans, stead220 } from "../src/adapters/stead220";
-import type { AdapterContext } from "../src/adapters/types";
+import { SiteBlockedError, type AdapterContext } from "../src/adapters/types";
 import { makeFixtureFetch } from "../src/fixtures";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -59,7 +59,7 @@ async function run(
 }
 
 /** Invariants every adapter's output must satisfy, whatever the site. */
-function expectSaneListings(listings: UnitListing[]): void {
+function expectSaneListings(listings: UnitListing[], today = "2026-11-15"): void {
   const seen = new Set<string>();
   for (const l of listings) {
     expect(l.price).toBeGreaterThanOrEqual(400);
@@ -67,7 +67,8 @@ function expectSaneListings(listings: UnitListing[]): void {
     if (l.priceMax !== undefined) expect(l.priceMax).toBeGreaterThan(l.price);
     if (l.availableDate !== null) expect(l.availableDate).toMatch(ISO_DAY);
     // The flag and the date may never contradict each other.
-    if (l.availableNow === false) expect(l.availableDate! > "2026-11-15").toBe(true);
+    if (l.availableNow === false) expect(l.availableDate! > today).toBe(true);
+    if (l.availableNow === true) expect(l.availableDate).toBe(today);
     if (l.leaseTerms) {
       const months = l.leaseTerms.map((t) => t.months);
       expect(months).toEqual([...months].sort((a, b) => a - b));
@@ -736,7 +737,7 @@ describe("oldtownpark adapter (legacy Aug 2026 markup)", () => {
 
 describe("leo adapter (captured 2026-11-15)", () => {
   it("parses the two listed units with the site's 'Available Now' flag", async () => {
-    const { listings, alsoListed } = await run(leo, "the-leo");
+    const { listings, alsoListed, notices, logs } = await run(leo, "the-leo");
     expectSaneListings(listings);
     expect(alsoListed).toEqual([]);
     expect(listings).toHaveLength(2);
@@ -753,73 +754,203 @@ describe("leo adapter (captured 2026-11-15)", () => {
       vacantSince: "2026-09-22",
     });
     expect(listings.find((l) => l.unitNumber === "705")!.planType).toBeUndefined();
+    // The junior one-bed is filed by the site under its own type, and the
+    // site's structured data counts it as 0 bedrooms — so it is studio-class
+    // here too, under its own name, not a "1 BR".
     expect(listings.find((l) => l.unitNumber === "602")).toMatchObject({
-      beds: 1,
+      beds: 0,
       sqft: 508,
       price: 2635,
-      // Charted with the other one-beds, but labelled as what it is.
-      floorplanName: "1 BR",
-      planType: "JR 1 Bedroom",
+      floorplanName: "Jr 1 Bedroom",
+      planType: "Jr 1 Bedroom",
       availableNow: true,
       vacantSince: "2026-11-10",
     });
-    expect(listings[0]!.url).toMatch(/^https:\/\/leochicago\.com\/floorplans\/unit-/);
+    // The JSON path, specifically: unit permalinks only exist there.
+    expect(listings.every((l) => /^https:\/\/leochicago\.com\/floorplans\/unit-/.test(l.url ?? ""))).toBe(true);
+    // What the site says about its prices is recorded with them.
+    expect(notices).toEqual([
+      "Receive a 1/2 month free on our final availability for 2026! — Ask about limited-time incentives! Schedule a tour with our leasing team to explore The Leo today.",
+      "Prices listed may include concessions (free rent) and/or special offers.",
+    ]);
+    expect(logs.join("\n")).toContain("2 unit(s) in the site's list → 2 priced");
   });
 
-  it("treats a real page with an empty inventory blob as 'nothing listed', not a failure", async () => {
-    const html = `<html><body><script id="jd-fp-data-script-app" type="application/json">${JSON.stringify(
-      { version: "1.12.0", units: [], floorplans: [] },
-    )}</script></body></html>`;
-    const logs: string[] = [];
+  it("asks for the page's real address (no redirect) and makes one request", async () => {
+    const urls: string[] = [];
+    const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "the-leo"));
     const ctx: AdapterContext = {
-      fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
-      log: (m) => logs.push(m),
+      fetch: (async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return base(input);
+      }) as typeof fetch,
+      log: () => {},
       now: () => CAPTURED,
     };
-    // Must return without falling back to a browser (which would time out here).
-    await expect(leo.scrape(buildingById("the-leo"), ctx)).resolves.toEqual([]);
+    await leo.scrape(buildingById("the-leo"), ctx);
+    expect(urls).toEqual(["https://leochicago.com/floorplans/"]);
+  });
+
+  const blobPage = (units: unknown[], extra = ""): string =>
+    `<html><head><title>Floor plans</title></head><body>${extra}<script id="jd-fp-data-script-app" type="application/json">${JSON.stringify(
+      { version: "1.12.0", units, floorplans: [] },
+    )}</script></body></html>`;
+  const catalogue = (plans: { name: string; beds: number; available: number }[]): string =>
+    `<script type="application/ld+json">${JSON.stringify({
+      "@graph": [
+        {
+          "@type": "ApartmentComplex",
+          accommodationFloorPlan: plans.map((p) => ({
+            "@type": "FloorPlan",
+            name: p.name,
+            numberOfBedrooms: p.beds,
+            numberOfAvailableAccommodationUnits: p.available,
+          })),
+        },
+      ],
+    })}</script>`;
+  const serve = (body: string, status = 200, logs: string[] = [], notices: string[] = []): AdapterContext => ({
+    fetch: async () => new Response(body, { status, headers: { "content-type": "text/html" } }),
+    log: (m) => logs.push(m),
+    now: () => CAPTURED,
+    reportNotice: (t) => notices.push(t),
+  });
+
+  it("treats a real page with an empty inventory as 'nothing listed', not a failure", async () => {
+    const html = blobPage([], catalogue([{ name: "408", beds: 0, available: 0 }, { name: "705", beds: 1, available: 0 }]));
+    const logs: string[] = [];
+    const notices: string[] = [];
+    await expect(leo.scrape(buildingById("the-leo"), serve(html, 200, logs, notices))).resolves.toEqual([]);
     expect(logs.join(" ")).toContain("lists nothing right now");
+    expect(notices).toEqual([
+      "The site lists no available apartments right now (2 floor plans in its catalogue, none marked available).",
+    ]);
     expect(parseLeoInventory(html, "https://leochicago.com/", CAPTURED).sawInventory).toBe(true);
     expect(parseLeoInventory("<html></html>", "https://leochicago.com/", CAPTURED).sawInventory).toBe(false);
   });
 
-  it("reports a unit without a price instead of silently dropping it", () => {
-    const html = `<script id="jd-fp-data-script-app" type="application/json">${JSON.stringify({
-      units: [
-        { apartment_number: "1201", bedrooms: "2", bathrooms: "2", square_feet: "1100", rent_min: null, available_display: "Available Now" },
-        { apartment_number: "408", bedrooms: "Studio", bathrooms: "1", square_feet: "467", rent_min: "2350", rent_max: "2500", available_date: "1797400800", available_display: "Available Dec 16" },
-      ],
-    })}</script>`;
+  it("does not record an empty building when the page's own catalogue contradicts it", async () => {
+    const html = blobPage([], catalogue([{ name: "705", beds: 1, available: 1 }]));
+    await expect(leo.scrape(buildingById("the-leo"), serve(html))).rejects.toThrow(/contradictory evidence/);
+  });
+
+  it("records a bot-protection refusal as blocked — no browser, no second request", async () => {
+    const waf = JSON.stringify({
+      message: "Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted",
+    });
+    let requests = 0;
+    const ctx: AdapterContext = {
+      fetch: async () => {
+        requests++;
+        return new Response(waf, { status: 200, headers: { "content-type": "application/json" } });
+      },
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    const err = await leo.scrape(buildingById("the-leo"), ctx).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SiteBlockedError);
+    expect((err as Error).message).toMatch(/bot protection refused the request \(HTTP 200, application\/json, \d+ bytes\)/);
+    expect(requests).toBe(1);
+
+    // A flat 403 and an HTML challenge page are refusals too.
+    await expect(leo.scrape(buildingById("the-leo"), serve("<html><body>403 Forbidden</body></html>", 403))).rejects.toBeInstanceOf(SiteBlockedError);
+    await expect(
+      leo.scrape(buildingById("the-leo"), serve("<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>")),
+    ).rejects.toBeInstanceOf(SiteBlockedError);
+    // A server error or an unrecognised page is an ordinary failure, with what was seen.
+    const plain = await leo.scrape(buildingById("the-leo"), serve("<html><head><title>Oops</title></head><body>maintenance</body></html>", 200)).catch((e: unknown) => e);
+    expect(plain).not.toBeInstanceOf(SiteBlockedError);
+    expect((plain as Error).message).toMatch(/no unit data found .*HTTP 200, text\/html, \d+ bytes, title "Oops"/);
+    const down = await leo.scrape(buildingById("the-leo"), serve("Bad gateway", 502)).catch((e: unknown) => e);
+    expect(down).not.toBeInstanceOf(SiteBlockedError);
+    expect((down as Error).message).toContain("HTTP 502");
+  });
+
+  it("never mistakes the real page for a challenge page, whatever words it contains", () => {
+    const real = blobPage([], "<!-- protected by imunify360 --><p>captcha</p>");
+    expect(isWafPage(real)).toBe(false);
+    expect(isWafPage(real, 403)).toBe(false);
+    // A full-size real page mentioning a captcha (contact form) is not a challenge either.
+    expect(isWafPage(`<html>${"x".repeat(30_000)} recaptcha</html>`)).toBe(false);
+    expect(isWafPage("<html><title>One moment, please...</title></html>")).toBe(true);
+    expect(isWafPage("")).toBe(false);
+  });
+
+  it("reports a unit without a price or bed count instead of silently dropping it", async () => {
+    const html = blobPage([
+      { apartment_number: "1201", bedrooms: "2", bathrooms: "2", square_feet: "1100", rent_min: "", price_display: "Contact Us", available_display: "Available Now" },
+      { apartment_number: "408", bedrooms: "Studio", bathrooms: "1", square_feet: "467", rent_min: "2350", rent_max: "2500", available_date: "1797400800", available_display: "Available Dec 16" },
+      { apartment_number: "PH1", bedrooms: "Penthouse", bathrooms: "2", square_feet: "1500", rent_min: "6100", available_display: "Available Now" },
+      { apartment_number: "PH2", bedrooms: "", bedrooms_display: "1 bed", bathrooms: "1", square_feet: "700", rent_min: "3100", available_display: "Available Now" },
+    ]);
     const page = parseLeoInventory(html, "https://leochicago.com/", CAPTURED);
-    expect(page.listings).toHaveLength(1);
+    expect(page.unitCount).toBe(4);
+    expect(page.listings.map((l) => [l.unitNumber, l.beds, l.price])).toEqual([
+      ["408", 0, 2350],
+      // An empty bedroom field falls back to the display label; odd unit
+      // names are kept as the unit's identity.
+      ["PH2", 1, 3100],
+    ]);
     expect(page.listings[0]).toMatchObject({
-      unitNumber: "408",
-      beds: 0,
-      price: 2350,
       priceMax: 2500,
       availableDate: "2026-12-16",
       availableNow: false,
     });
     expect(page.alsoListed).toEqual([
-      expect.objectContaining({ unitNumber: "1201", beds: 2, note: "No price published", availableNow: true }),
+      expect.objectContaining({ unitNumber: "1201", beds: 2, note: "Contact Us", availableNow: true }),
+      expect.objectContaining({ unitNumber: "PH1", beds: null, price: 6100, note: "Bed count not published" }),
     ]);
+    const logs: string[] = [];
+    await leo.scrape(buildingById("the-leo"), serve(html, 200, logs));
+    expect(logs.join("\n")).toContain("4 unit(s) in the site's list → 2 priced, 2 listed without a price or bed count");
+  });
+
+  it("classifies a non-numeric bedroom label the way the site's catalogue does", () => {
+    const junior = { apartment_number: "602", floorplan_title: "602", bedrooms: "JR 1 Bedroom", bedrooms_display: "JR 1 Bedroom", bathrooms: "1", square_feet: "508", rent_min: "2635", available_display: "Available Now" };
+    // With the catalogue: 0 bedrooms, as the site says.
+    const withCatalogue = parseLeoInventory(
+      blobPage([junior], catalogue([{ name: "602", beds: 0, available: 1 }])),
+      "https://leochicago.com/",
+      CAPTURED,
+    );
+    expect(withCatalogue.listings[0]).toMatchObject({ beds: 0, floorplanName: "JR 1 Bedroom", planType: "JR 1 Bedroom" });
+    expect(withCatalogue.catalogueAvailable).toBe(1);
+    // Without one, the digit in the label is the only clue left.
+    const without = parseLeoInventory(blobPage([junior]), "https://leochicago.com/", CAPTURED);
+    expect(without.listings[0]).toMatchObject({ beds: 1, planType: "JR 1 Bedroom" });
+    expect(without.catalogueAvailable).toBeNull();
+  });
+
+  it("rejects timestamps that are not a plausible day", () => {
+    const unit = (available_date: unknown) => ({ apartment_number: "705", bedrooms: "1", rent_min: "3093", available_date });
+    const day = (v: unknown) =>
+      parseLeoInventory(blobPage([unit(v)]), "https://leochicago.com/", CAPTURED).listings[0]!.availableDate;
+    expect(day("1797400800")).toBe("2026-12-16");
+    expect(day(1797400800)).toBe("2026-12-16");
+    // Milliseconds, zero, garbage: no date rather than a wrong one.
+    expect(day(1797400800000)).toBeNull();
+    expect(day("0")).toBeNull();
+    expect(day("soon")).toBeNull();
   });
 });
 
 describe("leo adapter (legacy Aug 2026 capture)", () => {
   const dir = join(ROOT, "scraper", "fixtures", "legacy-2026-09", "the-leo");
 
-  it("parses unit-level cards with sqft, baths and future move-in dates", async () => {
+  it("parses unit-level data with sqft, baths and future move-in dates", async () => {
     const { listings } = await run(leo, "the-leo", "legacy-2026-09/the-leo");
-    expect(listings.length).toBeGreaterThanOrEqual(8); // page had 9 cards
-    expect(listings.filter((l) => l.unitNumber !== null).length).toBeGreaterThanOrEqual(8);
+    expectSaneListings(listings, "2026-08-04");
+    expect(listings.map((l) => l.unitNumber).sort()).toEqual(
+      ["1309", "1310", "1401", "1801", "408", "501", "603", "707", "910"].sort(),
+    );
     expect(listings.every((l) => l.sqft !== null && l.baths !== null)).toBe(true);
-    const studio408 = listings.find((l) => l.unitNumber === "408");
     // Seen from early August, Aug 27 is a future move-in day.
-    expect(studio408).toMatchObject({
+    expect(listings.find((l) => l.unitNumber === "408")).toMatchObject({
       beds: 0,
       sqft: 467,
       baths: 1,
+      price: 2350,
+      floorplanName: "Studio",
       availableDate: "2026-08-27",
       availableNow: false,
     });
@@ -829,26 +960,67 @@ describe("leo adapter (legacy Aug 2026 capture)", () => {
       availableNow: true,
       vacantSince: "2026-06-29",
     });
-    expect(studio408!.price).toBeGreaterThan(1800);
-    expect(studio408!.price).toBeLessThan(3200);
+    // One-beds with a den are their own product on the site, and here.
+    for (const unit of ["910", "1310"]) {
+      expect(listings.find((l) => l.unitNumber === unit)).toMatchObject({
+        beds: 1,
+        floorplanName: "1 Bedroom + Den",
+        planType: "1 Bedroom + Den",
+      });
+    }
+    expect(listings.find((l) => l.unitNumber === "603")).toMatchObject({ beds: 1, floorplanName: "1 BR" });
+    expect(listings.find((l) => l.unitNumber === "603")!.planType).toBeUndefined();
+    expect(listings.find((l) => l.unitNumber === "707")).toMatchObject({ beds: 2, floorplanName: "2 BR" });
   });
 
   it("prefers the embedded Jonah JSON over card markup", () => {
     const html = readFileSync(join(dir, "00-floorplans.html"), "utf8");
     const listings = parseLeoPage(html, "https://leochicago.com/");
-    expect(listings.length).toBeGreaterThanOrEqual(8);
-    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
-    expect(listings.every((l) => l.availableDate === null || ISO_DAY.test(l.availableDate))).toBe(true);
+    expect(listings).toHaveLength(9);
+    // Dates and unit permalinks exist only in the JSON.
+    expect(listings.every((l) => l.availableDate !== null && ISO_DAY.test(l.availableDate))).toBe(true);
+    expect(listings.every((l) => /\/floorplans\/unit-/.test(l.url ?? ""))).toBe(true);
   });
 
-  it("recognizes Imunify360 WAF bodies so we retry instead of treating them as empty inventory", () => {
-    const waf = JSON.stringify({
-      message: "Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted",
-    });
+  it("reads the cards of a page that lost its data script — a degraded reading, and says so", async () => {
+    // The rendered capture: the site's own script has removed the data node.
+    const html = readFileSync(join(dir, "05-floorplans.html"), "utf8");
+    expect(html.includes("jd-fp-data-script-app")).toBe(false);
+    const cards = parseLeoCards(html, "https://leochicago.com/");
+    expect(cards).toHaveLength(9);
+    expect(cards.every((l) => l.availableDate === null)).toBe(true);
+    expect(cards.find((l) => l.unitNumber === "408")).toMatchObject({ beds: 0, sqft: 467, baths: 1, price: 2350 });
+    for (const l of cards) UnitListingSchema.parse(l);
+
+    const notices: string[] = [];
+    const logs: string[] = [];
+    const ctx: AdapterContext = {
+      fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+      log: (m) => logs.push(m),
+      now: () => LEGACY_CAPTURED,
+      reportNotice: (t) => notices.push(t),
+    };
+    await expect(leo.scrape(buildingById("the-leo"), ctx)).resolves.toHaveLength(9);
+    expect(notices[0]).toMatch(/move-in dates are not available for this run/);
+  });
+
+  it("card prices: the first dollar amount only, within sane bounds", () => {
+    const card = (price: string): string =>
+      `<a data-jd-fp-selector="floorplan-item" href="/floorplans/602/"><p class="jd-fp-card-info__title">602</p>
+       <p class="jd-fp-card-info__text"><span>JR 1 Bedroom</span><span>1 bath</span><span>508 sq. ft.</span></p>
+       <span data-jd-fp-adp="display">${price}</span></a>`;
+    expect(parseLeoCards(card("Starting at $2,635 - $2,900"), "https://leochicago.com/")).toEqual([
+      expect.objectContaining({ unitNumber: "602", price: 2635, planType: "JR 1 Bedroom" }),
+    ]);
+    expect(parseLeoCards(card("Contact Us"), "https://leochicago.com/")).toEqual([]);
+    expect(parseLeoCards(card("$26,352,900"), "https://leochicago.com/")).toEqual([]);
+  });
+
+  it("recognizes Imunify360 bodies, which never pass for an empty building", () => {
+    const waf = readFileSync(join(dir, "00-root.html"), "utf8");
     expect(isWafPage(waf)).toBe(true);
     expect(isWafPage("<html><body>floorplans</body></html>")).toBe(false);
-    expect(parseLeoPage('{"message":"Access denied by Imunify360 bot-protection."}', "https://leochicago.com/")).toEqual([]);
-    // A WAF body carries no inventory blob, so it can never pass for "empty building".
+    expect(parseLeoPage(waf, "https://leochicago.com/")).toEqual([]);
     expect(parseLeoInventory(waf, "https://leochicago.com/", CAPTURED).sawInventory).toBe(false);
   });
 });

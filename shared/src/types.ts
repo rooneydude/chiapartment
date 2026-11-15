@@ -220,7 +220,22 @@ export const BuildingSnapshotSchema = z.object({
   buildingId: z.string(),
   status: z.enum(["ok", "error"]),
   error: z.string().optional(),
-  source: z.object({ adapter: z.string(), fetchedUrl: z.string() }),
+  /**
+   * With status "error": the site answered with its bot protection (a
+   * challenge / "access denied" page) rather than failing or changing. Such
+   * a refusal is recorded and left alone — never retried in the same run.
+   */
+  blocked: z.boolean().optional(),
+  source: z.object({
+    adapter: z.string(),
+    /**
+     * The page the data was read from (the first URL the adapter requested).
+     * Snapshots before 2026-11-15 carry the building's home page here.
+     */
+    fetchedUrl: z.string(),
+    /** How many requests the scrape made to the site. */
+    requests: z.number().int().nonnegative().optional(),
+  }),
   units: z.array(UnitListingSchema),
   /** Historical only — see OmittedListingSchema. */
   omitted: z.array(OmittedListingSchema).optional(),
@@ -282,6 +297,12 @@ export interface PriceChange {
    *                  (Old Town Park alternates between two pricing states).
    */
   notComparable?: "lease-term" | "price-form";
+  /**
+   * When the site itself says the new price was set (Stead 220's per-plan
+   * edit timestamp). Its page trails its price edits by days, so this — not
+   * the day the tracker first saw it — is when the price really changed.
+   */
+  sourceUpdatedAt?: string;
 }
 
 /** A unit whose earliest move-in day changed between two runs. */
@@ -301,6 +322,11 @@ export interface SnapshotDelta {
   priceChanges: PriceChange[];
   /** Move-in date moves (future ↔ future, or future → now). Additive. */
   dateChanges?: DateChange[];
+  /**
+   * Listing keys of the `newUnits` that were listed in some earlier run and
+   * came back — re-listings, not first appearances. Additive.
+   */
+  relistedKeys?: string[];
 }
 
 /** Calendar-day, focus-bed slice of a delta — weekday-brief input. */
@@ -329,6 +355,12 @@ export interface BriefListing {
   leaseTerms?: LeaseTermPrice[];
   sqft?: number | null;
   url?: string;
+  /**
+   * In `new`: the unit was listed before, left, and is back — a re-listing,
+   * not a first appearance. `firstSeen` is when it was first ever listed.
+   */
+  relisted?: boolean;
+  firstSeen?: string;
 }
 
 export interface BriefDrop {
@@ -378,9 +410,11 @@ export interface WeekdayBriefBuilding {
   /** Focus-bed units whose earliest move-in day moved since the prior day. */
   dateChanges?: DateChange[];
   /** Listed on the site but not comparable (no price / no bed count). */
-  alsoListed?: AlsoListed[];
+  alsoListed?: AlsoListedCompiled[];
   /** Building-wide notices the site prints (specials). */
   notices?: string[];
+  /** With status "error": the site's bot protection refused the request. */
+  blocked?: boolean;
 }
 
 export interface WeekdayBrief {
@@ -407,9 +441,26 @@ export interface WeekdayBrief {
 }
 
 export interface DataWarning {
-  code: "scrape-error" | "empty-run" | "price-jump" | "count-drop" | "partial-data";
+  code:
+    | "scrape-error"
+    | "empty-run"
+    | "price-jump"
+    | "count-drop"
+    | "partial-data"
+    /** Every unit moved by the same ratio at once — a concession, not base rent. */
+    | "uniform-reprice";
   message: string;
 }
+
+/**
+ * An also-listed row as the dashboard gets it: plus, when the tracker has
+ * seen the same plan / unit with a price before, what that price was and
+ * when it was last on the site (build-time, never stored in snapshots).
+ */
+export type AlsoListedCompiled = AlsoListed & {
+  lastPrice?: number;
+  lastPricedAt?: string;
+};
 
 export interface BuildingHistory {
   buildingId: string;
@@ -436,6 +487,10 @@ export interface BuildingHistory {
     timestamp: string;
     status: "ok" | "error";
     error?: string;
+    /** The site's bot protection refused the request (see BuildingSnapshot.blocked). */
+    blocked?: boolean;
+    /** How many scrape attempts in a row have failed, this one included. */
+    failedRuns?: number;
   } | null;
   /**
    * Calendar-day diff on focus.beds (Chicago timezone). Additive field for
@@ -445,7 +500,7 @@ export interface BuildingHistory {
   /** Historical: over-cap units skipped on the latest ok scrape. Empty since the cap was removed. */
   omitted: OmittedListing[];
   /** Listed but not comparable on the latest ok scrape (no price / no bed count). */
-  alsoListed: AlsoListed[];
+  alsoListed: AlsoListedCompiled[];
   /** Building-wide notices (specials) from the latest ok scrape. */
   notices: string[];
 }

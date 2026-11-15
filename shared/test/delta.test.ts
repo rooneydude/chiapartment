@@ -144,7 +144,7 @@ describe("like-for-like price changes", () => {
     // on the market the day before as well.
     const prev = [unit("0509", 3774)];
     const curr = [unit("0509", 3774), unit("0625", 3529), unit("0701", 4944, { beds: 2 })];
-    const d = computeDelta(prev, curr, T0, T1, ["u:0625"]);
+    const d = computeDelta(prev, curr, T0, T1, { prevAlsoKnown: ["u:0625"] });
     expect(d.newUnits.map((u) => u.unitNumber)).toEqual(["0701"]);
   });
 });

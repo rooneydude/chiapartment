@@ -1,13 +1,14 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { computeDelta, listingKey, listingLabel } from "../../shared/src/delta";
-import { isAvailableNow, priceAtTerm } from "../../shared/src/listing";
 import {
-  SnapshotSchema,
-  type OmittedListing,
-  type Snapshot,
-  type UnitListing,
-} from "../../shared/src/types";
+  computeDelta,
+  deltaContextFor,
+  isRelisted,
+  listingLabel,
+  type DeltaRun,
+} from "../../shared/src/delta";
+import { isAvailableNow, priceAtTerm } from "../../shared/src/listing";
+import { SnapshotSchema, type Snapshot, type UnitListing } from "../../shared/src/types";
 import { loadConfig } from "./run";
 
 /**
@@ -31,22 +32,41 @@ export interface AlertResult {
   errors: number;
 }
 
-interface OkRun {
-  timestamp: string;
-  units: UnitListing[];
-  omitted: OmittedListing[];
-}
-
-function lastTwoOk(snaps: Snapshot[], buildingId: string): { prev: OkRun; curr: OkRun } | null {
-  const ok: OkRun[] = [];
+/** Every successful scrape of one building, oldest first. */
+function okRunsOf(snaps: Snapshot[], buildingId: string): DeltaRun[] {
+  const ok: DeltaRun[] = [];
   for (const snap of snaps) {
     const bs = snap.buildings.find((b) => b.buildingId === buildingId);
     if (!bs || bs.status !== "ok") continue;
-    ok.push({ timestamp: snap.timestamp, units: bs.units, omitted: bs.omitted ?? [] });
+    ok.push({
+      timestamp: snap.timestamp,
+      units: bs.units,
+      omitted: bs.omitted ?? [],
+      alsoListed: bs.alsoListed ?? [],
+    });
   }
-  if (ok.length < 2) return null;
-  return { prev: ok[ok.length - 2]!, curr: ok[ok.length - 1]! };
+  return ok;
 }
+
+/** How many of the building's most recent scrape attempts failed in a row. */
+function failedStreak(snaps: Snapshot[], buildingId: string): number {
+  let n = 0;
+  for (let i = snaps.length - 1; i >= 0; i--) {
+    const bs = snaps[i]!.buildings.find((b) => b.buildingId === buildingId);
+    if (!bs) continue;
+    if (bs.status === "ok") break;
+    n++;
+  }
+  return n;
+}
+
+const shortDay = (iso: string): string =>
+  new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: iso.length === 10 ? "UTC" : "America/Chicago",
+  });
 
 const bedsText = (beds: number): string => (beds === 0 ? "studio" : `${beds} BR`);
 const usd = (n: number): string => `$${n.toLocaleString("en-US")}`;
@@ -102,26 +122,45 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
   const dropLines: string[] = [];
   const newLines: string[] = [];
   const errorLines: string[] = [];
+  // Move-in date changes ride along with an alert; alone they do not raise one.
+  const dateLines: string[] = [];
 
   for (const building of config.buildings) {
     const name = nameOf.get(building.id) ?? building.id;
     const latestBs = latest.buildings.find((b) => b.buildingId === building.id);
     // Not part of this run (single-building refresh): nothing new to say.
     if (!latestBs) continue;
+    const okRuns = okRunsOf(snaps, building.id);
     if (latestBs.status === "error") {
-      errorLines.push(`- ⚠ **${name}** scrape failed: ${latestBs.error ?? "unknown error"}`);
+      const streak = failedStreak(snaps, building.id);
+      const lastGood = okRuns[okRuns.length - 1];
+      const since = lastGood ? ` Showing data from ${shortDay(lastGood.timestamp)}.` : "";
+      if (latestBs.blocked) {
+        // One refusal by a site's bot protection is routine and fixes itself
+        // on the next run; only a streak is worth a notification.
+        if (streak >= 2) {
+          errorLines.push(
+            `- ⚠ **${name}**: the site's bot protection has refused the last ${streak} scrapes.${since}`,
+          );
+        }
+      } else {
+        errorLines.push(
+          `- ⚠ **${name}** scrape failed${streak > 1 ? ` (${streak} runs in a row)` : ""}: ${latestBs.error ?? "unknown error"}${since}`,
+        );
+      }
       continue;
     }
 
-    const pair = lastTwoOk(snaps, building.id);
-    if (!pair || pair.curr.timestamp !== latest.timestamp) continue;
+    if (okRuns.length < 2) continue;
+    const pair = { prev: okRuns[okRuns.length - 2]!, curr: okRuns[okRuns.length - 1]! };
+    if (pair.curr.timestamp !== latest.timestamp) continue;
 
     const delta = computeDelta(
       pair.prev.units,
       pair.curr.units,
       pair.prev.timestamp,
       pair.curr.timestamp,
-      pair.prev.omitted.map(listingKey),
+      deltaContextFor(okRuns, pair.prev, pair.curr),
     );
 
     for (const c of delta.priceChanges) {
@@ -136,8 +175,11 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
         c.fromTerm !== undefined && c.fromTerm === c.toTerm ? `${c.fromTerm}-mo lease` : "",
         unit ? moveInText(unit, pair.curr.timestamp) : "",
       ].filter(Boolean);
+      // Stead 220's page trails its price edits by days: say when the
+      // building itself set the price, not just when the tracker saw it.
+      const setOn = c.sourceUpdatedAt ? ` — set by the building on ${shortDay(c.sourceUpdatedAt)}` : "";
       dropLines.push(
-        `- **${name}** ${label} (${detail.join(", ")}): ${usd(c.from)} → **${usd(c.to)}** (▼${usd(c.from - c.to)})`,
+        `- **${name}** ${label} (${detail.join(", ")}): ${usd(c.from)} → **${usd(c.to)}** (▼${usd(c.from - c.to)})${setOn}`,
       );
     }
     for (const u of delta.newUnits) {
@@ -145,9 +187,17 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
       const detail = [bedsText(u.beds), u.sqft ? `${u.sqft} sqft` : ""].filter(Boolean);
       const tail = [leaseText(u, compareTerm), moveInText(u, pair.curr.timestamp)].filter(Boolean);
       const range = u.priceMax !== undefined ? `–${usd(u.priceMax)}` : "";
+      // Back after an absence is not a first appearance — say which it is.
+      const verb = isRelisted(delta, u) ? "back on the site at" : "listed at";
       newLines.push(
-        `- **${name}** ${listingLabel(u)} (${detail.join(", ")}) listed at **${usd(u.price)}${range}**${tail.length ? ` · ${tail.join(" · ")}` : ""}`,
+        `- **${name}** ${listingLabel(u)} (${detail.join(", ")}) ${verb} **${usd(u.price)}${range}**${tail.length ? ` · ${tail.join(" · ")}` : ""}`,
       );
+    }
+    for (const c of delta.dateChanges ?? []) {
+      if (!inFocus(c.beds)) continue;
+      const label = c.unitNumber === c.floorplanName ? c.floorplanName : `#${c.unitNumber}`;
+      const day = (d: string | null): string => (d ? shortDay(d) : "now");
+      dateLines.push(`- **${name}** ${label} (${bedsText(c.beds)}): move-in ${day(c.from)} → **${day(c.to)}**`);
     }
   }
 
@@ -156,6 +206,7 @@ export function buildAlerts(root: string, snapshots?: Snapshot[]): AlertResult {
   const parts: string[] = [];
   if (dropLines.length) parts.push(`## 📉 Price drops\n${dropLines.join("\n")}`);
   if (newLines.length) parts.push(`## 🆕 New listings\n${newLines.join("\n")}`);
+  if (dateLines.length) parts.push(`## 📅 Move-in dates changed\n${dateLines.join("\n")}`);
   if (errorLines.length) parts.push(`## Scrape problems\n${errorLines.join("\n")}`);
   parts.push(
     `\n[Open the dashboard](https://rooneydude.github.io/chiapartment/) · snapshot ${latest.timestamp} · weekday brief: [brief.json](https://rooneydude.github.io/chiapartment/data/brief.json)`,
