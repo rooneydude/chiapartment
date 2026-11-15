@@ -744,6 +744,11 @@ table.units tbody tr.empty-row td {
 /* On a phone the table keeps unit, type, rent, lease length and move-in
    date on screen; the rest is in each row's detail panel. */
 @media (max-width: 640px) {
+  /* One scroll, the page's: no list-within-a-page to get stuck in. */
+  .tbl-wrap {
+    max-height: none;
+  }
+
   table.units .hide-sm {
     display: none;
   }
