@@ -82,11 +82,16 @@ function UnitDetail({
   asOf,
   compareTerm,
   meta,
+  floor,
+  change,
 }: {
   u: UnitListing;
   asOf: string;
   compareTerm: number;
   meta: BuildingHistory["perUnitMeta"][string] | undefined;
+  floor: number | null;
+  /** Price change since the previous scrape, when there is one. */
+  change: SnapshotDelta["priceChanges"][number] | undefined;
 }) {
   const table = leaseTermTable(u);
   const cheapest = cheapestTerm(u);
@@ -102,6 +107,12 @@ function UnitDetail({
     );
   }
   facts.push(mi.kind === "unknown" ? "No move-in date published" : mi.title);
+  if (floor !== null) facts.unshift(`Floor ${floor}`);
+  if (change && !change.notComparable) {
+    facts.push(
+      `${change.to < change.from ? "Down" : "Up"} ${money(Math.abs(change.to - change.from))} since the previous scrape (${money(change.from)} → ${money(change.to)})`,
+    );
+  }
   if (meta) {
     facts.push(
       `First seen ${longDate(meta.firstSeen)} at ${money(meta.firstPrice)}${meta.firstTerm ? ` (${meta.firstTerm}-mo lease)` : ""}`,
@@ -331,9 +342,12 @@ export default function AvailabilityTable({
     selectedRow.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedUnit]);
 
-  const header = (key: SortKey, label: string, num = false, title?: string) => (
+  // `secondary` columns give way on a phone, where rent, lease length and
+  // move-in date must be readable without scrolling sideways; what they hold
+  // is repeated in the row's detail panel.
+  const header = (key: SortKey, label: string, num = false, title?: string, secondary = false) => (
     <th
-      className={num ? "num" : undefined}
+      className={[num ? "num" : "", secondary ? "hide-sm" : ""].join(" ").trim() || undefined}
       title={title}
       aria-sort={sortKey === key ? (sortDir === 1 ? "ascending" : "descending") : "none"}
       onClick={() => {
@@ -361,9 +375,9 @@ export default function AvailabilityTable({
           <thead>
             <tr>
               {header("unit", "Unit")}
-              {header("floor", "Fl", true)}
+              {header("floor", "Fl", true, undefined, true)}
               {header("type", "Type")}
-              {header("sqft", "SqFt", true)}
+              {header("sqft", "SqFt", true, undefined, true)}
               {header(
                 "price",
                 leaseTerm !== null ? `Rent @${leaseTerm}mo` : "Rent",
@@ -374,10 +388,10 @@ export default function AvailabilityTable({
               )}
               {header("lease", "Lease", false, "Lease length the shown rent is for")}
               {header("movein", "Move-in", false, "Earliest move-in date")}
-              <th className="num" title="Change since the previous scrape (like-for-like lease length), and since the unit was first listed (Σ)">
+              <th className="num hide-sm" title="Change since the previous scrape (like-for-like lease length), and since the unit was first listed (Σ)">
                 Δ
               </th>
-              {header("listed", "Listed", true, "Days since the tracker first saw this unit")}
+              {header("listed", "Listed", true, "Days since the tracker first saw this unit", true)}
             </tr>
           </thead>
           <tbody>
@@ -457,7 +471,7 @@ export default function AvailabilityTable({
                           </span>
                         ))}
                     </td>
-                    <td className="num">{floor ?? "—"}</td>
+                    <td className="num hide-sm">{floor ?? "—"}</td>
                     <td
                       title={
                         u.planType
@@ -473,7 +487,7 @@ export default function AvailabilityTable({
                         </>
                       )}
                     </td>
-                    <td className="num">{u.sqft?.toLocaleString() ?? "—"}</td>
+                    <td className="num hide-sm">{u.sqft?.toLocaleString() ?? "—"}</td>
                     <td className="num price-cell">
                       <span
                         className={shown.termUnavailable ? "price-fallback" : undefined}
@@ -530,7 +544,7 @@ export default function AvailabilityTable({
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td className="num">
+                    <td className="num hide-sm">
                       {change && !change.notComparable && (
                         <span
                           className={change.to < change.from ? "delta-down" : "delta-up"}
@@ -567,7 +581,7 @@ export default function AvailabilityTable({
                       )}
                     </td>
                     <td
-                      className="num"
+                      className="num hide-sm"
                       title={first ? `first seen ${shortDate(first.firstSeen)}` : undefined}
                     >
                       {first ? `${daysSince(first.firstSeen)}d` : "—"}
@@ -576,7 +590,14 @@ export default function AvailabilityTable({
                   {isOpen && (
                     <tr className="detail-row">
                       <td colSpan={COLS}>
-                        <UnitDetail u={u} asOf={asOf} compareTerm={compareTerm} meta={first} />
+                        <UnitDetail
+                          u={u}
+                          asOf={asOf}
+                          compareTerm={compareTerm}
+                          meta={first}
+                          floor={floor}
+                          change={change}
+                        />
                       </td>
                     </tr>
                   )}

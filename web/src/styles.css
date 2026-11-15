@@ -741,6 +741,24 @@ table.units tbody tr.empty-row td {
   color: var(--text-muted);
 }
 
+/* On a phone the table keeps unit, type, rent, lease length and move-in
+   date on screen; the rest is in each row's detail panel. */
+@media (max-width: 640px) {
+  table.units .hide-sm {
+    display: none;
+  }
+
+  table.units th,
+  table.units td {
+    padding-left: 8px;
+    padding-right: 6px;
+  }
+
+  table.units .plan-name {
+    display: none;
+  }
+}
+
 /* What a "—" in the table means, and what this site publishes at all. */
 .table-footnote {
   padding: 8px 16px 0;
