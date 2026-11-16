@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type DependencyList,
   type MutableRefObject,
 } from "react";
 import { useLocation } from "react-router-dom";
@@ -29,6 +28,7 @@ import type {
   BuildingHistory,
   Facing,
   SkylineCollection,
+  UnitListing,
   UnitMapSidecar,
 } from "../../../shared/src/types";
 import { isDarkActive } from "../lib/theme";
@@ -47,7 +47,11 @@ import {
   type SceneTheme,
 } from "./geometry";
 import Landmarks from "./Landmarks";
+import MarksLegend from "./MarksLegend";
 import { resolveSite, type Site } from "./site";
+import UnitMarks, { CLICK_SLOP_PX } from "./UnitMarks";
+import { buildLegend, buildMarkStates, type MarkState } from "./unitMarks";
+import { useDisposable } from "./useDisposable";
 
 const CAMERA_FOV_DEG = 45;
 const CAMERA = { fov: CAMERA_FOV_DEG, near: 1, far: 9000 };
@@ -64,16 +68,6 @@ function parseHourOfDay(raw: string | null): number | null {
   if (raw === null || raw.trim() === "") return null;
   const hours = Number(raw);
   return Number.isFinite(hours) && hours >= 0 && hours <= 24 ? hours : null;
-}
-
-/** A memoized GPU resource, freed when it is replaced or its owner unmounts. */
-function useDisposable<T extends { dispose(): void } | null>(
-  create: () => T,
-  deps: DependencyList,
-): T {
-  const resource = useMemo(create, deps);
-  useEffect(() => () => resource?.dispose(), [resource]);
-  return resource;
 }
 
 /** Writes camera azimuth into the compass disc's transform — no React state. */
@@ -198,6 +192,8 @@ function SceneContent({
   theme,
   atmosphere,
   placement,
+  marks,
+  labelLayer,
   onTuneClick,
 }: {
   site: Site;
@@ -205,6 +201,10 @@ function SceneContent({
   theme: SceneTheme;
   atmosphere: Atmosphere;
   placement: UnitPlacement | null;
+  /** Every listed unit, as a mark on the tower. */
+  marks: readonly MarkState[];
+  /** Where the label of the hovered mark is put (see UnitMarks). */
+  labelLayer: MutableRefObject<HTMLElement | null>;
   onTuneClick?: (c: TuneClick) => void;
 }) {
   const selectedPlan = useStore((s) => s.selectedPlan);
@@ -263,6 +263,8 @@ function SceneContent({
   // filter the table to the clicked floor.
   const onBuildingClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    // The end of an orbit drag that began on the tower (or on a mark) and ends on it arrives as a click too.
+    if (e.delta > CLICK_SLOP_PX) return;
     const z = e.point.y; // three y == height
     const floor = Math.floor((z - g.groundFloorOffsetM) / g.floorHeightM) + 1;
     if (onTuneClick) {
@@ -357,12 +359,26 @@ function SceneContent({
         </mesh>
       )}
 
+      {/* every listed unit, on the tower; in tune mode the facade keeps all the clicks */}
+      <UnitMarks
+        states={marks}
+        ring={ring}
+        interactive={!onTuneClick}
+        labelLayer={labelLayer}
+      />
+
       {/* unit marker beacon: sits just inside the facade, so it is drawn over everything */}
       {placement?.marker && (
         <group position={planToThree(...placement.marker)}>
           <mesh renderOrder={10}>
             <sphereGeometry args={[2.4, 20, 20]} />
-            <meshBasicMaterial color={theme.marker} depthTest={false} toneMapped={false} />
+            {/* `transparent` only queues it with the other overlays, so that renderOrder puts it after the unit marks */}
+            <meshBasicMaterial
+              color={theme.marker}
+              depthTest={false}
+              toneMapped={false}
+              transparent
+            />
           </mesh>
           <mesh renderOrder={10}>
             <sphereGeometry args={[4.2, 20, 20]} />
@@ -390,15 +406,24 @@ function SceneContent({
 export default function Scene3D({
   building,
   allBuildings,
+  history,
+  units,
 }: {
   building: BuildingConfig;
   allBuildings: BuildingConfig[];
   history: BuildingHistory;
+  /**
+   * The rows the table shows now. Every listed unit is drawn on the tower;
+   * the ones missing from this list are drawn as "not in the current filter".
+   * Omitted = nothing is filtered.
+   */
+  units?: UnitListing[];
 }) {
   const [skyline, setSkyline] = useState<SkylineCollection | null | undefined>(undefined);
   const [unitMap, setUnitMap] = useState<UnitMapSidecar | null>(null);
   const [tuneClick, setTuneClick] = useState<TuneClick | null>(null);
   const discRef = useRef<HTMLDivElement | null>(null);
+  const labelLayer = useRef<HTMLDivElement | null>(null);
   const theme = useTheme();
   const selectedUnit = useStore((s) => s.selectedUnit);
   const selectedPlan = useStore((s) => s.selectedPlan);
@@ -467,6 +492,28 @@ export default function Scene3D({
     if (cameraMode === "unit-view" && !placement?.viewCamera) setCameraMode("orbit");
   }, [cameraMode, placement, setCameraMode]);
 
+  // Every listing as a mark on the tower. The page swaps `building` a moment
+  // before the matching history arrives: another building's units are never
+  // laid out on this tower.
+  const listings = history.buildingId === building.id ? history : null;
+  const markStates = useMemo(() => {
+    const latest = listings?.latest;
+    if (!site || !listings || !latest) return [];
+    return buildMarkStates({
+      building,
+      ring: site.ring,
+      listed: latest.units,
+      alsoListed: listings.alsoListed ?? [],
+      shown: units,
+      asOf: latest.timestamp,
+      exactFor: (unit) => {
+        const p = exactFor(unit);
+        return p ? [p.x, p.y] : undefined;
+      },
+    });
+  }, [site, building, listings, units, exactFor]);
+  const legend = useMemo(() => buildLegend(markStates), [markStates]);
+
   // Which way does the selection face? Sidecar beats stack map; never guess.
   const mapping = building.unitMapping;
   const facing: Facing | null = useMemo(() => {
@@ -504,7 +551,7 @@ export default function Scene3D({
     : placement?.confidence === "exact"
       ? `unit ${selectedUnit} — exact position (floorplate)`
       : placement?.confidence === "stack"
-        ? `unit ${selectedUnit} — approximate position`
+        ? `unit ${selectedUnit} — side estimated`
         : placement?.confidence === "floor-only"
           ? `unit ${selectedUnit} — floor shown; exact position unknown`
           : `unit ${selectedUnit} — can't infer floor from unit number`;
@@ -517,7 +564,8 @@ export default function Scene3D({
         shadows={SHADOWS}
         gl={RENDERER}
         camera={CAMERA}
-        style={{ background: theme.background }}
+        // isolate: the labels drawn inside the canvas stay under the overlays below
+        style={{ background: theme.background, isolation: "isolate" }}
       >
         <SceneContent
           site={site}
@@ -525,14 +573,19 @@ export default function Scene3D({
           theme={theme}
           atmosphere={atmosphere}
           placement={placement}
+          marks={markStates}
+          labelLayer={labelLayer}
           {...(tuneMode ? { onTuneClick: setTuneClick } : {})}
         />
         <AzimuthBridge discRef={discRef} />
       </Canvas>
       <CompassHud building={building} facing={facing} discRef={discRef} at={litAt} />
+      {/* the tune overlay takes the same corner */}
+      {!tuneMode && markStates.length > 0 && <MarksLegend model={legend} />}
       {tuneMode && (
         <TuneOverlay mapping={mapping} lastClick={tuneClick} selectedStack={selectedStack} />
       )}
+      {/* the bottom edge: button left, notes right — one row that wraps where the panel is narrow */}
       <div className="scene-overlay">
         {placement?.viewCamera && (
           <button
@@ -543,12 +596,12 @@ export default function Scene3D({
           </button>
         )}
         {cameraMode === "unit-view" && (
-          <span className="scene-note" style={{ position: "static" }}>
-            approximate view — massing only
-          </span>
+          <span className="scene-note">approximate view — massing only</span>
         )}
+        <div className="scene-note">{note}</div>
       </div>
-      <div className="scene-note">{note}</div>
+      {/* last, so on top: the label of the hovered unit mark is drawn in here */}
+      <div ref={labelLayer} className="scene-labels" />
     </div>
   );
 }

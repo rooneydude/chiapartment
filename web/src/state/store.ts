@@ -22,6 +22,11 @@ interface AppState {
   leaseTerm: number | null;
   floorMin: number | null;
   floorMax: number | null;
+  /**
+   * The 3D scene's legend: open or folded once the reader has chosen; null =
+   * not chosen yet (open, except on a narrow panel). Kept across buildings.
+   */
+  legendOpen: boolean | null;
   selectUnit(unit: string | null): void;
   selectPlan(plan: string | null): void;
   hoverUnit(unit: string | null): void;
@@ -32,6 +37,7 @@ interface AppState {
   setMoveInWithin(within: MoveInWithin): void;
   setLeaseTerm(months: number | null): void;
   setFloorRange(min: number | null, max: number | null): void;
+  setLegendOpen(open: boolean): void;
   resetForBuilding(focusBeds?: number[] | null): void;
 }
 
@@ -46,6 +52,7 @@ export const useStore = create<AppState>((set) => ({
   leaseTerm: null,
   floorMin: null,
   floorMax: null,
+  legendOpen: null,
   selectUnit: (unit) =>
     set((s) => ({
       selectedUnit: unit,
@@ -70,6 +77,7 @@ export const useStore = create<AppState>((set) => ({
   setMoveInWithin: (moveInWithin) => set({ moveInWithin }),
   setLeaseTerm: (leaseTerm) => set({ leaseTerm }),
   setFloorRange: (floorMin, floorMax) => set({ floorMin, floorMax }),
+  setLegendOpen: (legendOpen) => set({ legendOpen }),
   resetForBuilding: (focusBeds) =>
     set({
       selectedUnit: null,

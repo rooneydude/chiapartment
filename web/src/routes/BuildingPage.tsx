@@ -213,7 +213,7 @@ export default function BuildingPage() {
           )}
         </div>
         <div className="panel">
-          <Scene3D building={building} allBuildings={config.buildings} history={history} />
+          <Scene3D building={building} allBuildings={config.buildings} history={history} units={filteredUnits} />
         </div>
       </div>
       <div style={{ height: 16 }} />

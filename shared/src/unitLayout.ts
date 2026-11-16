@@ -290,7 +290,8 @@ export function layoutListings(args: {
 /**
  * Marks that share a floor and a straight facade run (or risers sharing a
  * face) must not overlap: approximate marks are nudged apart along the
- * facade, exact ones never move, and when a facade is simply too short the
+ * facade, exact ones keep their place (see arrangeAlongEdge for the one
+ * exception, at a facade's end), and when a facade is simply too short the
  * marks shrink instead.
  */
 function declutter(marks: UnitMark[], edges: Edge[]): void {
@@ -350,8 +351,11 @@ interface Slot {
 
 /**
  * Lay marks out along one facade (sorted by position): no overlaps, a gap
- * between neighbours, everything on the facade, exact marks untouched, and a
- * cluster of approximate marks kept centred on where its units really are.
+ * between neighbours, everything on the facade, and a cluster of approximate
+ * marks kept centred on where its units really are. An exact mark keeps its
+ * place — unless its glyph would hang off the end of the facade (a corner
+ * unit, whose floor-plan point projects onto the facade's very end): then it
+ * sits flush with that end.
  */
 function arrangeAlongEdge(items: Slot[], length: number): void {
   const n = items.length;
@@ -366,6 +370,9 @@ function arrangeAlongEdge(items: Slot[], length: number): void {
     const f = Math.max(room, 0) / wanted;
     for (const it of items) it.w = Math.max(MIN_WIDTH_M, it.w * f);
   }
+  // A mark is a glyph on ONE face: half of it past the corner would float in
+  // the air or sink into the next wall.
+  for (const it of items) if (it.fixed) it.s = Math.min(Math.max(it.s, lo(it)), hi(it));
   // Two exact marks cannot move apart; where they collide they narrow instead.
   for (let i = 1; i < n; i++) {
     const a = items[i - 1]!;
