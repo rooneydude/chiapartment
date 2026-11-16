@@ -1,2 +1,2 @@
-# retry 2026-09-09 scrape after Playwright apt hash-mismatch
+# 2026-11-16: first refresh with the rewritten scrapers - runs when this change lands on the published branch
 # (no flags: scrape all buildings)
