@@ -159,6 +159,25 @@ describe("layoutListings: marks that would overlap", () => {
     expect(Math.abs(approx.center![0])).toBeGreaterThanOrEqual(BED_WIDTH_M[1] + 1 - 1e-6);
   });
 
+  it("keeps an exact mark on its face when the unit sits at the very end of it", () => {
+    // A corner unit: 1 m inside the north face, 2.5 m from its east end. Centred on
+    // its floor-plan position the 7 m glyph would stick 1 m out past the corner.
+    const [corner] = layout([unit("0501", 1)], () => [17.5, 19]);
+    expect(corner).toMatchObject({ kind: "plate", confidence: "exact", facing: "N", widthM: BED_WIDTH_M[1] });
+    expect(corner!.center![1]).toBeCloseTo(20);
+    expect(span(corner!)[1]).toBeLessThanOrEqual(20);
+    // ...flush with that end, not pushed further along the face than it has to be.
+    expect(span(corner!)[1]).toBeGreaterThan(19);
+
+    // The same at the west end of the face; a mark that fits where it is does not move.
+    const [west, mid] = layout([unit("0601", 1), unit("0701", 1)], (u) => (u === "0601" ? [-18, 19] : [11, 18]));
+    expect(west!.facing).toBe("N");
+    expect(span(west!)[0]).toBeGreaterThanOrEqual(-20);
+    expect(span(west!)[0]).toBeLessThan(-19);
+    expect(mid!.center![0]).toBeCloseTo(11);
+    expect(mid!.widthM).toBe(BED_WIDTH_M[1]);
+  });
+
   it("shrinks marks rather than letting them leave a facade that is too short", () => {
     // A slim 12 m face cannot hold four 10 m marks.
     const slim = makeBoxRing(0, 0, 12, 40);
