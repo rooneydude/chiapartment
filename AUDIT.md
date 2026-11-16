@@ -196,7 +196,10 @@ and left alone.
 ## Decisions for the owner
 
 1. **Merge this branch** to make any of it live. Until then the scheduled
-   refresh keeps running the old scraper on the default branch.
+   refresh keeps running the old scraper on the default branch. The merge
+   itself starts a refresh (this branch changes `.github/refresh-trigger`),
+   so the first snapshot from the new scraper lands a few minutes later
+   without anyone pressing a button.
 2. **Stead 220's live prices.** The current, per-floor rents are served by
    the site's own JSON endpoint under `/api/`, which every visitor's browser
    calls — and which the site's `robots.txt` asks robots not to fetch. The
@@ -215,7 +218,16 @@ and left alone.
 - Old Town Park units gain move-in dates; that is not reported as a date
   change.
 - The Leo's "1 BR" line in the floor-plan chart steps up on 15 Nov because
-  the junior one-bed now has a line of its own.
+  the junior one-bed now has a line of its own. The first alert names that
+  unit once — "#602 (Jr 1 Bedroom) now counted as a studio" — because
+  studios are a size being watched.
+- The price chart for 1225 shades 15–16 Nov (and any further days until the
+  merge): runs of the old and the new scraper alternate there.
+- `data/unitmaps/1225-old-town.json` is deliberately the published branch's
+  copy, so the daily job's edits to it cannot conflict with the merge. The
+  first refresh after merging rewrites it (adding unit 0509, which the old
+  scraper never mapped; until then that one unit's 3D position is a side
+  estimate).
 
 ## How it was verified
 
@@ -223,7 +235,14 @@ and left alone.
   adapter's output: 1225 15/15 units, Old Town Park 19/19/20 (+2 penthouse /
   townhome rows), The Leo 2/2, Stead 13 priced plans + 2 unpriced — matching
   the page the tracker is allowed to read.
-- 282 automated tests, most of them run against pages captured that day
+- A full run of the finished scrapers on 16 Nov 2026 (the committed
+  snapshot `2026-11-16T17-01-38Z`): 6 of 6 buildings, 86 priced listings
+  plus 4 listed without a price; every 1225 unit with its lease table, fees
+  and move-in date; every Old Town Park and Leo unit with a move-in date.
+  Compiled against the old history it raises no warning; the alert it would
+  have sent names two real price drops (checked against the stored ranges)
+  and the Leo junior one-bed.
+- 285 automated tests, most of them run against pages captured that day
   (kept under `scraper/fixtures/`, with the August captures as a second set),
   plus `tsc` and a production build.
 - The CI changes were simulated locally (run summary, health gate, push
@@ -302,6 +321,69 @@ would have, the day a site changed. All are closed, each with a test:
   never worked around.
 - **One malformed row could discard a whole run** (all six buildings). A row
   that does not fit the snapshot format now costs that row only.
+
+## Independent review of the dashboard
+
+A third adversarial review drove the dashboard itself in a real browser —
+six buildings, three screen sizes, both themes, every filter and sort — and
+compared what it rendered with the compiled data, cell by cell. Every table
+cell matched (168 rows checked), calendar days were right in three time
+zones, and filters, sorting and links did what they said. It also confirmed
+eighteen defects, three of them serious. All are fixed and were re-checked
+in the browser:
+
+- **A snapshot from the previous scraper kept 8 of 1225's 15 apartments out
+  of the table, the counts and the "cheapest" figures**, and labelled its
+  capped rents "exactly as the site advertises". They are ordinary rows
+  everywhere now, at the rent the site advertised; rows recorded the old way
+  say so.
+- **Without WebGL a building page went completely white**, and the
+  dashboard itself could not start without downloading the 3D library. The
+  3D view, the chart and each page now fail on their own; the dashboard's
+  own script is about 60 kB compressed and needs neither library.
+- **One building's data file failing to load took the whole dashboard
+  down**, and the failure stuck until a reload. Buildings load
+  independently now; a failed one gets its own card with "Try again".
+- **"The site does not publish X" was inferred from X being absent in the
+  latest snapshot** — false whenever a snapshot simply lacked it. Each
+  building's config now states what its site publishes; anything else reads
+  "not recorded in this snapshot".
+- **Listings with no move-in date were counted as "later"**; the dashboard
+  now keeps three buckets (now, later, no date on record).
+- **Change summaries used the wrong words**: a switch between a rent range
+  and a single price was called a "lease-term switch", a re-listed unit was
+  counted as "new", a building-wide concession was promoted as the "biggest
+  recent drop". Each now says what it is.
+- **Stead 220's price history was wrong where it mattered**: a flat
+  sparkline drawn from one penthouse, and no chart line for its cheapest
+  studio or two-bedroom. Charts now follow the listings the filters show.
+- **The unit table did not fit** on 1024–1320 px screens or, for Stead, on
+  a phone (columns cut off with nothing to say so); it fits from 360 px up.
+- **Rows and sort headers were mouse-only**; they are real buttons now.
+  Secondary text in the light theme went from 3.5:1 to 5.3:1 contrast.
+- Smaller ones: a building switched by URL showing the previous building's
+  rows; a tab left open for days blaming the refresh job for its own stale
+  copy; the stale-data banner quoting the wrong age; a move-in date change
+  that was only counted, never shown; "Listed" sorting against its arrow;
+  the plan name unreadable on a phone.
+
+## The 3D view
+
+- **New rendering.** Glass-and-mullion facades with floor lines, a sky and
+  ground lit for the real position of the sun over Chicago at the chosen
+  hour (a slider in the view, 5 am to 11 pm), soft shadows, lit windows at
+  night, streets, parks and trees from OpenStreetMap.
+- **Every listed unit is on its tower**, coloured by bed type, with a
+  legend. A mark says how sure its position is — and for every building
+  except 1225 the honest answer is "the floor is right, the side is an
+  estimate": the stack-to-side tables in `buildings.json` were never
+  verified against floor plans. 1225's positions are exact (from its unit
+  map). Units outside the filter are drawn hollow rather than hidden.
+- **Street names lie on the ground** along their streets, so they no longer
+  print across the tower; "reset view" brings back the whole-tower view.
+- Not done: the stack-to-side tables are still unverified guesses (a
+  per-building job with the leasing sites' floor plans), and the default
+  camera does not yet turn to the side with the most listed units.
 
 ---
 

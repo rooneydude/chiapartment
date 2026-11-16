@@ -21,7 +21,7 @@ entry there.
 ## How it works
 
 ```
-GitHub Actions "Refresh prices" (manual button)
+GitHub Actions "Refresh prices" (daily schedule, or the manual button)
   └─ scraper (adapter per leasing site)
        └─ data/snapshots/<timestamp>.json   ← committed, append-only history
             └─ build-data → static JSON → Vite dashboard → GitHub Pages
@@ -34,8 +34,11 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   GitHub often starts scheduled runs late (in Nov 2026 by 4½–9 hours), so
   read it as "once a day", not "every morning". Also on
   demand via the **Refresh prices** workflow in the Actions tab (or
-  `npm run refresh` locally, `-- --commit` to also commit). Each run appends
-  one snapshot. Run-over-run deltas (new / removed / price changes) compare
+  `npm run refresh` locally, `-- --commit` to also commit). A commit that
+  changes `.github/refresh-trigger` on the published branch starts one too
+  (its words are flags: `capture`, `skyline`, `buildings=a,b`) — which is
+  also how merging a change to the scraper can take a fresh snapshot at
+  once. Each run appends one snapshot. Run-over-run deltas (new / removed / price changes) compare
   the last two **successful** scrapes per building; the weekday brief
   compares Chicago calendar days.
 - **Weekday brief.** Compiled at build time as
@@ -86,11 +89,20 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   issues as phone notifications:** install the GitHub mobile app and Watch
   this repository (Custom → Issues, or All Activity).
 - **3D.** Building footprints come from OpenStreetMap (`npm run skyline`),
-  extruded to their tagged heights. A unit's floor is parsed from its unit
-  number; its position on the floorplate comes from the per-building
-  `unitMapping.stacks` table (stack → facade + position). The
-  "view from unit" camera stands at the unit's facade looking outward, so
-  neighboring building masses show what would block the view.
+  extruded to their tagged heights. Every listed unit is marked on its
+  tower, coloured by bed type; a legend counts them and says how sure each
+  position is: **exact** (1225 only — from the building's own unit map),
+  **side estimated** (the floor is parsed from the unit number, the side
+  comes from the hand-made `unitMapping.stacks` table, which is mostly
+  unverified), **side unknown** (a band round the floor) or **floor
+  unknown** (a strip up a face, for a site that lists plan stacks). Units
+  outside the current filter are drawn hollow, not hidden. Hovering or
+  clicking a mark shows the unit, rent and move-in date and selects its
+  row. The scene is lit for today's sun over Chicago at the hour on the
+  slider (or `?t=17.5` in the URL), so it shows which sides get light
+  when; "view from unit" stands at the unit's facade looking outward, so
+  neighbouring building masses show what would block the view. Where WebGL
+  is not available the 3D panel says so and the rest of the page works.
 
 ## Commands
 
@@ -117,7 +129,12 @@ Verified against the live sites on 15 Nov 2026.
 | 1225 Old Town | `sightmap` | every unit, with sqft | ✅ full table per unit, 2–18 months, for the unit's move-in day | ✅ date per unit; "now" flagged; vacancy date from the marketing page when reachable | Rent is base rent; the site headlines rent + a mandatory $100–$230 utility bundle (`monthlyFees`). "18 Months" on the site is the *longest* lease at the cheapest price, not a requirement — often 12 months costs the same. |
 | Old Town Park I–III | `oldtownpark` | every unit; interior + outdoor sqft | ❌ not published — only a rent **range** per unit (cheapest–dearest option). Per-term prices are in the leasing portal behind a bot challenge the tracker does not go around; every row deep-links there. | ✅ "Available" or a date per unit | "Jr. 2 Bed" / "1 Bed + Flex" / "Convertible" kept as `planType`. Penthouse / townhome rows have no published bed count → `alsoListed`. The site alternates between two pricing states for a few plans; the runner takes a second look and the pipeline never treats a range↔single flip as a price move. |
 | The Leo | `leo` | every unit, with sqft | ❌ not published (one "starting at" price, which the site says may already include concessions) | ✅ "Available Now" (+ vacant since) or a date | Read from the page's embedded inventory in one request. A "JR 1 Bedroom" is filed as the site files it (0 bedrooms) under its own name. The site special is recorded as a notice. A page with an empty inventory is an empty building, not an error. When the site's bot protection refuses the request, that is recorded (`blocked`) and left alone — no browser, no retry; the next scheduled run asks again. |
-| Stead 220 | `stead220` | **floorplans/stacks, not units** (penthouse plans are real units); no sqft | ❌ not published | ❌ not published — every active plan carries the same "Available Now" label | The page is a **1–5 day delayed copy** of the building's price list; each price carries the day the building last edited it (`sourceUpdatedAt`). "Contact for Pricing" and switched-off plans → `alsoListed` (with the price they last carried). Live and per-floor prices exist only behind `/api/`, which the site's `robots.txt` disallows — the tracker does not fetch it. Real per-unit inventory is in RentCafe behind a bot wall. |
+| Stead 220 | `stead220` | **floorplans/stacks, not units** (penthouse plans are real units); no sqft | ❌ not published | ⚠️ no dates — every active plan carries the same "Available Now" label, recorded as available now | The page is a **1–5 day delayed copy** of the building's price list; each price carries the day the building last edited it (`sourceUpdatedAt`). "Contact for Pricing" and switched-off plans → `alsoListed` (with the price they last carried). Live and per-floor prices exist only behind `/api/`, which the site's `robots.txt` disallows — the tracker does not fetch it. Real per-unit inventory is in RentCafe behind a bot wall. |
+
+Each building's `publishes` block in `buildings.json` records these facts
+for the dashboard: an empty cell reads "the site does not publish this"
+only where the site really does not; otherwise it reads "not recorded in
+this snapshot" (an older snapshot, or a detail request that failed).
 
 The stack→facade maps in `buildings.json` are placeholder quadrant guesses
 until refined per building (`unitMapping.stacks`), except 1225 which also
