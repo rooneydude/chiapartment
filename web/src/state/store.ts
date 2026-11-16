@@ -84,6 +84,9 @@ export const useStore = create<AppState>((set) => ({
       selectedPlan: null,
       hoveredUnit: null,
       cameraMode: "orbit",
+      // A unit clicked in another building switched the chart to its
+      // per-unit view; a new building starts on the overview again.
+      chartMode: "floorplans",
       // Buildings open pre-filtered to the beds the user shops for.
       bedsFilter: focusBeds && focusBeds.length > 0 ? focusBeds : null,
       // Never restrict by move-in date or lease length unless asked to.

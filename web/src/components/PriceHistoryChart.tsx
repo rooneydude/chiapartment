@@ -78,48 +78,81 @@ function ChartTooltip({
 export default function PriceHistoryChart({
   history,
   visibleUnits,
+  visiblePlans,
+  visiblePlanListings,
 }: {
   history: BuildingHistory;
   /** Unit numbers passing the current filters. */
   visibleUnits: Set<string>;
+  /** Floor plans of the listings passing the current filters. */
+  visiblePlans: Set<string>;
+  /**
+   * Listings passing the filters that have no unit number (a site that lists
+   * floor-plan stacks): their history is kept per plan, under these names.
+   */
+  visiblePlanListings: Set<string>;
 }) {
   const chartMode = useStore((s) => s.chartMode);
   const setChartMode = useStore((s) => s.setChartMode);
   const selectedUnit = useStore((s) => s.selectedUnit);
+  const selectedPlan = useStore((s) => s.selectedPlan);
   const hoveredUnit = useStore((s) => s.hoveredUnit);
   const selectUnit = useStore((s) => s.selectUnit);
+  const selectPlan = useStore((s) => s.selectPlan);
 
-  // Stable slot assignment: alphabetical over ALL plans ever seen, so colors
-  // never shift when filters change series membership.
   const allPlans = useMemo(() => Object.keys(history.perFloorplan).sort(), [history]);
-  const planSlot = useMemo(() => {
-    const map = new Map<string, number>();
-    allPlans.forEach((p, i) => map.set(p, i));
-    return map;
-  }, [allPlans]);
-  // Which plans get a line: the ones listed right now first, then the ones
-  // with the longest history. A plan name seen in a single run and gone again
-  // (a one-off label) draws nothing useful and is left out.
+  // Which plans get a line: first the plans of the listings the filters are
+  // showing (the cheapest studio must not lose its line to eight one-bedroom
+  // plans), then the other plans listed right now, then the longest
+  // histories. A plan name seen in a single run and gone again (a one-off
+  // label) draws nothing useful and is left out.
   const { plans, plansLeftOut } = useMemo(() => {
     const latestT = history.latest?.timestamp;
     const ranked = allPlans
       .map((plan) => {
         const series = history.perFloorplan[plan] ?? [];
-        return { plan, n: series.length, current: series[series.length - 1]?.t === latestT };
+        return {
+          plan,
+          n: series.length,
+          current: series[series.length - 1]?.t === latestT,
+          visible: visiblePlans.has(plan),
+        };
       })
       .filter((x) => x.current || x.n >= 2)
       .sort(
-        (a, b) => Number(b.current) - Number(a.current) || b.n - a.n || a.plan.localeCompare(b.plan),
+        (a, b) =>
+          Number(b.visible) - Number(a.visible) ||
+          Number(b.current) - Number(a.current) ||
+          b.n - a.n ||
+          a.plan.localeCompare(b.plan),
       );
     return {
-      plans: ranked.slice(0, MAX_PLAN_SERIES).map((x) => x.plan),
+      // Alphabetical among the ones drawn, so the legend reads in order.
+      plans: ranked
+        .slice(0, MAX_PLAN_SERIES)
+        .map((x) => x.plan)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
       plansLeftOut: Math.max(0, ranked.length - MAX_PLAN_SERIES),
     };
-  }, [allPlans, history]);
+  }, [allPlans, history, visiblePlans]);
+  // One colour per line drawn: by position among the plotted plans, so no two share one.
+  const planColor = useMemo(
+    () => new Map(plans.map((p, i) => [p, SLOT_VARS[i % SLOT_VARS.length]!])),
+    [plans],
+  );
 
+  // Units view: one line per listing the filters show — by unit number, or by
+  // plan name for the listings that have none.
   const unitNumbers = useMemo(
     () => Object.keys(history.perUnit).filter((u) => visibleUnits.has(u)),
     [history, visibleUnits],
+  );
+  const planListings = useMemo(
+    () =>
+      Object.keys(history.perFloorplan)
+        .filter((p) => visiblePlanListings.has(p) && !visibleUnits.has(p))
+        .sort(),
+    [history, visiblePlanListings, visibleUnits],
   );
 
   const rows = useMemo(() => {
@@ -139,11 +172,17 @@ export default function PriceHistoryChart({
           if (row) row[u] = p.price;
         }
       }
+      for (const plan of planListings) {
+        for (const p of history.perFloorplan[plan] ?? []) {
+          const row = byT.get(p.t);
+          if (row) row[plan] = p.minPrice;
+        }
+      }
     }
     return [...byT.entries()]
       .map(([t, values]) => ({ t: new Date(t).getTime(), ...values }))
       .sort((a, b) => a.t - b.t);
-  }, [history, chartMode, unitNumbers]);
+  }, [history, chartMode, unitNumbers, planListings]);
 
   // Lease term behind each price point, for the tooltip — and whether the
   // visible series mix lease lengths at all.
@@ -153,7 +192,10 @@ export default function PriceHistoryChart({
     const series: [string, { t: string; term?: number }[]][] =
       chartMode === "floorplans"
         ? plans.map((p) => [p, history.perFloorplan[p] ?? []])
-        : unitNumbers.map((u) => [u, history.perUnit[u] ?? []]);
+        : [
+            ...unitNumbers.map((u): [string, { t: string; term?: number }[]] => [u, history.perUnit[u] ?? []]),
+            ...planListings.map((p): [string, { t: string; term?: number }[]] => [p, history.perFloorplan[p] ?? []]),
+          ];
     for (const [name, points] of series) {
       const byTime = new Map<number, number>();
       for (const p of points) {
@@ -164,7 +206,7 @@ export default function PriceHistoryChart({
       if (byTime.size > 0) map.set(name, byTime);
     }
     return { termAt: map, mixedTerms: terms.size > 1 };
-  }, [history, chartMode, plans, unitNumbers]);
+  }, [history, chartMode, plans, unitNumbers, planListings]);
 
   // Points where what the stored prices MEAN changed (not the prices).
   const methodChanges = history.methodChanges ?? [];
@@ -191,7 +233,11 @@ export default function PriceHistoryChart({
         </span>
         {chartMode === "units" && (
           <span className="hint">
-            {selectedUnit ? `unit ${selectedUnit} highlighted` : "click a unit row to highlight"}
+            {selectedUnit
+              ? `unit ${selectedUnit} highlighted`
+              : selectedPlan && planListings.includes(selectedPlan)
+                ? `${selectedPlan} highlighted`
+                : "click a row, or a line, to highlight it"}
           </span>
         )}
         {single && (
@@ -226,13 +272,16 @@ export default function PriceHistoryChart({
             <span className="key" key={p}>
               <span
                 className="swatch"
-                style={{ background: SLOT_VARS[planSlot.get(p)! % SLOT_VARS.length] }}
+                style={{ background: planColor.get(p) }}
               />
               {p}
             </span>
           ))}
           {plansLeftOut > 0 && (
-            <span className="key">+{plansLeftOut} more plans (see units view)</span>
+            <span className="key">
+              +{plansLeftOut} more plan{plansLeftOut === 1 ? "" : "s"} — filter the list above to
+              chart {plansLeftOut === 1 ? "it" : "them"}
+            </span>
           )}
         </div>
       )}
@@ -290,7 +339,7 @@ export default function PriceHistoryChart({
                     key={p}
                     dataKey={p}
                     name={p}
-                    stroke={SLOT_VARS[planSlot.get(p)! % SLOT_VARS.length]}
+                    stroke={planColor.get(p)}
                     strokeWidth={2}
                     dot={single ? { r: 4 } : false}
                     activeDot={{ r: 4 }}
@@ -298,8 +347,9 @@ export default function PriceHistoryChart({
                     isAnimationActive={false}
                   />
                 ))
-              : unitNumbers.map((u) => {
-                  const emphasized = u === selectedUnit || u === hoveredUnit;
+              : [...unitNumbers, ...planListings].map((u) => {
+                  const isPlan = !visibleUnits.has(u);
+                  const emphasized = isPlan ? u === selectedPlan : u === selectedUnit || u === hoveredUnit;
                   return (
                     <Line
                       key={u}
@@ -312,7 +362,11 @@ export default function PriceHistoryChart({
                       connectNulls={false}
                       isAnimationActive={false}
                       style={{ cursor: "pointer" }}
-                      onClick={() => selectUnit(u === selectedUnit ? null : u)}
+                      onClick={() =>
+                        isPlan
+                          ? selectPlan(u === selectedPlan ? null : u)
+                          : selectUnit(u === selectedUnit ? null : u)
+                      }
                     />
                   );
                 })}

@@ -375,19 +375,22 @@ export default function Dashboard() {
         const focusUnitNumbers = new Set(
           units.map((u) => u.unitNumber).filter((u): u is string => u !== null),
         );
+        // Listings without a unit number (a site that lists floor-plan
+        // stacks) keep their history per plan. They count alongside the
+        // numbered ones — a building with one numbered penthouse must not
+        // have its whole sparkline drawn from that penthouse.
+        const focusPlanListings = new Set(
+          units.filter((u) => u.unitNumber === null).map((u) => u.floorplanName),
+        );
         const minPerRun = history.runs.map((t) => {
           let min = Infinity;
           for (const [unitNumber, series] of Object.entries(history.perUnit)) {
             if (focus !== null && !focusUnitNumbers.has(unitNumber)) continue;
             for (const p of series) if (p.t === t && p.price < min) min = p.price;
           }
-          // Floorplan-only buildings (Stead 220) have no unit numbers in perUnit.
-          if (!Number.isFinite(min)) {
-            const focusPlans = new Set(units.map((u) => u.floorplanName));
-            for (const [plan, series] of Object.entries(history.perFloorplan)) {
-              if (focus !== null && !focusPlans.has(plan)) continue;
-              for (const p of series) if (p.t === t && p.minPrice < min) min = p.minPrice;
-            }
+          for (const [plan, series] of Object.entries(history.perFloorplan)) {
+            if (!focusPlanListings.has(plan)) continue;
+            for (const p of series) if (p.t === t && p.minPrice < min) min = p.minPrice;
           }
           return min;
         });

@@ -139,6 +139,12 @@ export default function BuildingPage() {
     [filteredUnits],
   );
 
+  const visiblePlans = useMemo(() => new Set(filteredUnits.map((u) => u.floorplanName)), [filteredUnits]);
+  const visiblePlanListings = useMemo(
+    () => new Set(filteredUnits.filter((u) => u.unitNumber === null).map((u) => u.floorplanName)),
+    [filteredUnits],
+  );
+
   if (error?.unknownBuilding) {
     return (
       <div className="error-box" role="alert">
@@ -317,7 +323,12 @@ export default function BuildingPage() {
         )}
       >
         <Suspense fallback={<div className="skeleton" style={{ height: 360 }} />}>
-          <PriceHistoryChart history={history} visibleUnits={visibleUnitNumbers} />
+          <PriceHistoryChart
+            history={history}
+            visibleUnits={visibleUnitNumbers}
+            visiblePlans={visiblePlans}
+            visiblePlanListings={visiblePlanListings}
+          />
         </Suspense>
       </ErrorBoundary>
     </>
