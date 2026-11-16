@@ -162,7 +162,7 @@ export function computeWarnings(
     const n = latest.units.filter(has).length;
     warnings.push({
       code: "partial-data",
-      message: `Only ${n} of ${latest.units.length} units have ${what} in the latest scrape (the run of ${chicagoDate(hadIt.timestamp)} had them) — a follow-up request is probably failing.`,
+      message: `Only ${n} of ${latest.units.length} units have ${what} in the latest scrape; the run of ${chicagoDate(hadIt.timestamp)} had them. If the next refresh does not bring them back, a request the scraper makes is failing.`,
     });
   }
   return warnings;

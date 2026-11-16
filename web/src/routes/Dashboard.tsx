@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { priceAtTerm } from "../../../shared/src/listing";
-import type { BuildingConfig, BuildingHistory, UnitListing } from "../../../shared/src/types";
+import type {
+  BuildingConfig,
+  BuildingHistory,
+  CompiledConfig,
+  UnitListing,
+} from "../../../shared/src/types";
 import Sparkline from "../components/Sparkline";
 import { loadConfig, loadHistory, useDataEpoch } from "../lib/data";
 import {
   ageLabel,
+  ageWords,
   bedsLabel,
   dateTime,
   isStale,
@@ -39,6 +45,8 @@ export default function Dashboard() {
   const [focus, setFocus] = useState<number[] | null>(null);
   const [compareTerm, setCompareTerm] = useState(12);
   const [error, setError] = useState<string | null>(null);
+  /** Snapshot files the build could not read and left out of the history. */
+  const [skipped, setSkipped] = useState<string[]>([]);
   /** Goes up when the reader asks to try a failed load again. */
   const [attempt, setAttempt] = useState(0);
   /** Goes up when a tab left open drops its old data: load again, keep what is shown meanwhile. */
@@ -56,6 +64,7 @@ export default function Dashboard() {
         if (!current) return;
         setFocus(config.focus?.beds ?? null);
         setCompareTerm(config.focus?.compareLeaseTermMonths ?? 12);
+        setSkipped((config as CompiledConfig).health?.skippedSnapshots ?? []);
         setEntries((before) =>
           config.buildings.map((building, i): Entry => {
             const result = settled[i]!;
@@ -158,8 +167,11 @@ export default function Dashboard() {
     }
   }
 
+  // Three buckets, never two: a listing with no move-in date on record is
+  // not "later" — nobody knows when.
   let totalUnits = 0;
   let totalNow = 0;
+  let totalLater = 0;
   let totalAllBeds = 0;
   for (const { history } of rows) {
     if (!history.latest) continue;
@@ -167,9 +179,12 @@ export default function Dashboard() {
     for (const u of history.latest.units) {
       if (!inFocus(u.beds)) continue;
       totalUnits++;
-      if (moveIn(u, history.latest.timestamp).kind === "now") totalNow++;
+      const kind = moveIn(u, history.latest.timestamp).kind;
+      if (kind === "now") totalNow++;
+      else if (kind === "future") totalLater++;
     }
   }
+  const totalUndated = totalUnits - totalNow - totalLater;
   const focusLabel =
     focus === null ? "Units on market" : `${focus.map(bedsLabel).join(" + ")} on market`;
   const updates = rows
@@ -186,6 +201,9 @@ export default function Dashboard() {
       isStale(r.history.latest.timestamp) &&
       r.history.lastAttempt?.status !== "error",
   );
+
+  // Each stale building's own age — not the oldest timestamp on the page.
+  const staleAges = new Set(staleRows.map((r) => ageWords(r.history.latest!.timestamp)));
 
   return (
     <>
@@ -219,14 +237,24 @@ export default function Dashboard() {
           })}
         </div>
       )}
-      {staleRows.length > 0 && oldestUpdate && (
+      {staleRows.length > 0 && (
         <div className="warning-banner" role="status">
           <div>
-            ⚠ Prices are {ageLabel(oldestUpdate)} old
-            {staleRows.length < rows.length
-              ? ` for ${staleRows.map((r) => r.building.name).join(", ")}`
-              : ""}{" "}
+            ⚠{" "}
+            {staleRows.length === rows.length && staleAges.size === 1
+              ? `Prices are ${[...staleAges][0]} old`
+              : `Prices are out of date for ${staleRows
+                  .map((r) => `${r.building.name} (${ageWords(r.history.latest!.timestamp)} old)`)
+                  .join(", ")}`}{" "}
             — the daily refresh has not produced newer data. Check the “Refresh prices” workflow.
+          </div>
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <div className="warning-banner" role="status">
+          <div>
+            ⚠ {skipped.length} snapshot file{skipped.length === 1 ? "" : "s"} could not be read and{" "}
+            {skipped.length === 1 ? "is" : "are"} left out of the price history: {skipped.join(", ")}
           </div>
         </div>
       )}
@@ -277,7 +305,8 @@ export default function Dashboard() {
           <span className="stat-label">{focusLabel}</span>
           <span className="stat-value">{totalUnits}</span>
           <span className="stat-sub">
-            {totalNow} move-in now · {totalUnits - totalNow} later
+            {totalNow} move-in now · {totalLater} later
+            {totalUndated > 0 ? ` · ${totalUndated} with no move-in date on record` : ""}
             {focus !== null ? ` · ${totalAllBeds} listings of all sizes` : ""}
             {lastUpdated ? ` · as of ${dateTime(lastUpdated)}` : ""}
           </span>
@@ -382,12 +411,13 @@ export default function Dashboard() {
             <div className="prices">
               {bedsSorted.length === 0 && (
                 <span>
-                  {focus === null
-                    ? "No listings in last snapshot"
-                    : `No ${focus.map(bedsLabel).join(" or ")} listed right now`}
-                  {focus !== null && allUnits.length > 0
-                    ? ` (${allUnits.length} other listing${allUnits.length === 1 ? "" : "s"})`
-                    : ""}
+                  {!history.latest
+                    ? "Not read successfully yet — no data"
+                    : allUnits.length === 0
+                      ? `The ${failed ? "last good scrape" : "last scrape"} (${longDate(history.latest.timestamp)}) found no listings`
+                      : `No ${(focus ?? []).map(bedsLabel).join(" or ")} listed ${
+                          failed ? `as of ${longDate(history.latest.timestamp)}` : "right now"
+                        } (${allUnits.length} other listing${allUnits.length === 1 ? "" : "s"})`}
                 </span>
               )}
               {bedsSorted.map((b) => {
@@ -405,9 +435,17 @@ export default function Dashboard() {
             </div>
             {units.length > 0 && (
               <div className="card-movein">
-                {nowCount > 0 ? `${nowCount} move-in now` : "none available now"}
+                {nowCount > 0
+                  ? `${nowCount} move-in now`
+                  : undated === units.length
+                    ? building.publishes?.moveInDate === false
+                      ? "the site publishes no move-in dates"
+                      : "move-in dates not recorded in this snapshot"
+                    : undated > 0
+                      ? "none known to be available now"
+                      : "none available now"}
                 {nextFuture ? ` · next ${nextFuture.label}` : ""}
-                {undated > 0 ? ` · ${undated} without a date` : ""}
+                {undated > 0 && undated < units.length ? ` · ${undated} without a date` : ""}
                 {terms.length > 0
                   ? ` · ${terms.length === 1 ? `${terms[0]}-mo` : `${terms[0]}–${terms[terms.length - 1]}-mo`} leases advertised`
                   : ""}
@@ -451,14 +489,11 @@ export default function Dashboard() {
               {omittedCount > 0 && (
                 <span
                   className="badge bad"
-                  title={`Hidden by the old 14-month lease filter in this snapshot (fixed — the next refresh lists them):\n${history.omitted
-                    .map(
-                      (o) =>
-                        `${o.unitNumber ? `#${o.unitNumber}` : o.floorplanName}: $${o.advertisedPrice.toLocaleString()} @ ${o.leaseTermMonths}mo`,
-                    )
-                    .join("\n")}`}
+                  title={`The newest snapshot was taken by the tracker's previous scraper: rents are each apartment's cheapest lease of 14 months or less, and the ${omittedCount} apartment${omittedCount === 1 ? "" : "s"} it left out of its list ${omittedCount === 1 ? "is" : "are"} counted here at the rent the site advertised (${history.omitted
+                    .map((o) => (o.unitNumber ? `#${o.unitNumber}` : o.floorplanName))
+                    .join(", ")}). The next refresh records every apartment the current way.`}
                 >
-                  {omittedCount} hidden by old filter
+                  old-method snapshot
                 </span>
               )}
             </div>

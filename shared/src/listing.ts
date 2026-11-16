@@ -1,5 +1,5 @@
 import { chicagoDate } from "./time";
-import type { LeaseTermPrice, UnitListing } from "./types";
+import type { LeaseTermPrice, OmittedListing, UnitListing } from "./types";
 
 /**
  * Listing helpers shared by the scraper pipeline and the dashboard, so
@@ -183,4 +183,25 @@ export function shortestTermAtAdvertisedPrice(u: Priced): number | null {
     if (t.price <= u.price && (best === null || t.months < best)) best = t.months;
   }
   return best;
+}
+
+/**
+ * Until 15 Nov 2026 the scraper left out of its unit list any apartment the
+ * site did not offer for a lease of 14 months or less, and recorded it under
+ * `omitted` with the rent the site advertised. Such a snapshot still LISTS
+ * those apartments. This turns them into ordinary listings — advertised rent,
+ * the lease length it was for, no move-in date (that was not recorded) — so
+ * that no table, count or "cheapest" figure has to remember them separately.
+ */
+export function omittedAsListings(omitted: readonly OmittedListing[]): UnitListing[] {
+  return omitted.map((o) => ({
+    unitNumber: o.unitNumber,
+    floorplanName: o.floorplanName,
+    beds: o.beds,
+    baths: o.baths ?? null,
+    sqft: o.sqft ?? null,
+    price: o.advertisedPrice,
+    leaseTermMonths: o.leaseTermMonths,
+    availableDate: null,
+  }));
 }

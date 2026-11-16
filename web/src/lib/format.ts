@@ -65,6 +65,13 @@ export const ageLabel = (iso: string): string => {
   return `${daysSince(iso)}d ago`;
 };
 
+/** Age in words for a sentence, e.g. "20 hours" / "3 days" (no "ago"). */
+export const ageWords = (iso: string): string => {
+  const hours = hoursSince(iso);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  return `${daysSince(iso)} days`;
+};
+
 /**
  * The daily refresh should land once a day; past this the dashboard is
  * showing yesterday's (or older) prices and must say so.
@@ -118,6 +125,6 @@ export function moveIn(
     label: "—",
     kind: "unknown",
     days: null,
-    title: "The leasing site does not give a move-in date for this listing",
+    title: "No move-in date for this listing in this snapshot",
   };
 }

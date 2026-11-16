@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlsoListedCompiled,
+  BuildingConfig,
   BuildingHistory,
   SnapshotDelta,
   UnitListing,
@@ -65,6 +66,40 @@ export function shownPrice(u: UnitListing, leaseTerm: number | null): ShownPrice
  */
 const metaKey = (u: UnitListing): string => u.unitNumber ?? listingKey(u);
 
+/** What the building's leasing site publishes per apartment (from its config). */
+type Publishes = BuildingConfig["publishes"];
+/**
+ * How a snapshot taken by the old scraper (before 15 Nov 2026) recorded a
+ * row: at the cheapest rent for a lease of 14 months or less ("capped"), or
+ * not in its list at all ("left-out" — shown here from its omitted record).
+ * null for every row of a snapshot taken the current way.
+ */
+type Recorded = "capped" | "left-out" | null;
+
+/** "a 12-month lease", "an 18-month lease" — the article follows the number as spoken. */
+const monthLease = (months: number | null | undefined): string =>
+  months == null ? "a lease" : `${/^(8|11|18)/.test(String(months)) ? "an" : "a"} ${months}-month lease`;
+
+/** Numbers read the same whatever the browser's language is set to. */
+const count = (n: number): string => n.toLocaleString("en-US");
+
+/**
+ * How to word a fact a row does not have. "The site does not publish it" is
+ * only said when the building's config says so; otherwise the snapshot simply
+ * did not record it — the site may well show it.
+ */
+function missing(publishes: Publishes, what: "moveInDate" | "leaseLength"): { detail: string; cell: string } {
+  const notPublished = publishes?.[what] === false;
+  if (what === "moveInDate") {
+    return notPublished
+      ? { detail: "The site publishes no move-in date", cell: "The leasing site publishes no move-in dates" }
+      : { detail: "Move-in date not recorded in this snapshot", cell: "No move-in date was recorded for this listing in this snapshot" };
+  }
+  return notPublished
+    ? { detail: "The site publishes no lease lengths", cell: "The leasing site does not say which lease length this price is for" }
+    : { detail: "Lease length not recorded in this snapshot", cell: "No lease length was recorded for this price in this snapshot" };
+}
+
 /** nulls always sort last, whatever the direction. */
 function compare(a: string | number | null, b: string | number | null, dir: 1 | -1): number {
   if (a === null && b === null) return 0;
@@ -84,6 +119,8 @@ function UnitDetail({
   meta,
   floor,
   change,
+  publishes,
+  recorded,
 }: {
   u: UnitListing;
   asOf: string;
@@ -92,6 +129,8 @@ function UnitDetail({
   floor: number | null;
   /** Price change since the previous scrape, when there is one. */
   change: SnapshotDelta["priceChanges"][number] | undefined;
+  publishes: Publishes;
+  recorded: Recorded;
 }) {
   const table = leaseTermTable(u);
   const cheapest = cheapestTerm(u);
@@ -103,10 +142,12 @@ function UnitDetail({
   );
   if (u.sqft != null) {
     facts.push(
-      `${u.sqft.toLocaleString()} sq ft${u.outdoorSqft ? ` + ${u.outdoorSqft.toLocaleString()} outdoor` : ""}`,
+      `${count(u.sqft)} sq ft${u.outdoorSqft ? ` + ${count(u.outdoorSqft)} outdoor` : ""}`,
     );
+  } else {
+    facts.push(publishes?.sqft === false ? "The site publishes no square footage" : "Square footage not recorded");
   }
-  facts.push(mi.kind === "unknown" ? "No move-in date published" : mi.title);
+  facts.push(mi.kind === "unknown" ? missing(publishes, "moveInDate").detail : mi.title);
   if (floor !== null) facts.unshift(`Floor ${floor}`);
   if (change && !change.notComparable) {
     facts.push(
@@ -180,11 +221,19 @@ function UnitDetail({
         </>
       ) : (
         <div className="unit-detail-note">
-          {u.leaseTermMonths != null
-            ? `The site quotes ${money(u.price)} for a ${u.leaseTermMonths}-month lease and publishes no other lease lengths.`
-            : u.priceMax !== undefined
-              ? `The site prints a range (${priceLabel(u.price, u.priceMax)}) instead of a price per lease length — the price for each lease term is shown in its leasing portal.`
-              : "The site publishes one price and no lease lengths for this listing — ask the leasing office or open the listing for terms."}
+          {recorded === "left-out"
+            ? `The scraper that took this snapshot left this apartment out of its list, because the site offered it for no lease of 14 months or less. ${money(u.price)} is the rent the site advertised${u.leaseTermMonths != null ? `, for ${monthLease(u.leaseTermMonths)}` : ""}. Its other lease lengths and its move-in date were not recorded; the next refresh records them.`
+            : recorded === "capped"
+              ? `This snapshot was taken the old way: ${money(u.price)} is the cheapest rent the site offered for a lease of 14 months or less${u.leaseTermMonths != null ? ` (here ${u.leaseTermMonths} months)` : ""}, which can be more than the rent it advertised. The advertised rent and the other lease lengths were not recorded; the next refresh records them.`
+              : u.leaseTermMonths != null
+                ? publishes?.leaseTable === false
+                  ? `The site quotes ${money(u.price)} for ${monthLease(u.leaseTermMonths)} and publishes no other lease lengths.`
+                  : `The site quotes ${money(u.price)} for ${monthLease(u.leaseTermMonths)}. Its prices for other lease lengths were not recorded in this snapshot.`
+                : publishes?.leaseLength !== false
+                  ? "No lease length was recorded for this price in this snapshot."
+                  : u.priceMax !== undefined
+                    ? `The site prints a range (${priceLabel(u.price, u.priceMax)}) instead of a price per lease length — the price for each lease term is shown in its leasing portal.`
+                    : "The site publishes one price and no lease lengths for this listing — ask the leasing office or open the listing for terms."}
         </div>
       )}
 
@@ -235,7 +284,7 @@ function AlsoListedBlock({
           );
           const bits = [
             a.beds !== null ? bedsLabel(a.beds) : null,
-            a.sqft != null ? `${a.sqft.toLocaleString()} sq ft` : null,
+            a.sqft != null ? `${count(a.sqft)} sq ft` : null,
             a.price !== undefined ? priceLabel(a.price, a.priceMax) : null,
             mi.kind === "now" ? "move-in now" : mi.kind === "future" ? `move-in ${mi.label}` : null,
           ].filter((b): b is string => b !== null);
@@ -281,6 +330,10 @@ export default function AvailabilityTable({
   asOf,
   compareTerm,
   alsoListed,
+  publishes,
+  leftOutKeys,
+  totalListed,
+  hasSnapshot,
 }: {
   units: UnitListing[];
   delta: SnapshotDelta | null;
@@ -291,7 +344,22 @@ export default function AvailabilityTable({
   /** Lease length shown as a comparison next to the advertised one. */
   compareTerm: number;
   alsoListed: AlsoListedCompiled[];
+  /** What the leasing site publishes per apartment, so an empty cell can be worded truthfully. */
+  publishes: Publishes;
+  /**
+   * Set when the snapshot was taken by the old scraper: the keys of the
+   * listings it had left out of its list (shown here from its omitted record).
+   * null for a snapshot taken the current way.
+   */
+  leftOutKeys: Set<string> | null;
+  /** Listings in the snapshot before any filter. */
+  totalListed: number;
+  /** False when the building has never been scraped successfully. */
+  hasSnapshot: boolean;
 }) {
+  const oldMethod = leftOutKeys !== null;
+  const recordedAs = (u: UnitListing): Recorded =>
+    leftOutKeys === null ? null : leftOutKeys.has(listingKey(u)) ? "left-out" : "capped";
   const selectedUnit = useStore((s) => s.selectedUnit);
   const selectedPlan = useStore((s) => s.selectedPlan);
   const selectUnit = useStore((s) => s.selectUnit);
@@ -412,8 +480,10 @@ export default function AvailabilityTable({
                 leaseTerm !== null ? `Rent @${leaseTerm}mo` : "Rent",
                 true,
                 leaseTerm !== null
-                  ? `Monthly rent for a ${leaseTerm}-month lease where the site publishes it`
-                  : "Monthly rent exactly as the leasing site advertises it",
+                  ? `Monthly rent for ${monthLease(leaseTerm)} where the site publishes it`
+                  : oldMethod
+                    ? "This snapshot was taken the old way: each apartment's cheapest rent for a lease of 14 months or less — and, for the apartments that had none, the rent the site advertised (see the Lease column)"
+                    : "Monthly rent exactly as the leasing site advertises it",
               )}
               {header("lease", "Lease", false, "Lease length the shown rent is for")}
               {header("movein", "Move-in", false, "Earliest move-in date")}
@@ -426,7 +496,13 @@ export default function AvailabilityTable({
           <tbody>
             {sorted.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={COLS}>No listings match the current filters.</td>
+                <td colSpan={COLS}>
+                  {!hasSnapshot
+                    ? "This building has not been read successfully yet — there is nothing to show."
+                    : totalListed === 0
+                      ? "The last scrape found no listings on the leasing site."
+                      : "No listings match the current filters."}
+                </td>
               </tr>
             )}
             {sorted.map((u, i) => {
@@ -455,6 +531,10 @@ export default function AvailabilityTable({
                   : first.firstTerm === undefined || first.firstTerm === (u.leaseTermMonths ?? undefined)
                     ? u.price
                     : priceAtTerm(u, first.firstTerm);
+              const recorded = recordedAs(u);
+              // An old-method rent against a first price with no lease length
+              // on record is two different kinds of number.
+              const sigmaComparable = !(recorded === "capped" && first?.firstTerm === undefined);
               return (
                 <Fragment key={key}>
                   <tr
@@ -528,7 +608,7 @@ export default function AvailabilityTable({
                         </>
                       )}
                     </td>
-                    <td className="num hide-sm">{u.sqft?.toLocaleString() ?? "—"}</td>
+                    <td className="num hide-sm">{u.sqft != null ? count(u.sqft) : "—"}</td>
                     <td className="num price-cell">
                       <span
                         className={shown.termUnavailable ? "price-fallback" : undefined}
@@ -552,23 +632,20 @@ export default function AvailabilityTable({
                           className="lease-term"
                           title={
                             leaseTerm === null && shortest !== null && shortest < shown.term
-                              ? `Advertised with a ${shown.term}-month lease, but a ${shortest}-month lease costs the same`
-                              : `Rent shown is for a ${shown.term}-month lease`
+                              ? `Advertised with ${monthLease(shown.term)}, but ${monthLease(shortest)} costs the same`
+                              : `Rent shown is for ${monthLease(shown.term)}`
                           }
                         >
                           {shown.term} mo
                           {leaseTerm === null && shortest !== null && shortest < shown.term ? "*" : ""}
                         </span>
                       ) : (
-                        <span
-                          className="muted"
-                          title="The leasing site does not say which lease length this price is for"
-                        >
+                        <span className="muted" title={missing(publishes, "leaseLength").cell}>
                           —
                         </span>
                       )}
                       {atCompare !== null && (
-                        <span className="lease-compare" title={`Rent for a ${compareTerm}-month lease`}>
+                        <span className="lease-compare" title={`Rent for ${monthLease(compareTerm)}`}>
                           {compareTerm} mo {money(atCompare)}
                         </span>
                       )}
@@ -576,7 +653,7 @@ export default function AvailabilityTable({
                         <span className="lease-compare">{termCount} terms</span>
                       )}
                     </td>
-                    <td title={mi.title}>
+                    <td title={mi.kind === "unknown" ? missing(publishes, "moveInDate").cell : mi.title}>
                       {mi.kind === "now" ? (
                         <span className="badge now">Now</span>
                       ) : mi.kind === "future" ? (
@@ -593,8 +670,8 @@ export default function AvailabilityTable({
                             change.fromTerm === undefined
                               ? ""
                               : change.fromTerm === change.toTerm
-                                ? ` for a ${change.fromTerm}-month lease`
-                                : ` — the rent the site advertises (it headlined a ${change.fromTerm}-month lease, now ${change.toTerm} months)`
+                                ? ` for ${monthLease(change.fromTerm)}`
+                                : ` — the rent the site advertises (it headlined ${monthLease(change.fromTerm)}, now ${change.toTerm} months)`
                           } since ${
                             change.since
                               ? `${shortDate(change.since)}, the last time this unit was priced the same way (range or single price)`
@@ -607,7 +684,7 @@ export default function AvailabilityTable({
                       {change?.notComparable === "lease-term" && (
                         <span
                           className="muted"
-                          title={`The site now advertises a ${change.toTerm}-month lease instead of ${change.fromTerm} months (${money(change.from)} → ${money(change.to)}) — not a like-for-like price change`}
+                          title={`The site now advertises ${monthLease(change.toTerm)} instead of ${change.fromTerm} months (${money(change.from)} → ${money(change.to)}) — not a like-for-like price change`}
                         >
                           {change.fromTerm}→{change.toTerm}mo
                         </span>
@@ -620,7 +697,7 @@ export default function AvailabilityTable({
                           ≈ {money(change.from)}
                         </span>
                       )}
-                      {first && nowAtFirstTerm !== null && nowAtFirstTerm !== first.firstPrice && (
+                      {first && sigmaComparable && nowAtFirstTerm !== null && nowAtFirstTerm !== first.firstPrice && (
                         <span
                           className={nowAtFirstTerm < first.firstPrice ? "delta-down" : "delta-up"}
                           title={`vs first listing ${shortDate(first.firstSeen)} at ${money(first.firstPrice)}${first.firstTerm ? ` (${first.firstTerm}-month lease)` : ""}`}
@@ -648,6 +725,8 @@ export default function AvailabilityTable({
                           meta={first}
                           floor={floor}
                           change={change}
+                          publishes={publishes}
+                          recorded={recorded}
                         />
                       </td>
                     </tr>
@@ -661,13 +740,17 @@ export default function AvailabilityTable({
       {(noTerm > 0 || noDate > 0) && (
         <div className="table-footnote">
           {noTerm > 0 &&
-            (noTerm === units.length
-              ? "Lease “—”: this leasing site does not publish lease lengths. "
-              : `Lease “—”: the site publishes no lease length for ${noTerm} of these listings. `)}
+            (publishes?.leaseLength === false
+              ? noTerm === units.length
+                ? "Lease “—”: this leasing site does not publish lease lengths. "
+                : `Lease “—”: the site publishes no lease length for ${noTerm} of these listings. `
+              : `Lease “—”: no lease length was recorded for ${noTerm === units.length ? "these listings" : `${noTerm} of these listings`} in this snapshot. `)}
           {noDate > 0 &&
-            (noDate === units.length
-              ? "Move-in “—”: the site publishes no move-in dates."
-              : `Move-in “—”: no date published for ${noDate} of these listings.`)}
+            (publishes?.moveInDate === false
+              ? noDate === units.length
+                ? "Move-in “—”: the site publishes no move-in dates."
+                : `Move-in “—”: no date published for ${noDate} of these listings.`
+              : `Move-in “—”: no move-in date was recorded for ${noDate === units.length ? "these listings" : `${noDate} of these listings`} in this snapshot — the leasing site may show one.`)}
         </div>
       )}
       <AlsoListedBlock rows={alsoListed} asOf={asOf} newKeys={newAlsoKeys} />

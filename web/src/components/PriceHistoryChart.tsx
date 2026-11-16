@@ -194,7 +194,13 @@ export default function PriceHistoryChart({
             {selectedUnit ? `unit ${selectedUnit} highlighted` : "click a unit row to highlight"}
           </span>
         )}
-        {single && <span className="hint">one snapshot so far — history builds with each refresh</span>}
+        {single && (
+          <span className="hint">
+            {history.runs.length === 0
+              ? "no successful scrape yet — history builds with each refresh"
+              : "one snapshot so far — history builds with each refresh"}
+          </span>
+        )}
       </div>
       {mixedTerms && (
         <div className="chart-note">

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { listingKey } from "../../../shared/src/delta";
+import { omittedAsListings } from "../../../shared/src/listing";
 import type {
   BuildingHistory,
   BuildingsConfig,
@@ -26,7 +28,7 @@ const historyShape: ShapeCheck = (x) => {
   return null;
 };
 
-function fetchJson<T>(path: string, shape?: ShapeCheck): Promise<T> {
+function fetchJson<T>(path: string, shape?: ShapeCheck, prepare?: (body: T) => T): Promise<T> {
   let p = cache.get(path);
   if (!p) {
     // "no-cache": always ask the server whether its copy is newer. The data
@@ -42,7 +44,7 @@ function fetchJson<T>(path: string, shape?: ShapeCheck): Promise<T> {
         }
         const problem = shape?.(body) ?? null;
         if (problem) throw new Error(`${path} cannot be read: ${problem}`);
-        return body;
+        return prepare ? prepare(body as T) : body;
       })
       .catch((err: unknown) => {
         // A failure is never kept: the next attempt asks again.
@@ -57,8 +59,22 @@ function fetchJson<T>(path: string, shape?: ShapeCheck): Promise<T> {
 
 export const loadConfig = (): Promise<BuildingsConfig> => fetchJson("config.json", configShape);
 
+/**
+ * A snapshot taken by the scraper of before 15 Nov 2026 keeps the apartments
+ * it left out of its list under `omitted`. They are listed on the site all
+ * the same, so every view gets them as ordinary listings (at the rent the
+ * site advertised); `omitted` stays, for the views that explain it.
+ */
+function listEveryUnit(h: BuildingHistory): BuildingHistory {
+  if (!h.latest || !h.omitted || h.omitted.length === 0) return h;
+  const listed = new Set(h.latest.units.map(listingKey));
+  const leftOut = omittedAsListings(h.omitted).filter((u) => !listed.has(listingKey(u)));
+  if (leftOut.length === 0) return h;
+  return { ...h, latest: { ...h.latest, units: [...h.latest.units, ...leftOut] } };
+}
+
 export const loadHistory = (buildingId: string): Promise<BuildingHistory> =>
-  fetchJson(`buildings/${buildingId}.json`, historyShape);
+  fetchJson<BuildingHistory>(`buildings/${buildingId}.json`, historyShape, listEveryUnit);
 
 export async function loadSkyline(): Promise<SkylineCollection | null> {
   try {

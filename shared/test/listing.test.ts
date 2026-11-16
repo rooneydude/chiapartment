@@ -3,6 +3,7 @@ import {
   cheapestTerm,
   comparePrices,
   isAvailableNow,
+  omittedAsListings,
   leaseTermTable,
   priceAtTerm,
   shortestTermAtAdvertisedPrice,
@@ -253,5 +254,30 @@ describe("shortestTermAtAdvertisedPrice", () => {
   it("says nothing without a lease table", () => {
     expect(shortestTermAtAdvertisedPrice({ price: 2400, leaseTermMonths: 12 })).toBeNull();
     expect(shortestTermAtAdvertisedPrice({ price: 2400 })).toBeNull();
+  });
+});
+
+describe("omittedAsListings (units an old snapshot left out of its list)", () => {
+  it("lists them at the rent the site advertised, for the lease length it was for", () => {
+    const [u] = omittedAsListings([
+      { unitNumber: "0704", floorplanName: "bhrb2.1", beds: 2, baths: 2, sqft: 1134, advertisedPrice: 4874, leaseTermMonths: 18, reason: "over-cap" },
+    ]);
+    expect(u).toEqual({
+      unitNumber: "0704",
+      floorplanName: "bhrb2.1",
+      beds: 2,
+      baths: 2,
+      sqft: 1134,
+      price: 4874,
+      leaseTermMonths: 18,
+      availableDate: null, // the old scraper did not record one — not "no date"
+    });
+  });
+
+  it("copes with the fields old snapshots did not always carry", () => {
+    const [u] = omittedAsListings([
+      { unitNumber: null, floorplanName: "A1", beds: 1, advertisedPrice: 3000, leaseTermMonths: 16, reason: "over-cap" },
+    ]);
+    expect(u).toMatchObject({ unitNumber: null, baths: null, sqft: null, price: 3000, leaseTermMonths: 16 });
   });
 });

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { leaseTermTable } from "../../../shared/src/listing";
+import { listingKey } from "../../../shared/src/delta";
+import { leaseTermTable, omittedAsListings } from "../../../shared/src/listing";
 import { parseUnitNumber } from "../../../shared/src/parse";
 import {
   UnitMappingSchema,
@@ -123,6 +124,16 @@ export default function BuildingPage() {
     return [...months].sort((a, b) => a - b);
   }, [history]);
 
+  // A snapshot taken by the old scraper: which of its listings it had left
+  // out of its list (they are in latest.units all the same — see lib/data).
+  const leftOutKeys = useMemo(
+    () =>
+      history?.omitted && history.omitted.length > 0
+        ? new Set(omittedAsListings(history.omitted).map(listingKey))
+        : null,
+    [history],
+  );
+
   const visibleUnitNumbers = useMemo(
     () => new Set(filteredUnits.map((u) => u.unitNumber).filter((u): u is string => u !== null)),
     [filteredUnits],
@@ -176,6 +187,9 @@ export default function BuildingPage() {
           ← all buildings
         </Link>
         <h2>{building.name}</h2>
+        <a className="meta" href={building.url} target="_blank" rel="noopener noreferrer">
+          leasing site ↗
+        </a>
         <span className="meta">
           {building.address} · {building.geometry.floors} floors
           {history.lastAttempt?.status === "error"
@@ -207,16 +221,16 @@ export default function BuildingPage() {
       {(history.omitted?.length ?? 0) > 0 && (
         <div className="warning-banner" role="status">
           <div>
-            ⚠ This snapshot predates the removal of the old 14-month lease filter, which left{" "}
-            {history.omitted.length} listed unit{history.omitted.length === 1 ? "" : "s"} out of
-            the table:{" "}
-            {history.omitted
-              .map(
-                (o) =>
-                  `${o.unitNumber ? `#${o.unitNumber}` : o.floorplanName} $${o.advertisedPrice.toLocaleString()} @ ${o.leaseTermMonths}mo`,
-              )
-              .join(" · ")}
-            . The next refresh lists every unit.
+            ⚠ The newest snapshot{history.latest ? ` (${dateTime(history.latest.timestamp)})` : ""} was
+            taken by the tracker’s previous scraper. It recorded each apartment at its cheapest
+            rent for a lease of 14 months or less — which can be more than the rent the site
+            advertises — and left {history.omitted.length} apartment
+            {history.omitted.length === 1 ? "" : "s"} that had no such lease out of its list.{" "}
+            {history.omitted.length === 1 ? "It is" : "They are"} in the table below at the rent
+            the site advertised (
+            {history.omitted.map((o) => (o.unitNumber ? `#${o.unitNumber}` : o.floorplanName)).join(", ")}
+            ). The next refresh records every apartment the current way: the advertised rent, its
+            lease length, the price of every other lease length and the move-in date.
           </div>
         </div>
       )}
@@ -229,23 +243,28 @@ export default function BuildingPage() {
       )}
       <DeltaSummary delta={history.delta} />
       <div style={{ height: 10 }} />
-      <Filters
-        maxFloor={building.geometry.floors}
-        leaseTerms={leaseTermsAvailable}
-        focusBeds={config.focus?.beds ?? null}
-      />
+      {/* Nothing listed: nothing to filter. */}
+      {(history.latest?.units.length ?? 0) > 0 && (
+        <Filters
+          maxFloor={building.geometry.floors}
+          leaseTerms={leaseTermsAvailable}
+          focusBeds={config.focus?.beds ?? null}
+        />
+      )}
       <div className="bldg-grid">
         <div className="panel">
           <div className="panel-title">
             Listed units
-            <span className="hint">
-              {filteredUnits.length === (history.latest?.units.length ?? 0)
-                ? `all ${filteredUnits.length}`
-                : `${filteredUnits.length} of ${history.latest?.units.length ?? 0} — ${
-                    (history.latest?.units.length ?? 0) - filteredUnits.length
-                  } hidden by the filters above`}{" "}
-              · click a row for lease terms and its place in 3D
-            </span>
+            {history.latest && history.latest.units.length > 0 && (
+              <span className="hint">
+                {filteredUnits.length === history.latest.units.length
+                  ? `all ${filteredUnits.length}`
+                  : `${filteredUnits.length} of ${history.latest.units.length} — ${
+                      history.latest.units.length - filteredUnits.length
+                    } hidden by the filters above`}{" "}
+                · click a row for lease terms and its place in 3D
+              </span>
+            )}
           </div>
           <AvailabilityTable
             units={filteredUnits}
@@ -255,6 +274,10 @@ export default function BuildingPage() {
             asOf={history.latest?.timestamp ?? new Date().toISOString()}
             compareTerm={config.focus?.compareLeaseTermMonths ?? 12}
             alsoListed={history.alsoListed ?? []}
+            publishes={building.publishes}
+            leftOutKeys={leftOutKeys}
+            totalListed={history.latest?.units.length ?? 0}
+            hasSnapshot={history.latest != null}
           />
           {focusEmpty && bedsFilter === null && (
             <div className="table-footnote">
