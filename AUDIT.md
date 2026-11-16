@@ -223,7 +223,7 @@ and left alone.
   adapter's output: 1225 15/15 units, Old Town Park 19/19/20 (+2 penthouse /
   townhome rows), The Leo 2/2, Stead 13 priced plans + 2 unpriced — matching
   the page the tracker is allowed to read.
-- 252 automated tests, most of them run against pages captured that day
+- 282 automated tests, most of them run against pages captured that day
   (kept under `scraper/fixtures/`, with the August captures as a second set),
   plus `tsc` and a production build.
 - The CI changes were simulated locally (run summary, health gate, push
@@ -259,6 +259,49 @@ confirmed thirteen defects — two serious — all fixed since, each with a test
   partial second look replacing a full first one; a damaged snapshot file
   silencing alerts; alert wording (UTC date in the title, scraped text pasted
   unescaped).
+
+## Independent review of the scrapers
+
+A second adversarial review took the four site scrapers and tried to make
+each return wrong data while still reporting success — by editing single
+rows of the captured pages in the ways leasing sites really change them. It
+confirmed ten weaknesses. None was producing wrong data on 15 Nov; each
+would have, the day a site changed. All are closed, each with a test:
+
+- **Old Town Park — the rent was any dollar amount in the row.** A promo tag
+  such as "$1,000 Rent Credit" next to a unit would have been stored as its
+  rent (a 57% "price drop"); a struck-through "was" price became a price
+  range; a page served without whitespace fused the rent with the date into
+  a six-digit rent. The rent is now read from the price element only, and
+  the date only from a label that is a date.
+- **Old Town Park — a hidden number stood in for a withheld price.** A row
+  whose price slot prints words ("Call for Details") was given the page's
+  hidden attribute as its rent unless the words matched one of three known
+  phrases. Any price slot that prints words is now listed without a price,
+  with the slot's own text as the note.
+- **Old Town Park — a renamed page hook meant an empty tower recorded as
+  "ok".** Every unit row on the page is now read wherever it sits, and a
+  page whose rows cannot be read fails loudly instead of returning a shorter
+  list.
+- **1225 — a unit with no number, or a plan with no whole-number bed count,**
+  was dropped silently or (worse) made the whole run invalid. Such units are
+  now listed under "also listed" with the reason.
+- **The Leo — a lease-term table would not have been read.** The site does
+  not publish one today; had it switched one on (its widget is the same one
+  1225's site uses, which does), the table would have been dropped without
+  a word. It is now read in the widget's real format. Unit records the
+  scraper cannot read are no longer just counted in a log line, and an
+  apartment the site's catalogue marks available but its unit list omits is
+  reported.
+- **Stead 220 — a plan's identity hung on incidental card markup.** It now
+  comes from the page's own data record.
+- **Specials longer than 300 characters were dropped whole.** They are
+  shortened at a word boundary instead.
+- **Only one scraper recognised a bot-protection refusal as a refusal.** All
+  four now do, the same way: recorded as "refused", not retried in the run,
+  never worked around.
+- **One malformed row could discard a whole run** (all six buildings). A row
+  that does not fit the snapshot format now costs that row only.
 
 ---
 
