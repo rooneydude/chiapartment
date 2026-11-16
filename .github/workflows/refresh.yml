@@ -18,6 +18,9 @@ on:
   push:
     # Alternative trigger: commit a change to this file (its words become
     # flags: "capture", "skyline", "buildings=a,b").
+    # Only on the published branch: a refresh commits data and redeploys the
+    # site, which a side branch must not do by accident.
+    branches: [claude/repo-reset-4my0gv, main]
     paths: [".github/refresh-trigger"]
   schedule:
     # Every morning, Chicago time (14:17 UTC ≈ 8/9am depending on DST).
