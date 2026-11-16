@@ -518,7 +518,12 @@ export default function AvailabilityTable({
   return (
     <>
       <div className="tbl-wrap">
-        <table className="units" aria-label="Listed units">
+        {/* "no-lease": no listing here carries a lease length, so on a narrow
+            screen that column of dashes gives way (the footnote says why). */}
+        <table
+          className={`units${units.length > 0 && noTerm === units.length ? " no-lease" : ""}`}
+          aria-label="Listed units"
+        >
           <thead>
             <tr>
               {header("unit", "Unit")}
@@ -681,7 +686,8 @@ export default function AvailabilityTable({
                             : undefined
                         }
                       >
-                        {priceLabel(shown.price, shown.priceMax)}
+                        {/* a range may break after its dash where the column is narrow */}
+                        {priceLabel(shown.price, shown.priceMax).replace("–", "–\u200B")}
                       </span>
                       {u.specials && (
                         <span title={u.specials} className="special-mark">
@@ -716,7 +722,10 @@ export default function AvailabilityTable({
                         <span className="lease-compare">{termCount} terms</span>
                       )}
                     </td>
-                    <td title={mi.kind === "unknown" ? missing(publishes, "moveInDate").cell : mi.title}>
+                    <td
+                      className="movein-col"
+                      title={mi.kind === "unknown" ? missing(publishes, "moveInDate").cell : mi.title}
+                    >
                       {mi.kind === "now" ? (
                         <span className="badge now">Now</span>
                       ) : mi.kind === "future" ? (

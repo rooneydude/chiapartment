@@ -542,6 +542,21 @@ table.units td {
   white-space: nowrap;
 }
 
+/* A rent range ("$2,457–$2,478") may wrap after its dash rather than push
+   the lease and move-in columns off a narrow screen. */
+table.units td.price-cell {
+  white-space: normal;
+}
+
+/* The sixth column is Lease. Where no listing has a lease length (the site
+   publishes none) it is a column of dashes: below 900 px it gives way. */
+@media (max-width: 900px) {
+  table.units.no-lease th:nth-child(6),
+  table.units.no-lease td.lease-col {
+    display: none;
+  }
+}
+
 table.units tbody tr {
   cursor: pointer;
 }
@@ -807,6 +822,11 @@ table.units tbody tr.empty-row td {
 
   table.units .plan-name {
     display: none;
+  }
+
+  /* A move-in date in another year ("Jan 17, 2027") may take two lines. */
+  table.units td.movein-col {
+    white-space: normal;
   }
 
   /* Lease length and move-in date stay on screen: a long plan name wraps. */
