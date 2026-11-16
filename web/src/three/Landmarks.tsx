@@ -8,6 +8,7 @@ import {
   type SkylineCollection,
 } from "../../../shared/src/types";
 import { planToThree, type SceneTheme } from "./geometry";
+import StreetNames from "./StreetNames";
 
 const MAX_STATIONS = 4;
 const STATION_RADIUS_M = 1200;
@@ -22,8 +23,8 @@ const STREET_RADIUS_M = 260;
 /**
  * Orientation aids around the tracked building: the nearest named CTA
  * stations, the tallest named towers close by, and the names of the streets
- * it stands on. Positions are memoized; labels are plain drei Html so they
- * cost no draw calls.
+ * it stands on. Positions are memoized; station and tower labels are plain
+ * drei Html (no draw calls), street names are lettering on the ground.
  */
 export default function Landmarks({
   skyline,
@@ -85,7 +86,7 @@ export default function Landmarks({
 
   // Street names: for every named street, the point of its centre-line nearest to the tower.
   const streets = useMemo(() => {
-    const best = new Map<string, { name: string; pos: Vec2; d: number }>();
+    const best = new Map<string, { name: string; pos: Vec2; dir: Vec2; d: number }>();
     for (const f of skyline.features) {
       if (!isLineFeature(f) || f.properties.kind !== "road" || !f.properties.name) continue;
       if (f.properties.class === "motorway" || f.properties.class === "pedestrian") continue;
@@ -105,7 +106,10 @@ export default function Landmarks({
         const p: Vec2 = [a[0] + dx * t, a[1] + dy * t];
         const d = Math.hypot(p[0] - center[0], p[1] - center[1]);
         const cur = best.get(f.properties.name);
-        if (!cur || d < cur.d) best.set(f.properties.name, { name: f.properties.name, pos: p, d });
+        if (!cur || d < cur.d) {
+          const len = Math.sqrt(len2);
+          best.set(f.properties.name, { name: f.properties.name, pos: p, dir: [dx / len, dy / len], d });
+        }
       }
     }
     return [...best.values()]
@@ -144,28 +148,8 @@ export default function Landmarks({
           </Html>
         </group>
       ))}
-      {streets.map((st) => (
-        <Html
-          key={`street-${st.name}`}
-          position={planToThree(st.pos[0], st.pos[1], 1.5)}
-          center
-          zIndexRange={[5, 0]} // under the station and landmark pills
-          style={{
-            color: theme.label,
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            // a halo in the pill colour, so the name reads on any ground
-            textShadow: [3, 3, 6].map((blur) => `0 0 ${blur}px ${theme.labelBg}`).join(", "),
-            opacity: 0.9,
-          }}
-        >
-          {st.name}
-        </Html>
-      ))}
+      {/* painted on the ground, so buildings in front hide them (see StreetNames) */}
+      <StreetNames streets={streets} theme={theme} />
       {landmarks.map((l) => (
         <Html
           key={`lm-${l.name}-${l.pos[0]}`}

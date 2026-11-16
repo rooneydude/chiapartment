@@ -1023,6 +1023,30 @@ table.units tbody tr.empty-row td {
   color: var(--series-1);
 }
 
+/* The time of day the scene is lit for: a sun or moon, the hour, a slider. */
+.scene-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.scene-time-value {
+  min-width: 7ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.scene-time input[type="range"] {
+  width: 110px;
+  accent-color: var(--series-1);
+}
+
 .scene-empty {
   height: 100%;
   display: flex;

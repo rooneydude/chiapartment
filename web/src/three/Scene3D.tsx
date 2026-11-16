@@ -64,6 +64,14 @@ const SHADOWS = { enabled: true, type: THREE.PCFSoftShadowMap, autoUpdate: false
  * `?t=` in the URL: the hour of the day (Chicago wall clock, 0–24, fractions
  * allowed) to light the scene for. Null = absent or not a time of day.
  */
+/** 13.5 → "1:30 PM" */
+function hourLabel(hours: number): string {
+  const whole = Math.floor(hours) % 24;
+  const minutes = Math.round((hours - Math.floor(hours)) * 60);
+  const h12 = whole % 12 === 0 ? 12 : whole % 12;
+  return `${h12}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""} ${whole < 12 ? "AM" : "PM"}`;
+}
+
 function parseHourOfDay(raw: string | null): number | null {
   if (raw === null || raw.trim() === "") return null;
   const hours = Number(raw);
@@ -102,11 +110,14 @@ function CameraRig({
   city,
   sunAzDeg,
   night,
+  resetSignal,
 }: {
   placement: UnitPlacement | null;
   city: City;
   sunAzDeg: number;
   night: number;
+  /** Goes up when the reader asks for the whole-tower view back. */
+  resetSignal: number;
 }) {
   const cameraMode = useStore((s) => s.cameraMode);
   const controls = useRef<OrbitControlsImpl>(null);
@@ -155,7 +166,7 @@ function CameraRig({
       };
     }
     invalidate(); // frames are rendered on demand: ask for the first one
-  }, [cameraMode, placement, home, invalidate]);
+  }, [cameraMode, placement, home, invalidate, resetSignal]);
 
   useFrame(({ camera }, delta) => {
     const g = goal.current;
@@ -194,6 +205,7 @@ function SceneContent({
   placement,
   marks,
   labelLayer,
+  viewReset,
   onTuneClick,
 }: {
   site: Site;
@@ -205,6 +217,8 @@ function SceneContent({
   marks: readonly MarkState[];
   /** Where the label of the hovered mark is put (see UnitMarks). */
   labelLayer: MutableRefObject<HTMLElement | null>;
+  /** Goes up when the reader asks for the whole-tower view back. */
+  viewReset: number;
   onTuneClick?: (c: TuneClick) => void;
 }) {
   const selectedPlan = useStore((s) => s.selectedPlan);
@@ -398,6 +412,7 @@ function SceneContent({
         city={city}
         sunAzDeg={atmosphere.azDeg}
         night={atmosphere.night}
+        resetSignal={viewReset}
       />
     </>
   );
@@ -434,7 +449,10 @@ export default function Scene3D({
   const { search } = useLocation();
   const query = useMemo(() => new URLSearchParams(search), [search]);
   const tuneMode = query.has("tune");
-  const hours = parseHourOfDay(query.get("t")) ?? theme.defaultHour;
+  /** The hour picked with the slider; null = not touched (the URL's ?t=, else the theme's default). */
+  const [hourChoice, setHourChoice] = useState<number | null>(null);
+  const [viewReset, setViewReset] = useState(0);
+  const hours = hourChoice ?? parseHourOfDay(query.get("t")) ?? theme.defaultHour;
 
   useEffect(() => {
     void loadSkyline().then(setSkyline);
@@ -575,6 +593,7 @@ export default function Scene3D({
           placement={placement}
           marks={markStates}
           labelLayer={labelLayer}
+          viewReset={viewReset}
           {...(tuneMode ? { onTuneClick: setTuneClick } : {})}
         />
         <AzimuthBridge discRef={discRef} />
@@ -587,6 +606,33 @@ export default function Scene3D({
       )}
       {/* the bottom edge: button left, notes right — one row that wraps where the panel is narrow */}
       <div className="scene-overlay">
+        <button
+          className="scene-btn"
+          title="Back to the view of the whole tower"
+          onClick={() => {
+            if (cameraMode !== "orbit") setCameraMode("orbit");
+            setViewReset((n) => n + 1);
+          }}
+        >
+          ⟲ reset view
+        </button>
+        <label
+          className="scene-time"
+          title="The time of day the scene is lit for: today’s sun over Chicago, so you can see which sides get light when"
+        >
+          <span aria-hidden="true">{atmosphere.night > 0.5 ? "☾" : "☀"}</span>
+          <span className="scene-time-value">{hourLabel(hours)}</span>
+          <input
+            type="range"
+            min={5}
+            max={23}
+            step={0.5}
+            value={Math.min(23, Math.max(5, hours))}
+            aria-label="Time of day the scene is lit for"
+            aria-valuetext={hourLabel(hours)}
+            onChange={(e) => setHourChoice(Number(e.target.value))}
+          />
+        </label>
         {placement?.viewCamera && (
           <button
             className={`scene-btn${cameraMode === "unit-view" ? " on" : ""}`}
