@@ -288,6 +288,12 @@ export interface FloorplanPoint {
 export interface MethodChange {
   t: string;
   note: string;
+  /**
+   * Set when the method switched back and forth for a while (runs of the old
+   * and the new scraper alternating): the stretch runs from `t` to here, and
+   * the note says which method applies after it.
+   */
+  until?: string;
 }
 
 export interface PriceChange {

@@ -575,6 +575,47 @@ describe("buildData: warnings and notes that must not vanish", () => {
     expect(readHistory().warnings).toEqual([]);
   });
 
+  it("reports runs of the old and the new scraper alternating as one stretch, not a row of markers", () => {
+    setup();
+    const capped = { unitNumber: "103", floorplanName: "A1", beds: 1, advertisedPrice: 3529, leaseTermMonths: 18, reason: "over-cap" };
+    const oldRun = { units: [{ ...unit("101", 2409), leaseTermMonths: 14 }], omitted: [capped] };
+    const newRun = { units: [{ ...unit("101", 2382), leaseTermMonths: 18 }, { ...unit("103", 3529), leaseTermMonths: 18 }], alsoListed: [] };
+    write("2026-09-07T18:00:00Z", { units: [{ ...unit("101", 2283), leaseTermMonths: 18 }] });
+    write("2026-09-08T18:00:00Z", oldRun);
+    write("2026-11-14T18:00:00Z", oldRun);
+    write("2026-11-15T13:55:00Z", newRun); // the new scraper, checked by hand
+    write("2026-11-15T19:37:00Z", oldRun); // the schedule still runs the old one
+    write("2026-11-16T12:00:00Z", newRun);
+    write("2026-11-16T19:30:00Z", oldRun);
+    write("2026-11-17T19:30:00Z", oldRun);
+    write("2026-11-18T15:00:00Z", newRun); // merged: the new scraper from here on
+    write("2026-11-19T15:00:00Z", newRun);
+    buildData(ROOT);
+    const changes = readHistory().methodChanges!;
+    expect(changes.map((m) => [m.t, m.until])).toEqual([
+      ["2026-09-08T18:00:00Z", undefined],
+      ["2026-11-15T13:55:00Z", "2026-11-18T15:00:00Z"],
+    ]);
+    expect(changes[1]!.note).toMatch(/one method or the other/);
+    expect(changes[1]!.note).toMatch(/After it: the rent the leasing site itself advertises/);
+  });
+
+  it("says which method applies after a stretch that ends on the old one", () => {
+    setup();
+    const capped = { unitNumber: "103", floorplanName: "A1", beds: 1, advertisedPrice: 3529, leaseTermMonths: 18, reason: "over-cap" };
+    const oldRun = { units: [{ ...unit("101", 2409), leaseTermMonths: 14 }], omitted: [capped] };
+    const newRun = { units: [{ ...unit("101", 2382), leaseTermMonths: 18 }], alsoListed: [] };
+    write("2026-11-14T18:00:00Z", newRun);
+    write("2026-11-15T13:55:00Z", oldRun);
+    write("2026-11-15T19:37:00Z", newRun);
+    write("2026-11-16T19:30:00Z", oldRun);
+    buildData(ROOT);
+    const changes = readHistory().methodChanges!;
+    expect(changes).toHaveLength(1);
+    expect(changes[0]!.until).toBe("2026-11-16T19:30:00Z");
+    expect(changes[0]!.note).toMatch(/After it: each unit's cheapest rent for a lease of 14 months or less/);
+  });
+
   it("marks where the stored prices changed meaning, and records the lease term behind each plan price", () => {
     setup();
     const capped = { unitNumber: "103", floorplanName: "A1", beds: 1, advertisedPrice: 3529, leaseTermMonths: 18, reason: "over-cap" };

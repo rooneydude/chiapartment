@@ -829,6 +829,13 @@ table.units tbody tr.empty-row td {
   max-width: 96ch;
 }
 
+.chart-note-item {
+  display: block;
+  margin-top: 3px;
+  padding-left: 10px;
+  border-left: 2px solid var(--grid-line);
+}
+
 .viz-tooltip .tooltip-term {
   font-weight: 400;
   font-size: 11px;

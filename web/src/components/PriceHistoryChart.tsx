@@ -3,17 +3,25 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { BuildingHistory } from "../../../shared/src/types";
+import type { BuildingHistory, MethodChange } from "../../../shared/src/types";
 import { longDate, money, shortDate } from "../lib/format";
 import { useStore } from "../state/store";
 
 const SLOT_VARS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `var(--series-${n})`);
+
+/** "8 Sep 2026", or "15 – 18 Nov 2026"-style for a stretch of switches. */
+function methodChangeDates(m: MethodChange): string {
+  const from = longDate(m.t);
+  const to = m.until ? longDate(m.until) : from;
+  return from === to ? from : `${from} – ${to}`;
+}
 const MAX_PLAN_SERIES = 8;
 
 interface TooltipRow {
@@ -200,9 +208,8 @@ export default function PriceHistoryChart({
           <strong>Dashed lines</strong> mark where the recorded number changed meaning, not
           price:
           {methodChanges.map((m) => (
-            <span key={m.t}>
-              {" "}
-              <strong>{longDate(m.t)}</strong> — {m.note}
+            <span className="chart-note-item" key={m.t}>
+              <strong>{methodChangeDates(m)}</strong> — {m.note}
             </span>
           ))}
         </div>
@@ -249,10 +256,23 @@ export default function PriceHistoryChart({
               content={<ChartTooltip termAt={termAt} />}
               cursor={{ stroke: "var(--baseline)", strokeDasharray: "3 3" }}
             />
+            {methodChanges
+              .filter((m) => m.until)
+              .map((m) => (
+                <ReferenceArea
+                  key={`${m.t}-stretch`}
+                  x1={new Date(m.t).getTime()}
+                  x2={new Date(m.until!).getTime()}
+                  fill="var(--text-muted)"
+                  fillOpacity={0.14}
+                  stroke="none"
+                  ifOverflow="hidden"
+                />
+              ))}
             {methodChanges.map((m) => (
               <ReferenceLine
                 key={m.t}
-                x={new Date(m.t).getTime()}
+                x={new Date(m.until ?? m.t).getTime()}
                 stroke="var(--text-muted)"
                 strokeDasharray="5 4"
                 ifOverflow="hidden"

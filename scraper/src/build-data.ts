@@ -168,30 +168,53 @@ export function computeWarnings(
   return warnings;
 }
 
+const CAPPED_NOTE =
+  "From here the tracker stored each unit's cheapest rent for a lease of 14 months or less, and left out units that had none.";
+const ADVERTISED_NOTE =
+  "From here on: the rent the leasing site itself advertises, at the lease length it advertises — and every listed unit.";
+/** Switches closer together than this are one changeover, not separate events. */
+const CHANGEOVER_GAP_DAYS = 10;
+
 /**
  * Where the MEANING of a building's stored prices changed. From 8 Sep to 14
  * Nov 2026 the scraper stored each 1225 unit at its cheapest rent for a lease
  * of 14 months or less (and left out units without one); before and after,
- * the rent the site advertises. A chart line stepping at those two points is
- * the method, not the market — the chart marks them.
+ * the rent the site advertises. A chart line stepping at those points is the
+ * method, not the market — the chart marks them.
+ *
+ * While the new scraper was being checked, the old one was still on the
+ * schedule, so for a few days runs of both kinds alternate. Those switches are
+ * reported as one stretch (`until`) rather than a row of separate markers.
  */
 export function findMethodChanges(okRuns: OkRun[]): MethodChange[] {
-  const out: MethodChange[] = [];
+  const switches: { t: string; capped: boolean }[] = [];
   let capped = false;
   for (const run of okRuns) {
     const isCapped = (run.omitted?.length ?? 0) > 0;
-    if (isCapped && !capped) {
-      out.push({
-        t: run.timestamp,
-        note: "From here the tracker stored each unit's cheapest rent for a lease of 14 months or less, and left out units that had none.",
-      });
-    } else if (!isCapped && capped) {
-      out.push({
-        t: run.timestamp,
-        note: "From here on: the rent the leasing site itself advertises, at the lease length it advertises — and every listed unit.",
-      });
-    }
+    if (isCapped !== capped) switches.push({ t: run.timestamp, capped: isCapped });
     capped = isCapped;
+  }
+  const gapDays = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+  const out: MethodChange[] = [];
+  for (let i = 0; i < switches.length; ) {
+    let j = i;
+    while (j + 1 < switches.length && gapDays(switches[j]!.t, switches[j + 1]!.t) <= CHANGEOVER_GAP_DAYS) j++;
+    const first = switches[i]!;
+    const last = switches[j]!;
+    if (j > i) {
+      out.push({
+        t: first.t,
+        until: last.t,
+        note: `In this stretch runs used one method or the other (the old scraper was still on the schedule while the new one was being checked), so its points are not all like for like. After it: ${
+          last.capped
+            ? "each unit's cheapest rent for a lease of 14 months or less."
+            : "the rent the leasing site itself advertises, at the lease length it advertises — and every listed unit."
+        }`,
+      });
+    } else {
+      out.push({ t: first.t, note: first.capped ? CAPPED_NOTE : ADVERTISED_NOTE });
+    }
+    i = j + 1;
   }
   return out;
 }
