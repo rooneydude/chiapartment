@@ -1055,14 +1055,39 @@ table.units tbody tr.empty-row td {
 }
 
 /* ---- 3D: unit marks — the legend overlay and the label at a mark ---- */
+/* The scene's bottom edge: the button on the left, the notes on the right, in one row
+   across the panel. Where the panel is too narrow for that (a phone) the row wraps
+   instead of overlapping: the button keeps the bottom line, so it does not move from
+   under the pointer, and the notes stack above it. */
+.scene-overlay {
+  right: 12px;
+  flex-wrap: wrap-reverse;
+  /* the row spans the panel: only what is in it takes the pointer, the canvas keeps the rest */
+  pointer-events: none;
+}
+
+.scene-overlay > * {
+  pointer-events: auto;
+}
+
+.scene-overlay .scene-note {
+  position: static;
+}
+
+/* the position note, always last, keeps the right-hand edge */
+.scene-overlay .scene-note:last-child {
+  margin-left: auto;
+}
+
 /* Top-left of the scene panel; the compass keeps the top-right corner
-   (92px disc + margins), the buttons and notes the bottom edge. */
+   (92px disc + margins), the buttons and notes the bottom edge (up to
+   three lines of them on a phone: button, view note, position note). */
 .scene-legend {
   position: absolute;
   top: 12px;
   left: 12px;
   max-width: min(196px, calc(100% - 128px));
-  max-height: calc(100% - 68px);
+  max-height: calc(100% - 124px);
   overflow-y: auto;
   background: color-mix(in srgb, var(--surface-1) 88%, transparent);
   border: 1px solid var(--border);

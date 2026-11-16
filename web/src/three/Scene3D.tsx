@@ -49,7 +49,7 @@ import {
 import Landmarks from "./Landmarks";
 import MarksLegend from "./MarksLegend";
 import { resolveSite, type Site } from "./site";
-import UnitMarks from "./UnitMarks";
+import UnitMarks, { CLICK_SLOP_PX } from "./UnitMarks";
 import { buildLegend, buildMarkStates, type MarkState } from "./unitMarks";
 import { useDisposable } from "./useDisposable";
 
@@ -263,6 +263,8 @@ function SceneContent({
   // filter the table to the clicked floor.
   const onBuildingClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    // The end of an orbit drag that began on the tower (or on a mark) and ends on it arrives as a click too.
+    if (e.delta > CLICK_SLOP_PX) return;
     const z = e.point.y; // three y == height
     const floor = Math.floor((z - g.groundFloorOffsetM) / g.floorHeightM) + 1;
     if (onTuneClick) {
@@ -549,7 +551,7 @@ export default function Scene3D({
     : placement?.confidence === "exact"
       ? `unit ${selectedUnit} — exact position (floorplate)`
       : placement?.confidence === "stack"
-        ? `unit ${selectedUnit} — approximate position`
+        ? `unit ${selectedUnit} — side estimated`
         : placement?.confidence === "floor-only"
           ? `unit ${selectedUnit} — floor shown; exact position unknown`
           : `unit ${selectedUnit} — can't infer floor from unit number`;
@@ -583,6 +585,7 @@ export default function Scene3D({
       {tuneMode && (
         <TuneOverlay mapping={mapping} lastClick={tuneClick} selectedStack={selectedStack} />
       )}
+      {/* the bottom edge: button left, notes right — one row that wraps where the panel is narrow */}
       <div className="scene-overlay">
         {placement?.viewCamera && (
           <button
@@ -593,12 +596,10 @@ export default function Scene3D({
           </button>
         )}
         {cameraMode === "unit-view" && (
-          <span className="scene-note" style={{ position: "static" }}>
-            approximate view — massing only
-          </span>
+          <span className="scene-note">approximate view — massing only</span>
         )}
+        <div className="scene-note">{note}</div>
       </div>
-      <div className="scene-note">{note}</div>
       {/* last, so on top: the label of the hovered unit mark is drawn in here */}
       <div ref={labelLayer} className="scene-labels" />
     </div>

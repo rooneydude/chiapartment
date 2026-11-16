@@ -203,8 +203,13 @@ export function findMark(
 
 /**
  * The label shown at a mark, piece by piece: "#2906", "1 BR", "$3,831",
- * "Dec 3", "approx. position". `leaseTerm` is the table's lease-length
+ * "Dec 3", "side estimated". `leaseTerm` is the table's lease-length
  * choice: the label quotes the same rent the table row does.
+ *
+ * Only a position taken from a unit map ("exact") goes without a qualifier.
+ * Everywhere else the SIDE comes from the building's hand-made stack table,
+ * which is mostly unverified — the floor is the only certain part — and the
+ * label says so.
  */
 export function markLabelParts(s: MarkState, leaseTerm: number | null): string[] {
   const parts: string[] = [];
@@ -228,15 +233,15 @@ export function markLabelParts(s: MarkState, leaseTerm: number | null): string[]
   parts.push(s.moveIn.kind === "unknown" ? "no move-in date" : s.moveIn.label);
 
   if (mark.kind === "belt") parts.push(`floor ${mark.floor}, side unknown`);
-  else if (mark.kind === "riser") parts.push("floor not published");
-  else if (mark.kind === "plate" && mark.confidence !== "exact") parts.push("approx. position");
+  else if (mark.kind === "riser") parts.push("floor not published, side estimated");
+  else if (mark.kind === "plate" && mark.confidence !== "exact") parts.push("side estimated");
   else if (mark.kind === "unplaced") parts.push("not placed on the tower");
 
   if (s.look === "muted") parts.push("not in the current filter");
   return parts;
 }
 
-/** "#2906 · 1 BR · $3,831 · Dec 3 · approx. position" */
+/** "#2906 · 1 BR · $3,831 · Dec 3 · side estimated" */
 export const markLabel = (s: MarkState, leaseTerm: number | null): string =>
   markLabelParts(s, leaseTerm).join(" · ");
 
@@ -327,8 +332,8 @@ export function buildLegend(states: readonly MarkState[]): LegendModel {
   add(
     "approx",
     count((s) => s.mark.kind === "plate" && s.mark.confidence !== "exact"),
-    "approx. position",
-    "Whiskers: the floor is known and the side comes from the building's stack table — the unit is somewhere about here on this face",
+    "side estimated",
+    "Whiskers: the floor is certain, the side is an estimate — it comes from a hand-made table of this building's stacks that is mostly unverified",
   );
   add(
     "belt",
@@ -340,7 +345,7 @@ export function buildLegend(states: readonly MarkState[]): LegendModel {
     "riser",
     count((s) => s.mark.kind === "riser"),
     "floor unknown",
-    "Strip up a face: the leasing site lists this floor-plan stack, not a single apartment — it could be on any floor",
+    "Strip up a face: the leasing site lists this floor-plan stack, not a single apartment — it could be on any floor, and the side is an estimate too",
   );
   const hatched = drawn.filter((s) => s.look === "hatch");
   add(

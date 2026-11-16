@@ -17,7 +17,7 @@ import { findMark, markLabelParts, type MarkState } from "./unitMarks";
 import { useDisposable } from "./useDisposable";
 
 /** A press that travelled further than this before release was an orbit drag, not a click. */
-const CLICK_SLOP_PX = 5;
+export const CLICK_SLOP_PX = 5;
 /** Drawn after the floor bands (0), before the selected-unit beacon (10). */
 const RENDER_ORDER = { ghost: 5, solid: 6 };
 
@@ -108,10 +108,11 @@ export default function UnitMarks({
     hoverUnit(null);
     gl.domElement.style.cursor = "";
   };
-  // New listings or a new filter: indices mean something else now.
+  // New listings or a new filter: indices mean something else now. The hover goes with them
+  // (store and cursor too) — otherwise a pointer that then moves straight off the mark leaves
+  // its label and the pointer cursor behind.
   useEffect(() => {
-    pointedRef.current = -1;
-    setPointed(null);
+    leave();
     setPinned(null);
   }, [states]);
   // Gone while hovered: leave no hover or cursor behind.
@@ -127,7 +128,8 @@ export default function UnitMarks({
   }, [interactive]);
 
   const tableHover = hoveredUnit ? findMark(states, { unit: hoveredUnit }) : -1;
-  const hoverIndex = pointed?.index ?? pinned ?? tableHover;
+  // What the pointer is on, else the row hovered in the table, else a label a click left up.
+  const hoverIndex = pointed?.index ?? (tableHover >= 0 ? tableHover : (pinned ?? -1));
   const selectedIndex = findMark(states, { unit: selectedUnit, plan: selectedPlan });
 
   // Imperative: nothing redraws by itself on a demand-driven canvas.
@@ -175,6 +177,8 @@ export default function UnitMarks({
     if (e.delta > CLICK_SLOP_PX) return;
     const select = states[index]?.select;
     const store = useStore.getState();
+    // picking a mark that has a row takes down the label an earlier click left up on another one
+    if (select) setPinned(null);
     if (!select) setPinned((current) => (current === index ? null : index));
     else if (select.kind === "unit") {
       store.selectUnit(store.selectedUnit === select.unit ? null : select.unit);
@@ -193,11 +197,12 @@ export default function UnitMarks({
       buffers.anchors[labelIndex] ??
       beltAnchor(ring, labelState.mark, [camera.position.x, -camera.position.z]);
   }
-  // Near the left or right edge of the view the label grows inwards instead of being cut off.
-  const lean = useMemo(() => {
-    if (!labelAnchor) return 0;
+  // How far across the view the mark is, 0 (left edge) to 1: the label hangs from that same
+  // fraction of its own width, so however wide it is, it never sticks out of the panel.
+  const across = useMemo(() => {
+    if (!labelAnchor) return 0.5;
     const x = new THREE.Vector3(...labelAnchor).project(camera).x;
-    return x < -0.3 ? -1 : x > 0.3 ? 1 : 0;
+    return Math.min(Math.max((x + 1) / 2, 0), 1);
   }, [labelAnchor?.[0], labelAnchor?.[1], labelAnchor?.[2], camera]);
 
   if (!geometry) return null;
@@ -223,7 +228,7 @@ export default function UnitMarks({
           className={`mark-label${labelState.look === "muted" ? " muted" : ""}`}
           style={{
             pointerEvents: "none",
-            transform: `translate(${lean < 0 ? -12 : lean > 0 ? -88 : -50}%, calc(-100% - 12px))`,
+            transform: `translate(${(-100 * across).toFixed(1)}%, calc(-100% - 12px))`,
           }}
         >
           <span className="mark-label-chip" style={{ background: labelState.color }} />
