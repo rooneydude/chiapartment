@@ -3,6 +3,7 @@ import type {
   AlsoListedCompiled,
   BuildingConfig,
   BuildingHistory,
+  DateChange,
   SnapshotDelta,
   UnitListing,
   UnitMapping,
@@ -121,6 +122,7 @@ function UnitDetail({
   change,
   publishes,
   recorded,
+  dateChange,
 }: {
   u: UnitListing;
   asOf: string;
@@ -131,6 +133,8 @@ function UnitDetail({
   change: SnapshotDelta["priceChanges"][number] | undefined;
   publishes: Publishes;
   recorded: Recorded;
+  /** Move-in date change since the previous scrape, when there is one. */
+  dateChange: DateChange | undefined;
 }) {
   const table = leaseTermTable(u);
   const cheapest = cheapestTerm(u);
@@ -149,10 +153,32 @@ function UnitDetail({
   }
   facts.push(mi.kind === "unknown" ? missing(publishes, "moveInDate").detail : mi.title);
   if (floor !== null) facts.unshift(`Floor ${floor}`);
+  if (dateChange) {
+    facts.push(
+      `Move-in date changed since the previous scrape: was ${dateChange.from ? longDate(dateChange.from) : "not given"}`,
+    );
+  }
+  // The same statement the Δ column makes — on a phone, where that column
+  // gives way, this is the only place it is made.
   if (change && !change.notComparable) {
     facts.push(
-      `${change.to < change.from ? "Down" : "Up"} ${money(Math.abs(change.to - change.from))} since the previous scrape (${money(change.from)} → ${money(change.to)})`,
+      `${change.to < change.from ? "Down" : "Up"} ${money(Math.abs(change.to - change.from))} since ${
+        change.since
+          ? `${shortDate(change.since)}, the last time it was priced the same way`
+          : "the previous scrape"
+      } (${money(change.from)} → ${money(change.to)})`,
     );
+  } else if (change?.notComparable === "lease-term") {
+    facts.push(
+      `The site now advertises ${monthLease(change.toTerm)} instead of ${change.fromTerm} months (${money(change.from)} → ${money(change.to)}) — a different lease length, not a like-for-like price change`,
+    );
+  } else if (change?.notComparable === "price-form") {
+    facts.push(
+      `The site switched between a rent range and a single price (${money(change.from)} → ${money(change.to)}) — not counted as a price change`,
+    );
+  }
+  if (u.unitNumber !== null && u.floorplanName !== (u.planType ?? bedsLabel(u.beds))) {
+    facts.push(`Plan ${u.floorplanName}`);
   }
   if (meta) {
     facts.push(
@@ -217,6 +243,10 @@ function UnitDetail({
                 </div>
               );
             })}
+          </div>
+          <div className="lease-key">
+            Outlined: the lease length the site advertises this apartment at · ★ your {compareTerm}-month
+            comparison
           </div>
         </>
       ) : (
@@ -400,6 +430,18 @@ export default function AvailabilityTable({
     return map;
   }, [delta]);
 
+  const dateChangeByKey = useMemo(() => {
+    const map = new Map<string, DateChange>();
+    for (const c of delta?.dateChanges ?? []) {
+      const key =
+        c.unitNumber === c.floorplanName
+          ? listingKey({ unitNumber: null, floorplanName: c.floorplanName, beds: c.beds })
+          : listingKey({ unitNumber: c.unitNumber, floorplanName: c.floorplanName, beds: c.beds });
+      map.set(key, c);
+    }
+    return map;
+  }, [delta]);
+
   const sorted = useMemo(() => {
     const val = (u: UnitListing): string | number | null => {
       switch (sortKey) {
@@ -415,8 +457,11 @@ export default function AvailabilityTable({
           return shownPrice(u, leaseTerm).term;
         case "movein":
           return moveIn(u, asOf).days;
-        case "listed":
-          return meta[metaKey(u)]?.firstSeen ?? null;
+        case "listed": {
+          // The cell shows days since first seen: more recent = fewer days.
+          const firstSeen = meta[metaKey(u)]?.firstSeen;
+          return firstSeen ? -new Date(firstSeen).getTime() : null;
+        }
         default:
           return shownPrice(u, leaseTerm).price;
       }
@@ -532,6 +577,7 @@ export default function AvailabilityTable({
                     ? u.price
                     : priceAtTerm(u, first.firstTerm);
               const recorded = recordedAs(u);
+              const dateChange = dateChangeByKey.get(listingKey(u));
               // An old-method rent against a first price with no lease length
               // on record is two different kinds of number.
               const sigmaComparable = !(recorded === "capped" && first?.firstTerm === undefined);
@@ -604,7 +650,9 @@ export default function AvailabilityTable({
                       {u.unitNumber !== null && u.floorplanName !== (u.planType ?? bedsLabel(u.beds)) && (
                         <>
                           {" "}
-                          <span className="plan-name">{u.floorplanName}</span>
+                          <span className="plan-name" title={`Floor plan ${u.floorplanName}`}>
+                            {u.floorplanName}
+                          </span>
                         </>
                       )}
                     </td>
@@ -660,6 +708,14 @@ export default function AvailabilityTable({
                         mi.label
                       ) : (
                         <span className="muted">—</span>
+                      )}
+                      {dateChange && (
+                        <span
+                          className="lease-compare"
+                          title="The move-in date changed since the previous scrape"
+                        >
+                          was {dateChange.from ? shortDate(dateChange.from) : "not given"}
+                        </span>
                       )}
                     </td>
                     <td className="num hide-sm">
@@ -727,6 +783,7 @@ export default function AvailabilityTable({
                           change={change}
                           publishes={publishes}
                           recorded={recorded}
+                          dateChange={dateChange}
                         />
                       </td>
                     </tr>
@@ -761,14 +818,17 @@ export default function AvailabilityTable({
             <span key={listingKey(u) || i}>
               {i > 0 && ", "}
               <s>
-                {listingLabel(u)} ({money(u.price)})
+                {listingLabel(u)} ({u.planType ?? bedsLabel(u.beds)}, {priceLabel(u.price, u.priceMax)})
               </s>
             </span>
           ))}
           {(delta.removedAlsoListed ?? []).map((a, i) => (
             <span key={`also-${alsoListedKey(a) ?? i}`}>
               {(i > 0 || delta.removedUnits.length > 0) && ", "}
-              <s>{a.unitNumber ? `#${a.unitNumber}` : a.floorplanName} (no price)</s>
+              <s>
+                {a.unitNumber ? `#${a.unitNumber}` : a.floorplanName} (
+                {a.price !== undefined ? priceLabel(a.price, a.priceMax) : "no price"})
+              </s>
             </span>
           ))}
         </div>

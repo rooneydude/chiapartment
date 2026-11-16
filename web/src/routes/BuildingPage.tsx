@@ -241,7 +241,10 @@ export default function BuildingPage() {
           ))}
         </div>
       )}
-      <DeltaSummary delta={history.delta} />
+      <DeltaSummary
+        delta={history.delta}
+        concession={history.warnings?.some((w) => w.code === "uniform-reprice") ?? false}
+      />
       <div style={{ height: 10 }} />
       {/* Nothing listed: nothing to filter. */}
       {(history.latest?.units.length ?? 0) > 0 && (

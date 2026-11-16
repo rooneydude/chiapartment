@@ -32,8 +32,14 @@ export default function Filters({
   const floorMax = useStore((s) => s.floorMax);
   const setFloorRange = useStore((s) => s.setFloorRange);
 
+  // The lease-length choice hides nothing, but it re-prices the table: "show
+  // everything" puts that back to the advertised rent too.
   const anyFilter =
-    bedsFilter !== null || moveInWithin !== null || floorMin !== null || floorMax !== null;
+    bedsFilter !== null ||
+    moveInWithin !== null ||
+    floorMin !== null ||
+    floorMax !== null ||
+    leaseTerm !== null;
   const focusBuckets = focusBeds ? [...new Set(focusBeds.map((b) => Math.min(b, 3)))] : null;
 
   return (
@@ -120,6 +126,7 @@ export default function Filters({
             setFloorRange(null, null);
             setBedsFilter(null);
             setMoveInWithin(null);
+            setLeaseTerm(null);
           }}
         >
           ✕ show everything

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { listingKey } from "../../../shared/src/delta";
 import { priceAtTerm } from "../../../shared/src/listing";
 import type {
   BuildingConfig,
@@ -124,6 +125,9 @@ export default function Dashboard() {
   const rows = entries.filter((e): e is Row => e.history !== null);
   const notLoaded = entries.filter((e) => e.history === null);
   const inFocus = (beds: number) => focus === null || focus.includes(beds);
+  const repricedTogether = (history: BuildingHistory) =>
+    history.warnings?.some((w) => w.code === "uniform-reprice") ?? false;
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
   // Portfolio stats across every building's latest snapshot.
   // A "Jr. 2 Bed" is counted as a 2 BR but is not what someone shopping a
@@ -153,6 +157,9 @@ export default function Dashboard() {
   // (a site re-headlining a longer lease is not a price drop).
   let drop: { amount: number; name: string; id: string; label: string } | null = null;
   for (const { building, history } of rows) {
+    // Every unit repriced by the same share at once is a concession being
+    // netted into the prices, most likely — not the biggest rent cut in town.
+    if (repricedTogether(history)) continue;
     for (const c of history.delta?.priceChanges ?? []) {
       if (!inFocus(c.beds) || c.notComparable) continue;
       const amount = c.from - c.to;
@@ -386,7 +393,13 @@ export default function Dashboard() {
         });
 
         const d = history.delta;
-        const newCount = d?.newUnits.filter((u) => inFocus(u.beds)).length ?? 0;
+        // "New" is a first appearance. A unit that was listed before, or was
+        // on the site all along without a price, is back — not new.
+        const backKeys = new Set([...(d?.relistedKeys ?? []), ...(d?.pricedAgain ?? []).map((p) => p.key)]);
+        const focusNew = d?.newUnits.filter((u) => inFocus(u.beds)) ?? [];
+        const backCount = focusNew.filter((u) => backKeys.has(listingKey(u))).length;
+        const newCount = focusNew.length - backCount;
+        const concession = repricedTogether(history);
         const goneCount = d?.removedUnits.filter((u) => inFocus(u.beds)).length ?? 0;
         const focusChanges = (d?.priceChanges ?? []).filter(
           (c) => inFocus(c.beds) && !c.notComparable,
@@ -470,8 +483,24 @@ export default function Dashboard() {
                 </span>
               )}
               {newCount > 0 && <span className="badge new">{newCount} new</span>}
-              {drops > 0 && <span className="badge good">▼ {drops} price drops</span>}
-              {hikes > 0 && <span className="badge bad">▲ {hikes} increases</span>}
+              {backCount > 0 && (
+                <span className="badge back" title="Listed before, or on the site all along without a price">
+                  {backCount} back
+                </span>
+              )}
+              {concession && drops + hikes > 0 ? (
+                <span
+                  className="badge"
+                  title="Every unit listed in both runs was repriced by the same share at once — usually a concession (free rent) netted into the advertised prices, not a change in base rent"
+                >
+                  {drops + hikes} repriced together
+                </span>
+              ) : (
+                <>
+                  {drops > 0 && <span className="badge good">▼ {plural(drops, "price drop")}</span>}
+                  {hikes > 0 && <span className="badge bad">▲ {plural(hikes, "increase")}</span>}
+                </>
+              )}
               {goneCount > 0 && <span className="badge">{goneCount} gone</span>}
               {alsoCount > 0 && (
                 <span
@@ -483,7 +512,7 @@ export default function Dashboard() {
                     )
                     .join("\n")}
                 >
-                  +{alsoCount} unpriced
+                  +{alsoCount} also listed
                 </span>
               )}
               {omittedCount > 0 && (
