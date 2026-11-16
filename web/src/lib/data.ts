@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type {
   BuildingHistory,
   BuildingsConfig,
@@ -8,22 +9,56 @@ import type {
 const BASE = import.meta.env.BASE_URL;
 const cache = new Map<string, Promise<unknown>>();
 
-function fetchJson<T>(path: string): Promise<T> {
+const isObject = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null && !Array.isArray(x);
+
+/** Why a fetched file cannot be used, or null when it has the expected shape. */
+type ShapeCheck = (body: unknown) => string | null;
+
+const configShape: ShapeCheck = (x) =>
+  isObject(x) && Array.isArray(x["buildings"]) ? null : "it has no list of buildings";
+
+const historyShape: ShapeCheck = (x) => {
+  if (!isObject(x)) return "it is not a building record";
+  if (typeof x["buildingId"] !== "string") return "it names no building";
+  if (!Array.isArray(x["runs"])) return "it has no list of runs";
+  if (!isObject(x["perUnit"]) || !isObject(x["perFloorplan"])) return "it has no price history";
+  return null;
+};
+
+function fetchJson<T>(path: string, shape?: ShapeCheck): Promise<T> {
   let p = cache.get(path);
   if (!p) {
-    p = fetch(`${BASE}data/${path}`).then((res) => {
-      if (!res.ok) throw new Error(`Failed to load ${path} (HTTP ${res.status})`);
-      return res.json();
-    });
+    // "no-cache": always ask the server whether its copy is newer. The data
+    // changes once a day and a tab can stay open for days.
+    const request: Promise<unknown> = fetch(`${BASE}data/${path}`, { cache: "no-cache" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Failed to load ${path} (HTTP ${res.status})`);
+        let body: unknown;
+        try {
+          body = await res.json();
+        } catch {
+          throw new Error(`${path} is not a data file`);
+        }
+        const problem = shape?.(body) ?? null;
+        if (problem) throw new Error(`${path} cannot be read: ${problem}`);
+        return body;
+      })
+      .catch((err: unknown) => {
+        // A failure is never kept: the next attempt asks again.
+        if (cache.get(path) === request) cache.delete(path);
+        throw err;
+      });
+    p = request;
     cache.set(path, p);
   }
   return p as Promise<T>;
 }
 
-export const loadConfig = (): Promise<BuildingsConfig> => fetchJson("config.json");
+export const loadConfig = (): Promise<BuildingsConfig> => fetchJson("config.json", configShape);
 
 export const loadHistory = (buildingId: string): Promise<BuildingHistory> =>
-  fetchJson(`buildings/${buildingId}.json`);
+  fetchJson(`buildings/${buildingId}.json`, historyShape);
 
 export async function loadSkyline(): Promise<SkylineCollection | null> {
   try {
@@ -39,4 +74,43 @@ export async function loadUnitMap(buildingId: string): Promise<UnitMapSidecar | 
   } catch {
     return null; // no floorplate sidecar for this building
   }
+}
+
+// ---- a tab left open ----
+
+/** Data in memory older than this is fetched again when the tab is looked at. */
+const REFRESH_AFTER_MS = 30 * 60 * 1000;
+let loadedAt = Date.now();
+const listeners = new Set<() => void>();
+
+function refreshIfOld(): void {
+  if (document.visibilityState !== "visible") return;
+  if (Date.now() - loadedAt < REFRESH_AFTER_MS) return;
+  loadedAt = Date.now();
+  cache.clear();
+  for (const notify of listeners) notify();
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", refreshIfOld);
+  window.addEventListener("focus", refreshIfOld);
+}
+
+/**
+ * A number that goes up when the data in memory has been dropped because it
+ * was old (the tab came back into view after 30 minutes or more). Pages list
+ * it as an effect dependency so they load again — and keep showing what they
+ * have until the fresh copy arrives, so "these prices are 3 days old" is only
+ * ever said about data the server still serves.
+ */
+export function useDataEpoch(): number {
+  const [epoch, setEpoch] = useState(0);
+  useEffect(() => {
+    const notify = () => setEpoch((n) => n + 1);
+    listeners.add(notify);
+    return () => {
+      listeners.delete(notify);
+    };
+  }, []);
+  return epoch;
 }

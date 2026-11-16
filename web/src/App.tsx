@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Suspense, useEffect, useState } from "react";
+import { Link, Outlet, useLocation, useNavigationType } from "react-router-dom";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { applyTheme, getThemePref, nextThemePref, type ThemePref } from "./lib/theme";
 
 const THEME_ICON: Record<ThemePref, string> = { auto: "◐", light: "☀", dark: "☾" };
@@ -15,6 +16,14 @@ export default function App() {
   useEffect(() => {
     applyTheme(pref);
   }, [pref]);
+
+  // A page opened by a link starts at its top; Back and Forward are left to
+  // the browser, which puts the reader where they were.
+  const location = useLocation();
+  const navigation = useNavigationType();
+  useEffect(() => {
+    if (navigation !== "POP") window.scrollTo(0, 0);
+  }, [location.pathname, navigation]);
 
   return (
     <div className="shell">
@@ -33,7 +42,24 @@ export default function App() {
           {THEME_ICON[pref]}
         </button>
       </header>
-      <Outlet />
+      <ErrorBoundary
+        resetKey={location.pathname}
+        fallback={(error) => (
+          <div className="error-box" role="alert">
+            <strong>This page could not be shown.</strong> {error.message || "Unknown error."}
+            <div className="error-actions">
+              <button className="retry-btn" onClick={() => window.location.reload()}>
+                Reload
+              </button>
+              <Link to="/">← all buildings</Link>
+            </div>
+          </div>
+        )}
+      >
+        <Suspense fallback={<div className="skeleton" style={{ height: 320 }} />}>
+          <Outlet />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

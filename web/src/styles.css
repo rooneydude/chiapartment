@@ -1066,6 +1066,49 @@ table.units tbody tr.empty-row td {
   color: var(--text-muted);
 }
 
+.error-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.retry-btn {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+}
+
+.retry-btn:hover {
+  border-color: var(--series-1);
+}
+
+/* One panel of a page that could not be shown (no WebGL, a failed download):
+   the rest of the page keeps working. */
+.panel-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.panel-fallback strong {
+  color: var(--text-primary);
+}
+
+.card-problem {
+  border-style: dashed;
+}
+
 /* ---- 3D: unit marks — the legend overlay and the label at a mark ---- */
 /* The scene's bottom edge: the button on the left, the notes on the right, in one row
    across the panel. Where the panel is too narrow for that (a phone) the row wraps

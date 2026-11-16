@@ -5,14 +5,13 @@ export default defineConfig({
   base: "/chiapartment/",
   plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 1200, // three.js is a single large vendor chunk
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          three: ["three", "@react-three/fiber", "@react-three/drei"],
-          charts: ["recharts"],
-        },
-      },
-    },
+    // three.js arrives with the 3D view as one large file, loaded only when a
+    // building page asks for it.
+    chunkSizeWarningLimit: 1200,
+    // No manualChunks on purpose. Naming the 3D and chart libraries as chunks
+    // also pulls what they share with the rest of the app — React itself —
+    // into those files, and then the dashboard cannot start until the whole
+    // 3D library has downloaded (or at all, if that download fails). Split
+    // along the lazy imports instead: the dashboard gets only what it uses.
   },
 });

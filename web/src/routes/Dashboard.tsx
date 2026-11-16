@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { priceAtTerm } from "../../../shared/src/listing";
 import type { BuildingConfig, BuildingHistory, UnitListing } from "../../../shared/src/types";
 import Sparkline from "../components/Sparkline";
-import { loadConfig, loadHistory } from "../lib/data";
+import { loadConfig, loadHistory, useDataEpoch } from "../lib/data";
 import {
   ageLabel,
   bedsLabel,
@@ -20,6 +20,13 @@ interface Row {
   history: BuildingHistory;
 }
 
+/** A building in the order the config lists it: loaded, or the reason it could not be. */
+interface Entry {
+  building: BuildingConfig;
+  history: BuildingHistory | null;
+  problem?: string;
+}
+
 interface Best {
   unit: UnitListing;
   name: string;
@@ -28,29 +35,67 @@ interface Best {
 }
 
 export default function Dashboard() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [entries, setEntries] = useState<Entry[] | null>(null);
   const [focus, setFocus] = useState<number[] | null>(null);
   const [compareTerm, setCompareTerm] = useState(12);
   const [error, setError] = useState<string | null>(null);
+  /** Goes up when the reader asks to try a failed load again. */
+  const [attempt, setAttempt] = useState(0);
+  /** Goes up when a tab left open drops its old data: load again, keep what is shown meanwhile. */
+  const epoch = useDataEpoch();
+  const shown = useRef(false);
 
   useEffect(() => {
-    loadConfig()
-      .then((config) => {
+    let current = true;
+    (async () => {
+      try {
+        const config = await loadConfig();
+        // Each building on its own: one file that fails to load costs one
+        // card, not the dashboard.
+        const settled = await Promise.allSettled(config.buildings.map((b) => loadHistory(b.id)));
+        if (!current) return;
         setFocus(config.focus?.beds ?? null);
         setCompareTerm(config.focus?.compareLeaseTermMonths ?? 12);
-        return Promise.all(
-          config.buildings.map(async (building) => ({
-            building,
-            history: await loadHistory(building.id),
-          })),
+        setEntries((before) =>
+          config.buildings.map((building, i): Entry => {
+            const result = settled[i]!;
+            if (result.status === "fulfilled") return { building, history: result.value };
+            // A refresh that fails keeps the copy already on screen.
+            const had = before?.find((e) => e.building.id === building.id)?.history ?? null;
+            if (had) return { building, history: had };
+            const reason: unknown = result.reason;
+            return { building, history: null, problem: reason instanceof Error ? reason.message : String(reason) };
+          }),
         );
-      })
-      .then(setRows)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+        setError(null);
+        shown.current = true;
+      } catch (err: unknown) {
+        if (current && !shown.current) setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [attempt, epoch]);
 
-  if (error) return <div className="error-box">Failed to load data: {error}</div>;
-  if (!rows) {
+  const retry = () => {
+    setError(null);
+    setAttempt((n) => n + 1);
+  };
+
+  if (error) {
+    return (
+      <div className="error-box" role="alert">
+        Failed to load data: {error}
+        <div className="error-actions">
+          <button className="retry-btn" onClick={retry}>
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (!entries) {
     return (
       <>
         <div className="stat-strip">
@@ -67,6 +112,8 @@ export default function Dashboard() {
     );
   }
 
+  const rows = entries.filter((e): e is Row => e.history !== null);
+  const notLoaded = entries.filter((e) => e.history === null);
   const inFocus = (beds: number) => focus === null || focus.includes(beds);
 
   // Portfolio stats across every building's latest snapshot.
@@ -142,6 +189,17 @@ export default function Dashboard() {
 
   return (
     <>
+      {notLoaded.length > 0 && (
+        <div className="warning-banner" role="alert">
+          <div>
+            ⚠ {notLoaded.map((e) => e.building.name).join(", ")} could not be loaded — the figures
+            below leave {notLoaded.length === 1 ? "it" : "them"} out.{" "}
+            <button className="retry-btn" onClick={retry}>
+              Try again
+            </button>
+          </div>
+        </div>
+      )}
       {scrapeFails.length > 0 && (
         <div className="warning-banner" role="status">
           {scrapeFails.map(({ building, history }) => {
@@ -226,7 +284,27 @@ export default function Dashboard() {
         </div>
       </div>
       <div className="cards">
-      {rows.map(({ building, history }) => {
+      {entries.map((entry) => {
+        if (entry.history === null) {
+          return (
+            <div className="card card-problem" key={entry.building.id} role="alert">
+              <div className="card-head">
+                <div>
+                  <h2>{entry.building.name}</h2>
+                  <div className="addr">{entry.building.address}</div>
+                </div>
+              </div>
+              <div className="prices">Could not load this building’s data.</div>
+              <div className="addr">{entry.problem}</div>
+              <div className="card-foot">
+                <button className="retry-btn" onClick={retry}>
+                  Try again
+                </button>
+              </div>
+            </div>
+          );
+        }
+        const { building, history } = entry;
         const asOf = history.latest?.timestamp ?? null;
         const allUnits = history.latest?.units ?? [];
         const units = allUnits.filter((u) => inFocus(u.beds));

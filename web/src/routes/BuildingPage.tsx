@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { leaseTermTable } from "../../../shared/src/listing";
 import { parseUnitNumber } from "../../../shared/src/parse";
@@ -10,12 +10,17 @@ import {
 } from "../../../shared/src/types";
 import AvailabilityTable from "../components/AvailabilityTable";
 import DeltaSummary from "../components/DeltaSummary";
+import ErrorBoundary, { PanelFallback } from "../components/ErrorBoundary";
 import Filters from "../components/Filters";
-import PriceHistoryChart from "../components/PriceHistoryChart";
-import { loadConfig, loadHistory } from "../lib/data";
+import { loadConfig, loadHistory, useDataEpoch } from "../lib/data";
 import { ageLabel, dateTime, isStale, longDate, moveIn } from "../lib/format";
 import { useStore } from "../state/store";
-import Scene3D from "../three/Scene3D";
+
+// Each loads its own library (three.js, recharts) and sits in its own error
+// boundary: a device without WebGL, or a download that failed, costs that one
+// panel — never the unit table.
+const Scene3D = lazy(() => import("../three/Scene3D"));
+const PriceHistoryChart = lazy(() => import("../components/PriceHistoryChart"));
 
 const FALLBACK_MAPPING = UnitMappingSchema.parse({});
 
@@ -23,7 +28,12 @@ export default function BuildingPage() {
   const { id } = useParams<{ id: string }>();
   const [config, setConfig] = useState<BuildingsConfig | null>(null);
   const [history, setHistory] = useState<BuildingHistory | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ unknownBuilding: boolean; message: string } | null>(null);
+  /** Goes up when the reader asks to try a failed load again. */
+  const [attempt, setAttempt] = useState(0);
+  /** Goes up when a tab left open drops its old data: load again, keep what is shown meanwhile. */
+  const epoch = useDataEpoch();
+  const shown = useRef(false);
   /** The building lists units, but none in the sizes being shopped for. */
   const [focusEmpty, setFocusEmpty] = useState(false);
   const resetForBuilding = useStore((s) => s.resetForBuilding);
@@ -34,22 +44,46 @@ export default function BuildingPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([loadConfig(), loadHistory(id)])
-      .then(([c, h]) => {
-        // Map focus beds into filter buckets (3 = "3+").
-        const focus = c.focus?.beds.map((b) => Math.min(b, 3)) ?? null;
-        // Never open on an empty table: when nothing listed here matches the
-        // sizes being shopped for, show everything that is listed instead.
-        const units = h.latest?.units ?? [];
-        const noneInFocus =
-          focus !== null && units.length > 0 && !units.some((u) => focus.includes(Math.min(u.beds, 3)));
-        resetForBuilding(noneInFocus ? null : focus);
-        setFocusEmpty(noneInFocus);
+    // A response that arrives after the page has moved on must not land.
+    let current = true;
+    (async () => {
+      try {
+        const c = await loadConfig();
+        if (!current) return;
+        if (!c.buildings.some((b) => b.id === id)) {
+          setError({ unknownBuilding: true, message: "" });
+          return;
+        }
+        const h = await loadHistory(id);
+        if (!current) return;
+        if (!shown.current) {
+          // Map focus beds into filter buckets (3 = "3+").
+          const focus = c.focus?.beds.map((b) => Math.min(b, 3)) ?? null;
+          // Never open on an empty table: when nothing listed here matches the
+          // sizes being shopped for, show everything that is listed instead.
+          const units = h.latest?.units ?? [];
+          const noneInFocus =
+            focus !== null && units.length > 0 && !units.some((u) => focus.includes(Math.min(u.beds, 3)));
+          // Only when the page opens: a later refresh of the data keeps the
+          // reader's filters and selection.
+          resetForBuilding(noneInFocus ? null : focus);
+          setFocusEmpty(noneInFocus);
+          shown.current = true;
+        }
         setConfig(c);
         setHistory(h);
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, [id, resetForBuilding]);
+        setError(null);
+      } catch (err: unknown) {
+        // A failed refresh of data already on screen keeps what is shown.
+        if (current && !shown.current) {
+          setError({ unknownBuilding: false, message: err instanceof Error ? err.message : String(err) });
+        }
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [id, resetForBuilding, attempt, epoch]);
 
   const building: BuildingConfig | undefined = config?.buildings.find((b) => b.id === id);
   const mapping = building?.unitMapping ?? FALLBACK_MAPPING;
@@ -94,7 +128,35 @@ export default function BuildingPage() {
     [filteredUnits],
   );
 
-  if (error) return <div className="error-box">Failed to load: {error}</div>;
+  if (error?.unknownBuilding) {
+    return (
+      <div className="error-box" role="alert">
+        There is no building “{id}” in this tracker.
+        <div className="error-actions">
+          <Link to="/">← all buildings</Link>
+        </div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="error-box" role="alert">
+        Failed to load: {error.message}
+        <div className="error-actions">
+          <button
+            className="retry-btn"
+            onClick={() => {
+              setError(null);
+              setAttempt((n) => n + 1);
+            }}
+          >
+            Try again
+          </button>
+          <Link to="/">← all buildings</Link>
+        </div>
+      </div>
+    );
+  }
   if (!config || !history || !building) {
     return (
       <>
@@ -137,8 +199,8 @@ export default function BuildingPage() {
       )}
       {(history.warnings?.length ?? 0) > 0 && (
         <div className="warning-banner">
-          {history.warnings.map((w) => (
-            <div key={w.code}>⚠ {w.message}</div>
+          {history.warnings.map((w, i) => (
+            <div key={`${w.code}-${i}`}>⚠ {w.message}</div>
           ))}
         </div>
       )}
@@ -213,11 +275,25 @@ export default function BuildingPage() {
           )}
         </div>
         <div className="panel">
-          <Scene3D building={building} allBuildings={config.buildings} history={history} units={filteredUnits} />
+          <ErrorBoundary fallback={(e) => <PanelFallback what="The 3D view" error={e} />}>
+            <Suspense fallback={<div className="skeleton" style={{ height: 480, border: "none" }} />}>
+              <Scene3D building={building} allBuildings={config.buildings} history={history} units={filteredUnits} />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
       <div style={{ height: 16 }} />
-      <PriceHistoryChart history={history} visibleUnits={visibleUnitNumbers} />
+      <ErrorBoundary
+        fallback={(e) => (
+          <div className="panel">
+            <PanelFallback what="The price history chart" error={e} />
+          </div>
+        )}
+      >
+        <Suspense fallback={<div className="skeleton" style={{ height: 360 }} />}>
+          <PriceHistoryChart history={history} visibleUnits={visibleUnitNumbers} />
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 }
