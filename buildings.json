@@ -89,8 +89,9 @@
       "neighborhood": "Old Town",
       "dataNotes": [
         "Per apartment, from the building's SightMap feed: the advertised base rent and the lease length it is for, the price of every other lease length for that apartment's move-in date, the move-in date, and the mandatory monthly fees.",
-        "The site headlines rent plus a required $100–$230 utility bundle; the Rent column here is base rent — open a row for the total."
-      ]
+        "The site headlines rent plus a required $100–$230 utility bundle. The Rent column here is base rent; a row's detail adds the fees and the total whenever the snapshot recorded them."
+      ],
+      "publishes": {"leaseLength": true, "leaseTable": true, "moveInDate": true, "sqft": true}
     },
     {
       "id": "old-town-park-1",
@@ -169,7 +170,8 @@
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
         "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change."
-      ]
+      ],
+      "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
     {
       "id": "old-town-park-2",
@@ -248,7 +250,8 @@
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
         "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change."
-      ]
+      ],
+      "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
     {
       "id": "old-town-park-3",
@@ -331,7 +334,8 @@
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
         "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change."
-      ]
+      ],
+      "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
     {
       "id": "the-leo",
@@ -406,7 +410,8 @@
       "dataNotes": [
         "Per apartment: one “starting at” rent, square footage and availability. No lease lengths are published, and the site says its prices may already include concessions (free rent).",
         "The site's bot protection sometimes refuses the tracker. Those days show the last good data, clearly flagged; the tracker does not try to get around it."
-      ]
+      ],
+      "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
     {
       "id": "stead-220",
@@ -482,7 +487,8 @@
       "dataNotes": [
         "The site lists floor-plan stacks with a “starting from” price, not individual apartments (the penthouses excepted). It publishes no square footage, no lease lengths and no move-in dates: every active plan simply says “Available Now”.",
         "Its page is a delayed copy of the building's own price list: a change shows up here 1–5 days after the building makes it. Open a row to see when the building last edited that price."
-      ]
+      ],
+      "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": false}
     }
   ]
 }

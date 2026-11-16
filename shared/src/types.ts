@@ -69,6 +69,23 @@ export const BuildingConfigSchema = z.object({
    * not say" rather than as a tracker gap. Audited facts, not marketing.
    */
   dataNotes: z.array(z.string()).optional(),
+  /**
+   * What this building's leasing site publishes per apartment — audited
+   * facts, kept next to dataNotes. The dashboard uses it to word an empty
+   * cell: "the site does not publish this" (false) versus "not recorded in
+   * this snapshot" (true, or not stated). Never used to hide anything.
+   */
+  publishes: z
+    .object({
+      /** The lease length the advertised rent is quoted for. */
+      leaseLength: z.boolean().optional(),
+      /** A price for every lease length, per apartment. */
+      leaseTable: z.boolean().optional(),
+      /** A move-in date, or "available now", per apartment. */
+      moveInDate: z.boolean().optional(),
+      sqft: z.boolean().optional(),
+    })
+    .optional(),
   geometry: BuildingGeometrySchema,
   unitMapping: UnitMappingSchema.optional(),
 });
