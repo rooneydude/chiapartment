@@ -2,7 +2,8 @@ import { parseLeaseTermMonths } from "../../../shared/src/parse";
 import { chicagoDate, isIsoDay } from "../../../shared/src/time";
 import type { BuildingConfig, LeaseTermPrice, UnitListing } from "../../../shared/src/types";
 import { dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
-import type { Adapter, AdapterContext } from "./types";
+import { clipNotice, looksLikeChallenge, throwIfRefused } from "./guard";
+import { SiteBlockedError, type Adapter, type AdapterContext } from "./types";
 
 /**
  * SightMap (Engrain) — the interactive floorplate map many leasing sites
@@ -19,6 +20,9 @@ import type { Adapter, AdapterContext } from "./types";
 export interface SightmapUnit {
   id: string;
   unit_number: string;
+  /** Other spellings of the unit's name ("0812", "APT 0812"). */
+  label?: string | null;
+  display_unit_number?: string | null;
   floor_id: string;
   floor_plan_id: string;
   price: number;
@@ -85,8 +89,11 @@ export function cleanPlanName(
 
 async function fetchText(url: string, ctx: AdapterContext, kind: string): Promise<string> {
   const res = await ctx.fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${kind} ${url}`);
   const text = await res.text();
+  // A refusal by the site's bot protection is recorded as such, never as a
+  // parse error — and never asked again in the same run.
+  throwIfRefused(`the ${kind} request`, res.status, res.headers.get("content-type"), text);
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${kind} ${url}`);
   ctx.record?.(url, text, res.headers.get("content-type") ?? "text/html");
   return text;
 }
@@ -251,6 +258,8 @@ async function fetchLeaseTable(
     }
     return table;
   } catch (err) {
+    // A refusal is the caller's business: it stops asking for the other units.
+    if (err instanceof SiteBlockedError) throw err;
     ctx.log(
       `lease terms for unit ${u.unit_number} unavailable (${err instanceof Error ? err.message : err})`,
     );
@@ -292,8 +301,9 @@ export function parseMarketingPage(html: string): MarketingExtras {
         const name = typeof rec["jonah:name"] === "string" ? rec["jonah:name"].trim() : "";
         const desc =
           typeof rec["jonah:description"] === "string" ? rec["jonah:description"].trim() : "";
-        const text = [name, desc].filter(Boolean).join(" — ").replace(/\s+/g, " ");
-        if (text && text.length <= 300 && !notices.includes(text)) notices.push(text);
+        // A long announcement (fine print added) is shortened, never dropped.
+        const text = clipNotice([name, desc].filter(Boolean).join(" — "));
+        if (text && !notices.includes(text)) notices.push(text);
       }
     }
     for (const v of Object.values(obj)) visit(v);
@@ -348,8 +358,8 @@ async function fetchMarketingExtras(
     }
     const html = await res.text();
     ctx.record?.(pageUrl, html, "text/html");
-    if (/imunify360|access denied/i.test(html.slice(0, 2000)) && html.length < 5000) {
-      ctx.log("marketing page refused the request (WAF) — specials and vacancy dates skipped");
+    if (looksLikeChallenge(html, res.status)) {
+      ctx.log("marketing page refused the request (bot protection) — specials and vacancy dates skipped");
       return null;
     }
     return parseMarketingPage(html);
@@ -370,11 +380,30 @@ export async function fetchSightmapPayload(
   return JSON.parse(text) as SightmapPayload;
 }
 
+/** A whole number of bedrooms, as the API should give it; null for anything else. */
+function bedroomCount(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 10 ? v : null;
+}
+
+/** The unit's name: unit_number, else one of its other spellings. */
+function unitName(u: SightmapUnit): string | null {
+  for (const v of [u.unit_number, u.label, u.display_unit_number]) {
+    if (typeof v !== "string" && typeof v !== "number") continue;
+    const name = String(v).replace(/^(apt|unit|#)\.?\s*/i, "").trim();
+    if (name && name.length <= 12) return name;
+  }
+  return null;
+}
+
 export const sightmap: Adapter = {
   id: "sightmap",
   async scrape(building, ctx) {
     const payload = await fetchSightmapPayload(building, ctx);
-    const plans = new Map(payload.data.floor_plans.map((p) => [p.id, p]));
+    const data = payload?.data;
+    if (!data || !Array.isArray(data.units) || !Array.isArray(data.floor_plans)) {
+      throw new Error("the SightMap API answered without a unit list — its format may have changed");
+    }
+    const plans = new Map(data.floor_plans.map((p) => [p.id, p]));
     const today = chicagoDate(ctx.now?.() ?? new Date());
 
     const extras = await fetchMarketingExtras(building, ctx);
@@ -382,34 +411,49 @@ export const sightmap: Adapter = {
 
     const listings: UnitListing[] = [];
     let withTerms = 0;
-    for (const u of payload.data.units) {
-      if (!u.unit_number) continue; // nothing to identify it by
+    let unnamed = 0;
+    let alsoListedCount = 0;
+    /** Once the lease-price API refuses, the remaining units are not asked for. */
+    let leaseApiRefused = false;
+    for (const u of data.units) {
+      const unitNumber = unitName(u);
       const plan = plans.get(u.floor_plan_id);
-      const availableOn = u.available_on && isIsoDay(u.available_on) ? u.available_on : null;
+      const availableOn = typeof u.available_on === "string" && isIsoDay(u.available_on) ? u.available_on : null;
       const saysNow = /\bnow\b/i.test(u.display_available_on ?? "");
       const availableNow = saysNow || (availableOn !== null && availableOn <= today);
-      const availableDate = availableOn ?? (saysNow ? today : null);
-      const sqft = u.area && u.area > 100 ? Math.round(u.area) : null;
-      const priced = Number.isFinite(u.price) && u.price > 0;
+      // The feed is rebuilt once a day (about 5 am Chicago) and stamps vacant
+      // units with THAT day; a unit that can be moved into now is listed with
+      // today's date, like everywhere else.
+      const availableDate = availableNow ? today : availableOn;
+      const sqft = typeof u.area === "number" && u.area > 100 ? Math.round(u.area) : null;
+      const price = typeof u.price === "number" ? u.price : Number.parseFloat(String(u.price ?? ""));
+      const priced = Number.isFinite(price) && price > 0;
       // A plan whose bedroom label is null and that has no bathrooms is a
       // placeholder ("TEMP / Coming Soon", bedroom_count 0) — not a studio.
+      // A bedroom count that is not a whole number is no bed count at all.
+      const beds = plan ? bedroomCount(plan.bedroom_count) : null;
       const bedsKnown =
-        plan !== undefined && !(plan.bedroom_label === null && !plan.bathroom_count);
+        plan !== undefined && beds !== null && !(plan.bedroom_label === null && !plan.bathroom_count);
 
-      if (!plan || !priced || !bedsKnown) {
+      if (unitNumber === null || !plan || !priced || !bedsKnown) {
         // On the site but not comparable: say so instead of dropping it.
-        const note = !priced
-          ? "No price published"
-          : !plan
-            ? "Floor plan not published"
-            : `${plan.filter_label?.trim() || "Plan"} — bed count not published`;
-        ctx.log(`unit ${u.unit_number}: ${note.toLowerCase()} — kept in the also-listed list`);
+        const note =
+          unitNumber === null
+            ? "Unit number not published"
+            : !priced
+              ? "No price published"
+              : !plan
+                ? "Floor plan not published"
+                : `${plan.filter_label?.trim() || "Plan"} — bed count not published`;
+        if (unitNumber === null) unnamed++;
+        alsoListedCount++;
+        ctx.log(`unit ${unitNumber ?? "(no number)"}: ${note.toLowerCase()} — kept in the also-listed list`);
         ctx.reportAlsoListed?.({
-          unitNumber: u.unit_number,
-          floorplanName: plan ? cleanPlanName(plan) : "Unknown plan",
-          beds: plan && bedsKnown ? plan.bedroom_count : null,
+          unitNumber,
+          floorplanName: plan ? cleanPlanName({ name: plan.name, bedroom_count: beds ?? 1 }) : "Unknown plan",
+          beds: plan && bedsKnown ? beds : null,
           sqft,
-          ...(priced ? { price: Math.round(u.price) } : {}),
+          ...(priced ? { price: Math.round(price) } : {}),
           availableDate,
           ...(availableDate !== null ? { availableNow } : {}),
           note,
@@ -419,16 +463,28 @@ export const sightmap: Adapter = {
       }
 
       // The lease-term table is quoted for the unit's own earliest move-in
-      // day; asking without a date returns nothing for units not yet vacant.
+      // day — the feed's date for it; asking without a date returns nothing
+      // for units not yet vacant.
       const term = parseLeaseTermMonths(u.display_lease_term);
-      await ctx.pause?.(250);
-      const table = await fetchLeaseTable(u, availableDate, ctx);
+      let table: LeaseTable | null = null;
+      if (!leaseApiRefused) {
+        await ctx.pause?.(250);
+        try {
+          table = await fetchLeaseTable({ ...u, unit_number: unitNumber }, availableOn ?? availableDate, ctx);
+        } catch (err) {
+          if (!(err instanceof SiteBlockedError)) throw err;
+          leaseApiRefused = true;
+          ctx.log(
+            `the lease-price API refused the request for unit ${unitNumber} — not asking for the remaining units' lease tables this run`,
+          );
+        }
+      }
       if (table) {
         withTerms++;
         const atTerm = term !== null ? table.terms.find((t) => t.months === term) : undefined;
-        if (atTerm && Math.abs(atTerm.price - u.price) > 1) {
+        if (atTerm && Math.abs(atTerm.price - price) > 1) {
           ctx.log(
-            `unit ${u.unit_number}: site headlines $${u.price} @ ${term}mo but its lease table says $${atTerm.price} for that term`,
+            `unit ${unitNumber}: site headlines $${price} @ ${term}mo but its lease table says $${atTerm.price} for that term`,
           );
         }
       }
@@ -447,28 +503,46 @@ export const sightmap: Adapter = {
         ? "Convertible"
         : undefined;
       const since = availableNow ? extras?.vacantSince.get(u.id) : undefined;
+      const baths = typeof plan.bathroom_count === "number" && plan.bathroom_count > 0 ? plan.bathroom_count : null;
 
       listings.push({
-        unitNumber: u.unit_number,
+        unitNumber,
         floorplanName: cleanPlanName(plan),
-        beds: plan.bedroom_count,
+        beds: beds!,
         ...(planType ? { planType } : {}),
-        baths: plan.bathroom_count || null,
+        baths,
         sqft,
-        price: Math.round(u.price),
+        price: Math.round(price),
         ...(monthlyFees ? { monthlyFees } : {}),
         leaseTermMonths: term,
         ...(table ? { leaseTerms: table.terms } : {}),
         availableDate,
         ...(availableDate !== null ? { availableNow } : {}),
         ...(since && since < today ? { vacantSince: since } : {}),
-        ...(u.specials_description ? { specials: u.specials_description } : {}),
+        ...(typeof u.specials_description === "string" && u.specials_description.trim()
+          ? { specials: u.specials_description.trim() }
+          : {}),
         url: applyUrl ?? building.url,
       });
     }
-    if (listings.length > 0) {
-      ctx.log(`${withTerms}/${listings.length} units have a lease-term price table`);
+
+    // A feed full of units none of which can be named is a changed feed.
+    if (data.units.length > 0 && unnamed === data.units.length) {
+      throw new Error(
+        `the SightMap API lists ${data.units.length} units but none carries a unit number — its format may have changed`,
+      );
     }
-    return dedupeListings(listings);
+    const unique = dedupeListings(listings);
+    if (unique.length !== listings.length) {
+      ctx.log(
+        `${listings.length - unique.length} unit number(s) appear more than once in the feed — kept the first of each`,
+      );
+    }
+    if (unique.length > 0 || alsoListedCount > 0) {
+      ctx.log(
+        `${data.units.length} units in the feed → ${unique.length} listed (${withTerms} with a lease-term price table), ${alsoListedCount} also listed`,
+      );
+    }
+    return unique;
   },
 };

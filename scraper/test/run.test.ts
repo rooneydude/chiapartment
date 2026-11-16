@@ -15,6 +15,8 @@ import {
   loadPreviousOk,
   pickStableObservation,
   priceFormFlips,
+  quarantineInvalidBuildings,
+  sanitizeListings,
   type ScrapeResult,
 } from "../src/run";
 
@@ -285,5 +287,42 @@ describe("describeRun (the CI summary and health check)", () => {
     );
     expect(run.ok).toBe(0);
     expect(run.failed).toEqual(["a"]);
+  });
+});
+
+describe("one bad row must not cost the whole run", () => {
+  it("keeps the good listings and moves a malformed one to the also-listed list", () => {
+    const logs: string[] = [];
+    const out = sanitizeListings(
+      [unit("0901", 2200), { ...unit("0509", 3774), beds: null }, { ...unit("0510", 0) }, { floorplanName: "A", beds: 1 }],
+      [{ unitNumber: "4003", floorplanName: "PH", beds: null, note: "Contact for Pricing" }, { unitNumber: "x" }],
+      (m) => logs.push(m),
+    );
+    expect(out.units.map((u) => u.unitNumber)).toEqual(["0901"]);
+    expect(out.alsoListed.map((a) => [a.unitNumber, a.floorplanName, a.note])).toEqual([
+      ["4003", "PH", "Contact for Pricing"],
+      ["0509", "A", "Listed, but its details could not be read"],
+      ["0510", "A", "Listed, but its details could not be read"],
+      [null, "A", "Listed, but its details could not be read"],
+    ]);
+    expect(logs.join("\n")).toContain("unit 0509: the scraper produced a row that does not fit the format (beds:");
+    expect(logs.join("\n")).toContain("dropped a malformed also-listed row");
+  });
+
+  it("turns a building whose entry still does not fit into that building's error, and keeps the rest", () => {
+    const snap = {
+      schemaVersion: 1 as const,
+      timestamp: "2026-11-16T14:20:00Z",
+      buildings: [
+        { buildingId: "a", ...ok([unit("101", 2000)]) },
+        { buildingId: "b", ...ok([{ ...unit("201", 3000), price: -5 }]) },
+      ],
+    } as Snapshot;
+    expect(quarantineInvalidBuildings(snap)).toEqual(["b"]);
+    expect(snap.buildings.map((b) => [b.buildingId, b.status, b.units.length])).toEqual([
+      ["a", "ok", 1],
+      ["b", "error", 0],
+    ]);
+    expect(snap.buildings[1]!.error).toMatch(/does not fit the snapshot format \(units\.0\.price/);
   });
 });

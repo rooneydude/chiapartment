@@ -3,6 +3,7 @@ import { parseAvailableDate, parseLeaseTermMonths } from "../../../shared/src/pa
 import { chicagoDate } from "../../../shared/src/time";
 import type { AlsoListed, LeaseTermPrice, UnitListing } from "../../../shared/src/types";
 import { coerceBeds, coercePrice, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
+import { clipNotice, describeResponse, looksLikeChallenge } from "./guard";
 import { extractTermPrices, parseMarketingPage } from "./sightmap";
 import { SiteBlockedError, type Adapter } from "./types";
 
@@ -39,19 +40,13 @@ import { SiteBlockedError, type Adapter } from "./types";
 
 const DATA_SCRIPT_ID = "jd-fp-data-script-app";
 const CARD_SELECTOR = 'a[data-jd-fp-selector="floorplan-item"]';
-const CHALLENGE =
-  /imunify360|bot-protection|access denied|just a moment|one moment, please|verif(y|ying) you are (a )?human|captcha|attention required/i;
-/** A real page is ~300 KB; challenge and refusal pages are a few KB at most. */
-const SMALL_BODY = 20_000;
-
 /**
  * Is this body a bot-protection / challenge page instead of the site? Never
  * true for a page that carries the inventory, whatever else it mentions.
  */
 export function isWafPage(body: string, status = 200): boolean {
   if (body.includes(DATA_SCRIPT_ID)) return false;
-  const refused = status === 401 || status === 403 || status === 429;
-  return (refused || body.length < SMALL_BODY) && CHALLENGE.test(body);
+  return looksLikeChallenge(body, status);
 }
 
 function coerceFinite(v: unknown): number | null {
@@ -165,7 +160,7 @@ function concessionDisclaimer(html: string): string | null {
   if (!m) return null;
   // Keep only the sentence itself, not the paragraph that ran into it.
   const sentence = tidy(m[0]).replace(/^.*?\b(Prices?\b)/i, "$1");
-  return sentence.length <= 220 ? sentence : null;
+  return clipNotice(sentence, 220);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +180,11 @@ function unitIdentity(raw: Record<string, unknown>): { unitNumber: string | null
     return /^[A-Za-z0-9][A-Za-z0-9 .-]{0,11}$/.test(s) ? s : null;
   };
   const title = typeof raw["title"] === "string" ? raw["title"].replace(/^#/, "").trim() : "";
-  return { unitNumber: clean(raw["apartment_number"]) ?? clean(title), title };
+  // On this site every apartment is its own floor plan, named by its number.
+  return {
+    unitNumber: clean(raw["apartment_number"]) ?? clean(title) ?? clean(raw["floorplan_title"]),
+    title,
+  };
 }
 
 /**
@@ -219,10 +218,33 @@ function bedsFor(raw: Record<string, unknown>, planKey: string | null, ctx: Page
   return plainBeds(raw["bedrooms_display"]) ?? coerceBeds(primary);
 }
 
-function leaseTermsFrom(raw: Record<string, unknown>): LeaseTermPrice[] {
+/**
+ * The unit's lease-length price table. The Jonah widget's own rows look like
+ * { term: "12", termDisplay: "12 months", priceLow: 3846, … } (the same
+ * widget publishes them for 1225 Old Town); other shapes go through the
+ * generic extractor. The Leo publishes none today.
+ */
+export function leaseTermsFrom(raw: Record<string, unknown>): LeaseTermPrice[] {
   const terms = raw["lease_terms"];
   if (!Array.isArray(terms) || terms.length === 0) return [];
-  return [...extractTermPrices(terms).entries()]
+  const byMonths = new Map<number, number>();
+  for (const row of terms) {
+    if (row === null || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const months =
+      typeof r["term"] === "number"
+        ? r["term"]
+        : typeof r["term"] === "string" && /^\d{1,2}$/.test(r["term"].trim())
+          ? Number.parseInt(r["term"], 10)
+          : parseLeaseTermMonths(typeof r["termDisplay"] === "string" ? r["termDisplay"] : null);
+    const price = coercePrice(r["priceLow"]);
+    if (months === null || !Number.isInteger(months) || months < 1 || months > 36) continue;
+    if (price === null || price <= 0) continue;
+    const seen = byMonths.get(months);
+    if (seen === undefined || price < seen) byMonths.set(months, Math.round(price));
+  }
+  const source = byMonths.size > 0 ? byMonths : extractTermPrices(terms);
+  return [...source.entries()]
     .map(([months, price]) => ({ months, price }))
     .sort((a, b) => a.months - b.months);
 }
@@ -255,15 +277,41 @@ function fromJdUnit(
   ctx: PageContext,
 ): JdResult {
   const { unitNumber, title } = unitIdentity(raw);
+  // The site lists apartments. A record that names none cannot be followed
+  // from one day to the next: it is unreadable, not a listing.
+  if (unitNumber === null) return null;
   const planTitle = typeof raw["floorplan_title"] === "string" ? raw["floorplan_title"].trim() : "";
   const beds = bedsFor(raw, planTitle || unitNumber, ctx);
   const typeLabel = unitTypeLabel(raw, ctx);
 
   const entity = raw["price_entity"] as
-    | { priceLow?: unknown; priceHigh?: unknown; term?: unknown; termDisplay?: unknown }
+    | {
+        priceLow?: unknown;
+        priceHigh?: unknown;
+        term?: unknown;
+        termDisplay?: unknown;
+        pricingReflectFees?: unknown;
+        adjusted?: Record<string, unknown>;
+      }
     | undefined;
-  const price =
+  const advertised =
     coercePrice(raw["rent_min"]) ?? coercePrice(entity?.priceLow) ?? coercePrice(raw["price"]);
+  const advertisedMax = coercePrice(raw["rent_max"]) ?? coercePrice(entity?.priceHigh);
+  // When the widget is set to show prices WITH required monthly fees (it is
+  // on 1225's page, not on The Leo's today), the base rent is given
+  // separately — and base rent is what a listing's price means here.
+  const baseLow =
+    entity?.pricingReflectFees === true ? coercePrice(entity.adjusted?.["low_no_fees"]) : null;
+  const baseHigh =
+    entity?.pricingReflectFees === true ? coercePrice(entity.adjusted?.["high_no_fees"]) : null;
+  const price = baseLow ?? advertised;
+  const monthlyFees =
+    baseLow !== null && advertised !== null && advertised > baseLow
+      ? {
+          min: Math.round(advertised - baseLow),
+          max: Math.round(Math.max(advertised - baseLow, (advertisedMax ?? advertised) - (baseHigh ?? baseLow))),
+        }
+      : undefined;
 
   const baths = coerceFinite(raw["bathrooms"]);
   const sqftRaw = coerceFinite(raw["square_feet"]);
@@ -303,7 +351,6 @@ function fromJdUnit(
   const priced = price !== null && price >= MIN_SANE_RENT && price <= MAX_SANE_RENT;
   if (beds === null || !priced) {
     // Listed on the site but not comparable — say so instead of dropping it.
-    if (unitNumber === null && title === "") return null;
     const priceText = [raw["price_display"], raw["price"]].find(
       (v): v is string => typeof v === "string" && v.trim().length > 0 && !/\d/.test(v),
     );
@@ -327,11 +374,14 @@ function fromJdUnit(
     };
   }
 
-  const rentMax = coercePrice(raw["rent_max"]) ?? coercePrice(entity?.priceHigh);
+  const rentMax = baseLow !== null ? baseHigh : advertisedMax;
+  const termRaw = entity?.term;
   const term =
-    typeof entity?.term === "number" && Number.isInteger(entity.term) && entity.term > 0
-      ? entity.term
-      : parseLeaseTermMonths(typeof entity?.termDisplay === "string" ? entity.termDisplay : null);
+    typeof termRaw === "number" && Number.isInteger(termRaw) && termRaw > 0
+      ? termRaw
+      : typeof termRaw === "string" && /^\d{1,2}$/.test(termRaw.trim()) && Number.parseInt(termRaw, 10) > 0
+        ? Number.parseInt(termRaw, 10)
+        : parseLeaseTermMonths(typeof entity?.termDisplay === "string" ? entity.termDisplay : null);
   const leaseTerms = leaseTermsFrom(raw);
   const specials = specialsFrom(raw);
 
@@ -347,6 +397,7 @@ function fromJdUnit(
       ...(rentMax !== null && rentMax > price! && rentMax <= MAX_SANE_RENT
         ? { priceMax: Math.round(rentMax) }
         : {}),
+      ...(monthlyFees ? { monthlyFees } : {}),
       ...(term !== null ? { leaseTermMonths: term } : {}),
       ...(leaseTerms.length > 0 ? { leaseTerms } : {}),
       availableDate,
@@ -374,6 +425,8 @@ export interface LeoPage {
   catalogueSize: number;
   /** How many of those the catalogue marks available; null without a catalogue. */
   catalogueAvailable: number | null;
+  /** The catalogue's available apartments: name → bed count (null when not given). */
+  catalogueAvailableUnits: Map<string, number | null>;
 }
 
 function pageContext(html: string, $: cheerio.CheerioAPI): PageContext {
@@ -390,12 +443,16 @@ function pageNotices(html: string): string[] {
 function catalogueSummary(catalogue: Map<string, CataloguePlan>): {
   catalogueSize: number;
   catalogueAvailable: number | null;
+  catalogueAvailableUnits: Map<string, number | null>;
 } {
   const counted = [...catalogue.values()].filter((p) => p.available !== null);
   return {
     catalogueSize: catalogue.size,
     catalogueAvailable:
       counted.length > 0 ? counted.reduce((s, p) => s + (p.available ?? 0), 0) : null,
+    catalogueAvailableUnits: new Map(
+      [...catalogue.entries()].filter(([, p]) => (p.available ?? 0) > 0).map(([name, p]) => [name, p.beds]),
+    ),
   };
 }
 
@@ -510,11 +567,6 @@ export function parseLeoPage(html: string, baseUrl: string): UnitListing[] {
   return parseLeoCards(html, baseUrl);
 }
 
-function pageTitle(html: string): string {
-  const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
-  return m ? tidy(m[1]!).slice(0, 80) : "";
-}
-
 export const leo: Adapter = {
   id: "leo",
   async scrape(building, ctx) {
@@ -529,7 +581,7 @@ export const leo: Adapter = {
       throw new Error(`failed to fetch ${url} (${err instanceof Error ? err.message : err})`);
     }
     const html = await res.text();
-    const seen = `HTTP ${res.status}, ${res.headers.get("content-type") ?? "no content type"}, ${html.length} bytes${pageTitle(html) ? `, title "${pageTitle(html)}"` : ""}`;
+    const seen = describeResponse(res.status, res.headers.get("content-type"), html);
 
     const page = parseLeoInventory(html, building.url, ref);
     if (page.sawInventory) {
@@ -540,10 +592,29 @@ export const leo: Adapter = {
       ctx.log(
         `${page.unitCount} unit(s) in the site's list → ${page.listings.length} priced, ${page.alsoListed.length} listed without a price or bed count${emitted < page.unitCount ? `, ${page.unitCount - emitted} unreadable` : ""}`,
       );
-      if (page.catalogueAvailable !== null && page.catalogueAvailable !== page.unitCount) {
-        ctx.log(
-          `note: the page's catalogue marks ${page.catalogueAvailable} apartment(s) available, its list has ${page.unitCount}`,
+      // Records are there but not one could be read: the widget's format
+      // changed. That is an error — never "the building is empty".
+      if (page.unitCount > 0 && emitted === 0) {
+        throw new Error(
+          `${url}: the page lists ${page.unitCount} unit record(s) but none could be read — the widget's format may have changed (${seen})`,
         );
+      }
+      // The page's own catalogue marks an apartment available that its list
+      // does not carry: keep it on the record rather than let it pass for
+      // removed.
+      const listed = new Set(
+        [...page.listings, ...page.alsoListed].map((u) => u.unitNumber).filter((n): n is string => n !== null),
+      );
+      for (const [name, beds] of page.catalogueAvailableUnits) {
+        if (page.unitCount === 0 || listed.has(name)) continue;
+        ctx.log(`apartment ${name} is marked available in the page's catalogue but missing from its unit list`);
+        ctx.reportAlsoListed?.({
+          unitNumber: name,
+          floorplanName: beds === null ? "Unit" : planNameFor(beds),
+          beds,
+          note: "Marked available in the site's catalogue, but missing from its unit list",
+          url: new URL(`/floorplans/${encodeURIComponent(name)}/`, building.url).href,
+        });
       }
       if (page.unitCount === 0) {
         // An empty list is only believed when nothing on the page contradicts it.
@@ -561,7 +632,7 @@ export const leo: Adapter = {
     }
 
     // No inventory on the page: refused, or changed?
-    if (isWafPage(html, res.status) || res.status === 401 || res.status === 403 || res.status === 429) {
+    if (isWafPage(html, res.status)) {
       throw new SiteBlockedError(
         `the site's bot protection refused the request (${seen}) — left alone; the next scheduled run will ask again`,
       );

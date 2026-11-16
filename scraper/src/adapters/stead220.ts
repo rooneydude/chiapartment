@@ -3,6 +3,7 @@ import { parseAvailableDate } from "../../../shared/src/parse";
 import { chicagoDate } from "../../../shared/src/time";
 import type { AlsoListed, UnitListing } from "../../../shared/src/types";
 import { coerceBeds, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
+import { throwIfRefused } from "./guard";
 import type { Adapter } from "./types";
 
 /**
@@ -127,9 +128,18 @@ function plansFromCards(html: string): Map<string, PlanRecord> {
     const priceNum = amountM ? Number.parseInt(amountM[1]!.replace(/,/g, ""), 10) : Number.NaN;
     const bathsM = /(\d+(?:\.\d+)?)\s*BATH/i.exec(meta);
     const unitTagM = /UNIT\s*(\d+)/i.exec(meta);
-    const aria = $(el).find("[aria-label]").first().attr("aria-label") ?? "";
-    const ariaName = aria.replace(/\s*preview.*$/i, "").trim();
-    const tag = unitTagM ? normTag(unitTagM[1]!) : `card-${i}`;
+    const href = $(el).find('a[href^="/floorplans/"]').first().attr("href") ?? null;
+    // Which plan this card is: its own link (/floorplans/<n>) says so; the
+    // words "UNIT 01" in the meta line are the fallback.
+    const linkTagM = /^\/floorplans\/(\d+)\b/.exec(href ?? "");
+    const tag = linkTagM ? normTag(linkTagM[1]!) : unitTagM ? normTag(unitTagM[1]!) : `card-${i}`;
+    // The plan's name: the carousel's label ("Large Studio - Unit 01 preview
+    // gallery, Unit 1") or its link's ("View Large Studio - Unit 01") — never
+    // simply "the first labelled element in the card".
+    const carousel = $(el).find(".fp-card-carousel[aria-label]").first().attr("aria-label") ?? "";
+    const viewLink = $(el).find('a[aria-label^="View "]').first().attr("aria-label") ?? "";
+    const ariaName =
+      carousel.replace(/\s*preview.*$/i, "").trim() || viewLink.replace(/^View\s+/i, "").trim();
     out.set(tag, {
       tag,
       name: ariaName || (unitTagM ? `${name} - Unit ${unitTagM[1]}` : `${name} (${meta})`),
@@ -138,7 +148,7 @@ function plansFromCards(html: string): Map<string, PlanRecord> {
       price: sanePrice(priceNum),
       priceText: contact || (amount.trim() ? amount.trim() : null),
       availability: $(el).find(".fp-availability-label").first().text().replace(/\s+/g, " ").trim() || null,
-      href: $(el).find('a[href^="/floorplans/"]').first().attr("href") ?? null,
+      href,
       updatedAt: null,
       active: null,
       // Card headings are upper-case ("1 BED + DEN"); the data blob's label is preferred.
@@ -153,13 +163,26 @@ export interface SteadPage {
   alsoListed: AlsoListed[];
   /** How many floorplan records the page carried at all. */
   planCount: number;
+  /** Things worth a log line (a card that matches no data record). */
+  remarks: string[];
 }
 
 export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): SteadPage {
   const ssr = plansFromSsr(html);
   const cards = plansFromCards(html);
   const today = chicagoDate(ref);
-  const tags = [...new Set([...cards.keys(), ...ssr.keys()])];
+  const remarks: string[] = [];
+  // The data blob names and numbers every plan: when it is there, it decides
+  // which plans exist and what they are called, and the cards only add what
+  // the blob lacks (the availability label, the link). A card that matches
+  // no record is reported, not listed as a second copy of some plan.
+  const unmatchedCards = ssr.size > 0 ? [...cards.keys()].filter((tag) => !ssr.has(tag)) : [];
+  if (unmatchedCards.length > 0) {
+    remarks.push(
+      `${unmatchedCards.length} floor-plan card(s) match no record in the page's data (${unmatchedCards.slice(0, 4).join(", ")}) — not listed twice; the page's markup may have changed`,
+    );
+  }
+  const tags = ssr.size > 0 ? [...ssr.keys()] : [...cards.keys()];
 
   const listings: UnitListing[] = [];
   const alsoListed: AlsoListed[] = [];
@@ -168,9 +191,12 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
     const c = cards.get(tag);
     const beds = s?.beds ?? c?.beds ?? null;
     const baths = s?.baths ?? c?.baths ?? null;
-    const name = c?.name ?? s?.name ?? `Unit ${tag}`;
-    const price = s?.price ?? c?.price ?? null;
+    const name = s?.name ?? c?.name ?? `Unit ${tag}`;
     const priceText = c?.priceText ?? s?.priceText ?? null;
+    // What a visitor sees wins: a card that says "Contact for Pricing" has
+    // no published price, even if the data record still carries a number.
+    const cardWithholdsPrice = c !== undefined && c.price === null && !!c.priceText && NO_PRICE_TEXT.test(c.priceText);
+    const price = cardWithholdsPrice ? null : (s?.price ?? c?.price ?? null);
     const availability = c?.availability ?? null;
     const href = c?.href ?? `/floorplans/${Number.parseInt(tag, 10) || tag}`;
     const url = new URL(href, baseUrl).href;
@@ -222,27 +248,29 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
     });
   }
 
-  return { listings: dedupeListings(listings), alsoListed, planCount: tags.length };
+  return { listings: dedupeListings(listings), alsoListed, planCount: tags.length, remarks };
 }
 
 export const stead220: Adapter = {
   id: "stead220",
   async scrape(building, ctx) {
     const listUrl = new URL("/floorplans", building.url).href;
-    let html: string;
+    let res: Response;
     try {
-      const res = await ctx.fetch(listUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      html = await res.text();
+      res = await ctx.fetch(listUrl);
     } catch (err) {
       throw new Error(`failed to fetch ${listUrl} (${err instanceof Error ? err.message : err})`);
     }
+    const html = await res.text();
+    const page = parseSteadFloorplans(html, building.url, ctx.now?.() ?? new Date());
+    if (page.planCount === 0) throwIfRefused(listUrl, res.status, res.headers.get("content-type"), html);
+    if (!res.ok) throw new Error(`failed to fetch ${listUrl} (HTTP ${res.status})`);
     ctx.record?.(listUrl, html, "text/html");
 
-    const page = parseSteadFloorplans(html, building.url, ctx.now?.() ?? new Date());
     if (page.planCount === 0) {
       throw new Error(`no floorplan cards parsed from ${listUrl} — page structure may have changed`);
     }
+    for (const remark of page.remarks) ctx.log(remark);
     for (const row of page.alsoListed) ctx.reportAlsoListed?.(row);
     ctx.log(
       `${page.listings.length} priced floorplans, ${page.alsoListed.length} listed without a price or not available`,

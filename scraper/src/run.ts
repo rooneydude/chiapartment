@@ -3,8 +3,11 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { listingKey, listingLabel } from "../../shared/src/delta";
 import {
+  AlsoListedSchema,
+  BuildingSnapshotSchema,
   BuildingsConfigSchema,
   SnapshotSchema,
+  UnitListingSchema,
   type AlsoListed,
   type BuildingConfig,
   type BuildingsConfig,
@@ -39,6 +42,69 @@ export function loadConfig(root: string): BuildingsConfig {
 }
 
 export type ScrapeResult = Omit<BuildingSnapshot, "buildingId">;
+
+/**
+ * Keep only what fits the snapshot format. A row an adapter got wrong (a
+ * null bed count, a price of 0) must cost that one row — moved to the
+ * also-listed list when it can be named — never the whole run: the snapshot
+ * is validated before it is written, and a single bad row would otherwise
+ * throw away every building's data for the day.
+ */
+export function sanitizeListings(
+  units: readonly unknown[],
+  alsoListed: readonly unknown[],
+  log: (msg: string) => void,
+): { units: UnitListing[]; alsoListed: AlsoListed[] } {
+  const goodUnits: UnitListing[] = [];
+  const goodAlso: AlsoListed[] = [];
+  for (const row of alsoListed) {
+    const parsed = AlsoListedSchema.safeParse(row);
+    if (parsed.success) goodAlso.push(parsed.data);
+    else log(`dropped a malformed also-listed row (${parsed.error.issues[0]?.path.join(".")}: ${parsed.error.issues[0]?.message})`);
+  }
+  for (const row of units) {
+    const parsed = UnitListingSchema.safeParse(row);
+    if (parsed.success) {
+      goodUnits.push(parsed.data);
+      continue;
+    }
+    const issue = parsed.error.issues[0];
+    const why = `${issue?.path.join(".") || "row"}: ${issue?.message ?? "invalid"}`;
+    const r = (row ?? {}) as Record<string, unknown>;
+    const unitNumber = typeof r["unitNumber"] === "string" && r["unitNumber"] ? r["unitNumber"] : null;
+    const floorplanName = typeof r["floorplanName"] === "string" && r["floorplanName"] ? r["floorplanName"] : "Unit";
+    log(`unit ${unitNumber ?? floorplanName}: the scraper produced a row that does not fit the format (${why}) — kept in the also-listed list`);
+    goodAlso.push({
+      unitNumber,
+      floorplanName,
+      beds: null,
+      note: "Listed, but its details could not be read",
+    });
+  }
+  return { units: goodUnits, alsoListed: goodAlso };
+}
+
+/**
+ * Last line of defence before writing: a building entry that still does not
+ * fit the format becomes that building's scrape error, so the others land.
+ */
+export function quarantineInvalidBuildings(snapshot: Snapshot): string[] {
+  const bad: string[] = [];
+  snapshot.buildings = snapshot.buildings.map((b) => {
+    const parsed = BuildingSnapshotSchema.safeParse(b);
+    if (parsed.success) return b;
+    const issue = parsed.error.issues[0];
+    bad.push(b.buildingId);
+    return {
+      buildingId: b.buildingId,
+      status: "error" as const,
+      error: `the scraper produced data that does not fit the snapshot format (${issue?.path.join(".")}: ${issue?.message})`,
+      source: { adapter: b.source?.adapter ?? "unknown", fetchedUrl: b.source?.fetchedUrl ?? "" },
+      units: [],
+    };
+  });
+  return bad;
+}
 
 async function scrapeOne(
   root: string,
@@ -75,17 +141,18 @@ async function scrapeOne(
   };
   console.log(`Scraping ${building.name} (${adapter.id})...`);
   try {
-    const units = await adapter.scrape(building, ctx);
+    const scraped = await adapter.scrape(building, ctx);
+    const clean = sanitizeListings(scraped, alsoListed, ctx.log);
     console.log(
-      `  → ${units.length} listings${alsoListed.length ? ` (+${alsoListed.length} listed without a price / bed count)` : ""}`,
+      `  → ${clean.units.length} listings${clean.alsoListed.length ? ` (+${clean.alsoListed.length} listed without a price / bed count)` : ""}`,
     );
     return {
       status: "ok",
       source: source(),
-      units,
+      units: clean.units,
       // Always written, even when empty: "this run looked and found none" is
       // what lets the next run say a row without a price is new.
-      alsoListed,
+      alsoListed: clean.alsoListed,
       ...(notices.length > 0 ? { notices } : {}),
     };
   } catch (err) {
@@ -351,6 +418,10 @@ export async function refresh(root: string, opts: RefreshOptions): Promise<strin
     }
   }
 
+  const quarantined = quarantineInvalidBuildings(snapshot);
+  if (quarantined.length > 0) {
+    console.error(`Recorded as failed (their data did not fit the snapshot format): ${quarantined.join(", ")}`);
+  }
   SnapshotSchema.parse(snapshot); // never write an invalid snapshot
 
   const dir = join(root, "data", "snapshots");
