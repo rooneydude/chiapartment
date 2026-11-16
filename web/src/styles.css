@@ -5,7 +5,7 @@
   --surface-1: #fcfcfb;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --text-muted: #898781;
+  --text-muted: #6b6a65;
   --grid-line: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
@@ -48,7 +48,7 @@
     --series-7: #9085e9;
     --series-8: #e66767;
     --delta-good: #0ca30c;
-    --delta-bad: #d03b3b;
+    --delta-bad: #ef6a6a;
     --context-line: #45443f;
     --accent-soft: rgba(57, 135, 229, 0.16);
   }
@@ -73,7 +73,7 @@
   --series-7: #9085e9;
   --series-8: #e66767;
   --delta-good: #0ca30c;
-  --delta-bad: #d03b3b;
+  --delta-bad: #ef6a6a;
   --context-line: #45443f;
   --accent-soft: rgba(57, 135, 229, 0.16);
 }
@@ -139,6 +139,7 @@ button {
 }
 
 .theme-btn {
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   width: 30px;
@@ -384,7 +385,10 @@ table.units td.num.price-cell {
   align-items: start;
 }
 
-@media (max-width: 980px) {
+/* The unit table needs about 800 px for all nine columns. Side by side with
+   the 3D view it only gets that on a wide screen; below, the 3D view goes
+   under the table instead of cutting its last columns off. */
+@media (max-width: 1320px) {
   .bldg-grid {
     grid-template-columns: 1fr;
   }
@@ -464,6 +468,43 @@ table.units td.num.price-cell {
   overflow-x: auto;
   max-height: 560px;
   overflow-y: auto;
+  /* Shadows at the left / right edge while there is more table that way. */
+  background:
+    linear-gradient(to right, var(--surface-1) 40%, transparent) left / 30px 100% no-repeat local,
+    linear-gradient(to left, var(--surface-1) 40%, transparent) right / 30px 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--text-primary) 16%, transparent), transparent)
+      left / 10px 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--text-primary) 16%, transparent), transparent)
+      right / 10px 100% no-repeat scroll;
+}
+
+/* The sort control in a column header and the open/close control in a row
+   are real buttons (reachable with Tab, worked with Enter or Space) that look
+   like the text they replace. */
+table.units th .sort-btn,
+table.units td .row-toggle {
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+table.units th .sort-btn {
+  display: block;
+  width: 100%;
+}
+
+table.units th .sort-btn:focus-visible,
+table.units td .row-toggle:focus-visible,
+.chip:focus-visible,
+.seg button:focus-visible,
+.theme-btn:focus-visible,
+.retry-btn:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 table.units {
@@ -557,10 +598,9 @@ table.units .plan-name {
 /* A floorplan-level listing shows its plan name where the unit number goes. */
 table.units .plan-as-unit {
   display: inline-block;
-  max-width: 24ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
+  max-width: 20ch;
+  white-space: normal;
+  vertical-align: top;
 }
 
 table.units .lease-col {
@@ -767,6 +807,32 @@ table.units tbody tr.empty-row td {
 
   table.units .plan-name {
     display: none;
+  }
+
+  /* Lease length and move-in date stay on screen: a long plan name wraps. */
+  table.units .plan-as-unit {
+    max-width: 12ch;
+  }
+
+  .topbar {
+    align-items: center;
+  }
+
+  .topbar .sub {
+    display: none;
+  }
+}
+
+/* The narrowest phones: tighter cells, so the move-in column stays on screen. */
+@media (max-width: 380px) {
+  table.units {
+    font-size: 12.5px;
+  }
+
+  table.units th,
+  table.units td {
+    padding-left: 5px;
+    padding-right: 4px;
   }
 }
 

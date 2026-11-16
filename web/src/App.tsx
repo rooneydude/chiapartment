@@ -37,6 +37,7 @@ export default function App() {
         <button
           className="theme-btn"
           title={THEME_LABEL[pref]}
+          aria-label={`${THEME_LABEL[pref]} — change`}
           onClick={() => setPref(nextThemePref(pref))}
         >
           {THEME_ICON[pref]}

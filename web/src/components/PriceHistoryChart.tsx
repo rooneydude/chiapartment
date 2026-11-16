@@ -220,12 +220,14 @@ export default function PriceHistoryChart({
         <span className="seg">
           <button
             className={chartMode === "floorplans" ? "on" : ""}
+            aria-pressed={chartMode === "floorplans"}
             onClick={() => setChartMode("floorplans")}
           >
             Floorplans
           </button>
           <button
             className={chartMode === "units" ? "on" : ""}
+            aria-pressed={chartMode === "units"}
             onClick={() => setChartMode("units")}
           >
             Units

@@ -87,6 +87,14 @@ export default function BuildingPage() {
   }, [id, resetForBuilding, attempt, epoch]);
 
   const building: BuildingConfig | undefined = config?.buildings.find((b) => b.id === id);
+  // Each building is its own page in the tab strip, the history and bookmarks.
+  useEffect(() => {
+    if (!building) return;
+    document.title = `${building.name} — Chicago Apartment Tracker`;
+    return () => {
+      document.title = "Chicago Apartment Tracker";
+    };
+  }, [building]);
   const mapping = building?.unitMapping ?? FALLBACK_MAPPING;
 
   const asOf = history?.latest?.timestamp ?? null;

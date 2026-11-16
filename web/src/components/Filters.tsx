@@ -46,6 +46,7 @@ export default function Filters({
     <div className="filters">
       <button
         className={`chip${bedsFilter === null ? " on" : ""}`}
+        aria-pressed={bedsFilter === null}
         onClick={() => setBedsFilter(null)}
         title="Show every bedroom count"
       >
@@ -55,6 +56,7 @@ export default function Filters({
         <button
           key={b}
           className={`chip${bedsFilter?.includes(b) ? " on" : ""}`}
+          aria-pressed={bedsFilter?.includes(b) ?? false}
           onClick={() => toggleBeds(b)}
         >
           {b === 0 ? "Studio" : b === 3 ? "3+ BR" : `${b} BR`}
@@ -100,6 +102,7 @@ export default function Filters({
           min={1}
           max={maxFloor}
           placeholder="1"
+          aria-label="Lowest floor"
           value={floorMin ?? ""}
           onChange={(e) =>
             setFloorRange(e.target.value === "" ? null : Number(e.target.value), floorMax)
@@ -113,6 +116,7 @@ export default function Filters({
           min={1}
           max={maxFloor}
           placeholder={String(maxFloor)}
+          aria-label="Highest floor"
           value={floorMax ?? ""}
           onChange={(e) =>
             setFloorRange(floorMin, e.target.value === "" ? null : Number(e.target.value))

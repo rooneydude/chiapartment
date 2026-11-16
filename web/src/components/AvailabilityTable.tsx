@@ -219,7 +219,7 @@ function UnitDetail({
             Lease length → monthly rent
             {u.availableDate ? ` for a ${mi.kind === "now" ? "move-in now" : `${longDate(u.availableDate)} move-in`}` : ""}
           </div>
-          <div className="lease-grid" role="table" aria-label="Lease term prices">
+          <div className="lease-grid" role="list" aria-label="Lease term prices">
             {table.map((t) => {
               const isAdvertised = t.months === u.leaseTermMonths;
               const isCheapest = cheapest !== null && t.price === cheapest.price;
@@ -227,7 +227,7 @@ function UnitDetail({
               return (
                 <div
                   key={t.months}
-                  role="row"
+                  role="listitem"
                   className={`lease-cell${isAdvertised ? " advertised" : ""}${isCheapest ? " cheapest" : ""}${t.months === compareTerm ? " compare" : ""}`}
                   title={
                     isAdvertised
@@ -492,16 +492,21 @@ export default function AvailabilityTable({
       className={[num ? "num" : "", secondary ? "hide-sm" : ""].join(" ").trim() || undefined}
       title={title}
       aria-sort={sortKey === key ? (sortDir === 1 ? "ascending" : "descending") : "none"}
-      onClick={() => {
-        if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
-        else {
-          setSortKey(key);
-          setSortDir(1);
-        }
-      }}
     >
-      {label}
-      {sortKey === key ? (sortDir === 1 ? " ↑" : " ↓") : ""}
+      <button
+        type="button"
+        className="sort-btn"
+        onClick={() => {
+          if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
+          else {
+            setSortKey(key);
+            setSortDir(1);
+          }
+        }}
+      >
+        {label}
+        {sortKey === key ? (sortDir === 1 ? " ↑" : " ↓") : ""}
+      </button>
     </th>
   );
 
@@ -513,7 +518,7 @@ export default function AvailabilityTable({
   return (
     <>
       <div className="tbl-wrap">
-        <table className="units">
+        <table className="units" aria-label="Listed units">
           <thead>
             <tr>
               {header("unit", "Unit")}
@@ -586,7 +591,6 @@ export default function AvailabilityTable({
                   <tr
                     ref={isSelected && u.unitNumber !== null ? selectedRow : undefined}
                     className={`${isSelected ? "sel" : ""}${isOpen ? " open" : ""}`.trim() || undefined}
-                    aria-expanded={isOpen}
                     onClick={() => {
                       if (u.unitNumber) {
                         selectUnit(selectedUnit === u.unitNumber ? null : u.unitNumber);
@@ -607,11 +611,22 @@ export default function AvailabilityTable({
                           : undefined
                       }
                     >
-                      <span className="caret" aria-hidden="true">
-                        {isOpen ? "▾" : "▸"}
-                      </span>
-                      {/* A floorplan-level listing is identified by its plan name. */}
-                      {u.unitNumber ?? <span className="plan-as-unit">{u.floorplanName}</span>}{" "}
+                      {/* The row opens on a click anywhere in it; this button is the
+                          same control for the keyboard (its click bubbles to the row). */}
+                      <button
+                        type="button"
+                        className="row-toggle"
+                        aria-expanded={isOpen}
+                        aria-label={`${isOpen ? "Hide" : "Show"} lease terms and details for ${
+                          u.unitNumber ? `unit ${u.unitNumber}` : u.floorplanName
+                        }`}
+                      >
+                        <span className="caret" aria-hidden="true">
+                          {isOpen ? "▾" : "▸"}
+                        </span>
+                        {/* A floorplan-level listing is identified by its plan name. */}
+                        {u.unitNumber ?? <span className="plan-as-unit">{u.floorplanName}</span>}
+                      </button>{" "}
                       {newSet.has(listingKey(u)) &&
                         (pricedAgain.has(listingKey(u)) ? (
                           <span
