@@ -89,9 +89,11 @@ jobs:
           CAPTURE=false; SKYLINE=false; BUILDINGS="$INPUT_BUILDINGS"
           if [ "${{ inputs.capture }}" = "true" ] || echo "$TRIG" | grep -qw capture; then CAPTURE=true; fi
           if [ "${{ inputs.skyline }}" = "true" ] || echo "$TRIG" | grep -qw skyline; then SKYLINE=true; fi
-          if [ -z "$BUILDINGS" ]; then BUILDINGS=$(echo "$TRIG" | grep -o 'buildings=[a-z0-9,-]*' | cut -d= -f2 || true); fi
-          # Building ids are lower-case letters, digits and dashes.
-          if ! printf '%s' "$BUILDINGS" | grep -Eq '^[a-z0-9,-]*$'; then
+          if [ -z "$BUILDINGS" ]; then BUILDINGS=$(echo "$TRIG" | grep -oE 'buildings=[a-z0-9,-]+' | head -1 | cut -d= -f2 || true); fi
+          # Empty means scrape every building. `printf '%s'` with no newline
+          # makes grep exit 1 on empty stdin, which aborted the 2026-11-17
+          # post-merge refresh (run 44099079573) and would fail every cron.
+          if [ -n "$BUILDINGS" ] && ! printf '%s\n' "$BUILDINGS" | grep -Eq '^[a-z0-9,-]+$'; then
             echo "::error::Unexpected characters in the buildings list."
             exit 1
           fi
