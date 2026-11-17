@@ -255,6 +255,15 @@ export default function BuildingPage() {
           ))}
         </div>
       )}
+      {/* Not a warning about the tracker and not news from the building: a
+          detail is missing because a page could not be read this run. */}
+      {(history.gaps?.length ?? 0) > 0 && (
+        <div className="info-banner" role="status">
+          {history.gaps!.map((g) => (
+            <div key={g}>ℹ {g}</div>
+          ))}
+        </div>
+      )}
       <DeltaSummary
         delta={history.delta}
         concession={history.warnings?.some((w) => w.code === "uniform-reprice") ?? false}

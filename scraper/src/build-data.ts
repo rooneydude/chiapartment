@@ -41,6 +41,8 @@ export interface OkRun {
   /** Undefined when the run did not record such rows at all. */
   alsoListed?: AlsoListed[] | undefined;
   notices?: string[];
+  /** What the run could not read although it succeeded. */
+  gaps?: string[];
 }
 
 /** How far back a "this detail used to be there" check looks. */
@@ -284,6 +286,7 @@ export function buildData(root: string): void {
         // 2026): "none listed" and "not recorded" are different things.
         alsoListed: bs.alsoListed,
         notices: bs.notices ?? [],
+        gaps: bs.gaps ?? [],
       });
     }
     if (lastAny && lastSnapTs) {
@@ -381,6 +384,7 @@ export function buildData(root: string): void {
       history.omitted = latest.omitted ?? [];
       history.alsoListed = withLastPrices(latest.alsoListed ?? [], okRuns);
       history.notices = latest.notices ?? [];
+      if (latest.gaps && latest.gaps.length > 0) history.gaps = latest.gaps;
       history.focusDelta = focusDeltaFromRuns(okRuns, focusBeds);
     }
     history.warnings = computeWarnings(lastAny, okRuns, latest?.omitted ?? []);

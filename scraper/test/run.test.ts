@@ -17,6 +17,7 @@ import {
   priceFormFlips,
   quarantineInvalidBuildings,
   sanitizeListings,
+  scrapeOne,
   type ScrapeResult,
 } from "../src/run";
 
@@ -324,5 +325,44 @@ describe("one bad row must not cost the whole run", () => {
       ["b", "error", 0],
     ]);
     expect(snap.buildings[1]!.error).toMatch(/does not fit the snapshot format \(units\.0\.price/);
+  });
+});
+
+describe("what a run records besides its units", () => {
+  const building = BuildingConfigSchema.parse({
+    id: "somewhere",
+    name: "Somewhere",
+    address: "x",
+    lat: 41.9,
+    lon: -87.63,
+    url: "https://example.com/",
+    adapter: "sightmap",
+    geometry: { floors: 10 },
+  });
+  const opts = { fixtures: true, capture: false, commit: false, buildings: null };
+
+  it("keeps each notice and each unread page once, and says nothing when there is nothing", async () => {
+    // offline mode replays a building's recorded responses: an empty recording will do
+    mkdirSync(join(ROOT, "scraper", "fixtures", building.id), { recursive: true });
+    writeFileSync(join(ROOT, "scraper", "fixtures", building.id, "manifest.json"), "[]");
+    const result = await scrapeOne(ROOT, building, opts, {
+      id: "fake",
+      scrape: async (_b, ctx) => {
+        ctx.reportNotice?.("One month free");
+        ctx.reportNotice?.("One month free");
+        ctx.reportGap?.("The building’s own website refused the tracker this run (HTTP 403).");
+        ctx.reportGap?.("The building’s own website refused the tracker this run (HTTP 403).");
+        return [unit("101", 2000)];
+      },
+    });
+    expect(result.status).toBe("ok");
+    expect(result.units).toHaveLength(1);
+    expect(result.notices).toEqual(["One month free"]);
+    expect(result.gaps).toEqual(["The building’s own website refused the tracker this run (HTTP 403)."]);
+
+    const quiet = await scrapeOne(ROOT, building, opts, { id: "fake", scrape: async () => [unit("101", 2000)] });
+    expect(quiet).not.toHaveProperty("gaps");
+    expect(quiet).not.toHaveProperty("notices");
+    expect(quiet.alsoListed).toEqual([]);
   });
 });

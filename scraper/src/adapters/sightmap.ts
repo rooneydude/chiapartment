@@ -45,6 +45,55 @@ export interface SightmapUnit {
   leasing_start_dates_url?: string | null;
   /** [min, max] mandatory monthly charges on top of base rent. */
   total_additional_expenses?: [number, number] | null;
+  /** The unit's charges by kind; the group with key "monthly" is what is owed every month. */
+  static_expenses?: { key?: string; expenses?: SightmapExpense[] }[] | null;
+  /** Expense id → what the site says it costs: numbers, or only words ("Varies"). */
+  expense_amounts?: Record<string, SightmapExpenseAmount> | null;
+  static_expense_amounts?: Record<string, SightmapExpenseAmount> | null;
+}
+
+export interface SightmapExpense {
+  id: string | number;
+  label?: string | null;
+  is_required?: boolean | null;
+}
+
+export interface SightmapExpenseAmount {
+  min_amount?: string | number | null;
+  max_amount?: string | number | null;
+  amount?: string | number | null;
+  text_amount?: string | null;
+  display_amount?: string | null;
+}
+
+/**
+ * Required monthly charges the feed lists with no amount — only words such as
+ * "Varies" or "Usage-Based" — as "Label: the site's words". On 17 Nov 2026 the
+ * building's utility bundle went from "$100–$230" to "Varies": the rent the
+ * site then headlines is no longer the monthly bill, and a tracker that only
+ * adds up the charges with numbers on them would quietly drop that fact.
+ */
+export function unpricedMonthlyCharges(u: SightmapUnit): string[] {
+  const out: string[] = [];
+  const hasNumber = (a: SightmapExpenseAmount | undefined) =>
+    [a?.min_amount, a?.max_amount, a?.amount].some(
+      (v) => v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v)),
+    );
+  for (const group of u.static_expenses ?? []) {
+    if (group?.key !== "monthly") continue;
+    for (const expense of group.expenses ?? []) {
+      if (expense?.is_required === false) continue;
+      const id = String(expense.id);
+      const amount = u.expense_amounts?.[id] ?? u.static_expense_amounts?.[id];
+      if (hasNumber(amount)) continue;
+      const label = (expense.label ?? "").replace(/\s+/g, " ").trim();
+      if (!label) continue;
+      const words = (amount?.display_amount ?? amount?.text_amount ?? "").replace(/\s+/g, " ").trim();
+      const entry = words ? `${label}: ${words}` : label;
+      if (!out.includes(entry)) out.push(entry);
+    }
+  }
+  return out;
 }
 
 export interface SightmapPlan {
@@ -354,12 +403,15 @@ async function fetchMarketingExtras(
     const res = await ctx.fetch(pageUrl);
     if (!res.ok) {
       ctx.log(`marketing page not available (HTTP ${res.status}) — specials and vacancy dates skipped`);
+      // 401 / 403 / 429 is a refusal: said as one, and left alone.
+      ctx.reportGap?.(marketingGap(looksLikeChallenge("", res.status) ? "refused" : "unread", `HTTP ${res.status}`));
       return null;
     }
     const html = await res.text();
     ctx.record?.(pageUrl, html, "text/html");
     if (looksLikeChallenge(html, res.status)) {
       ctx.log("marketing page refused the request (bot protection) — specials and vacancy dates skipped");
+      ctx.reportGap?.(marketingGap("refused", "a bot-protection page"));
       return null;
     }
     return parseMarketingPage(html);
@@ -367,8 +419,20 @@ async function fetchMarketingExtras(
     ctx.log(
       `marketing page not available (${err instanceof Error ? err.message : err}) — specials and vacancy dates skipped`,
     );
+    ctx.reportGap?.(marketingGap("unread", "the request failed"));
     return null;
   }
+}
+
+/**
+ * The sentence shown on the building's page when its own website could not
+ * be read. Without it, yesterday's special offer simply vanishing reads as
+ * "the offer ended" — when all that happened is that the page was not read.
+ */
+function marketingGap(kind: "refused" | "unread", how: string): string {
+  return `The building’s own website ${
+    kind === "refused" ? "refused the tracker this run" : "could not be read this run"
+  } (${how}). Its special offers and “vacant since” dates come from that page, so they are missing from this snapshot — the building has not necessarily withdrawn them.`;
 }
 
 export async function fetchSightmapPayload(
@@ -498,6 +562,7 @@ export const sightmap: Adapter = {
         fees[1] > 0
           ? { min: Math.min(fees[0], fees[1]), max: Math.max(fees[0], fees[1]) }
           : undefined;
+      const unpriced = unpricedMonthlyCharges(u);
       // "Convertible" plans are filed as studios by the site; keep the label.
       const planType = /convertible/i.test(`${plan.filter_label ?? ""} ${plan.name}`)
         ? "Convertible"
@@ -514,6 +579,7 @@ export const sightmap: Adapter = {
         sqft,
         price: Math.round(price),
         ...(monthlyFees ? { monthlyFees } : {}),
+        ...(unpriced.length > 0 ? { monthlyFeesUnpriced: unpriced } : {}),
         leaseTermMonths: term,
         ...(table ? { leaseTerms: table.terms } : {}),
         availableDate,
