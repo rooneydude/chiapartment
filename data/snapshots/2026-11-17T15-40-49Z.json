@@ -1,0 +1,2341 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-11-17T15:40:49Z",
+  "buildings": [
+    {
+      "buildingId": "1225-old-town",
+      "status": "ok",
+      "source": {
+        "adapter": "sightmap",
+        "fetchedUrl": "https://sightmap.com/app/api/v1/60p7xoklv7n/sightmaps/87594",
+        "requests": 17
+      },
+      "units": [
+        {
+          "unitNumber": "0509",
+          "floorplanName": "bhra14.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 941,
+          "price": 3774,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 5009
+            },
+            {
+              "months": 3,
+              "price": 9067
+            },
+            {
+              "months": 4,
+              "price": 4327
+            },
+            {
+              "months": 5,
+              "price": 4102
+            },
+            {
+              "months": 6,
+              "price": 4011
+            },
+            {
+              "months": 7,
+              "price": 3940
+            },
+            {
+              "months": 8,
+              "price": 3883
+            },
+            {
+              "months": 9,
+              "price": 4841
+            },
+            {
+              "months": 10,
+              "price": 3810
+            },
+            {
+              "months": 11,
+              "price": 4697
+            },
+            {
+              "months": 12,
+              "price": 4955
+            },
+            {
+              "months": 13,
+              "price": 3774
+            },
+            {
+              "months": 14,
+              "price": 3802
+            },
+            {
+              "months": 15,
+              "price": 3774
+            },
+            {
+              "months": 16,
+              "price": 3799
+            },
+            {
+              "months": 17,
+              "price": 3774
+            },
+            {
+              "months": 18,
+              "price": 3774
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-10-08",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=43&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0625",
+          "floorplanName": "bhra6.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 786,
+          "price": 3529,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 10680
+            },
+            {
+              "months": 3,
+              "price": 4079
+            },
+            {
+              "months": 4,
+              "price": 3895
+            },
+            {
+              "months": 5,
+              "price": 3785
+            },
+            {
+              "months": 6,
+              "price": 3712
+            },
+            {
+              "months": 7,
+              "price": 3660
+            },
+            {
+              "months": 8,
+              "price": 4636
+            },
+            {
+              "months": 9,
+              "price": 3590
+            },
+            {
+              "months": 10,
+              "price": 4460
+            },
+            {
+              "months": 11,
+              "price": 4701
+            },
+            {
+              "months": 12,
+              "price": 3529
+            },
+            {
+              "months": 13,
+              "price": 3529
+            },
+            {
+              "months": 14,
+              "price": 3529
+            },
+            {
+              "months": 15,
+              "price": 3529
+            },
+            {
+              "months": 16,
+              "price": 3529
+            },
+            {
+              "months": 17,
+              "price": 3529
+            },
+            {
+              "months": 18,
+              "price": 3529
+            }
+          ],
+          "availableDate": "2026-12-26",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-12-26&UnitId=85&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "bhrb4.2 2 BR, 2 BTH",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1166,
+          "price": 4944,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 22037
+            },
+            {
+              "months": 3,
+              "price": 5825
+            },
+            {
+              "months": 4,
+              "price": 9754
+            },
+            {
+              "months": 5,
+              "price": 5402
+            },
+            {
+              "months": 6,
+              "price": 5296
+            },
+            {
+              "months": 7,
+              "price": 5221
+            },
+            {
+              "months": 8,
+              "price": 6737
+            },
+            {
+              "months": 9,
+              "price": 6406
+            },
+            {
+              "months": 10,
+              "price": 6091
+            },
+            {
+              "months": 11,
+              "price": 6093
+            },
+            {
+              "months": 12,
+              "price": 5032
+            },
+            {
+              "months": 13,
+              "price": 5012
+            },
+            {
+              "months": 14,
+              "price": 4994
+            },
+            {
+              "months": 15,
+              "price": 4979
+            },
+            {
+              "months": 16,
+              "price": 5941
+            },
+            {
+              "months": 17,
+              "price": 4954
+            },
+            {
+              "months": 18,
+              "price": 4944
+            }
+          ],
+          "availableDate": "2026-11-22",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-22&UnitId=142&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0704",
+          "floorplanName": "bhrb3.2 2 BR, 2 BTH",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1134,
+          "price": 4874,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 14554
+            },
+            {
+              "months": 3,
+              "price": 5755
+            },
+            {
+              "months": 4,
+              "price": 5491
+            },
+            {
+              "months": 5,
+              "price": 5332
+            },
+            {
+              "months": 6,
+              "price": 7294
+            },
+            {
+              "months": 7,
+              "price": 6781
+            },
+            {
+              "months": 8,
+              "price": 6335
+            },
+            {
+              "months": 9,
+              "price": 6300
+            },
+            {
+              "months": 10,
+              "price": 5114
+            },
+            {
+              "months": 11,
+              "price": 5197
+            },
+            {
+              "months": 12,
+              "price": 5058
+            },
+            {
+              "months": 13,
+              "price": 4942
+            },
+            {
+              "months": 14,
+              "price": 6023
+            },
+            {
+              "months": 15,
+              "price": 4909
+            },
+            {
+              "months": 16,
+              "price": 4896
+            },
+            {
+              "months": 17,
+              "price": 4884
+            },
+            {
+              "months": 18,
+              "price": 4874
+            }
+          ],
+          "availableDate": "2027-01-19",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2027-01-19&UnitId=130&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0705",
+          "floorplanName": "bhra7.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 787,
+          "price": 3554,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4707
+            },
+            {
+              "months": 3,
+              "price": 8290
+            },
+            {
+              "months": 4,
+              "price": 4038
+            },
+            {
+              "months": 5,
+              "price": 3810
+            },
+            {
+              "months": 6,
+              "price": 3737
+            },
+            {
+              "months": 7,
+              "price": 3685
+            },
+            {
+              "months": 8,
+              "price": 3646
+            },
+            {
+              "months": 9,
+              "price": 4523
+            },
+            {
+              "months": 10,
+              "price": 3591
+            },
+            {
+              "months": 11,
+              "price": 4389
+            },
+            {
+              "months": 12,
+              "price": 4630
+            },
+            {
+              "months": 13,
+              "price": 3554
+            },
+            {
+              "months": 14,
+              "price": 3588
+            },
+            {
+              "months": 15,
+              "price": 3554
+            },
+            {
+              "months": 16,
+              "price": 3584
+            },
+            {
+              "months": 17,
+              "price": 3554
+            },
+            {
+              "months": 18,
+              "price": 3554
+            }
+          ],
+          "availableDate": "2026-11-22",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-22&UnitId=89&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0718",
+          "floorplanName": "bhra12.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 864,
+          "price": 3703,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 11155
+            },
+            {
+              "months": 3,
+              "price": 4414
+            },
+            {
+              "months": 4,
+              "price": 4067
+            },
+            {
+              "months": 5,
+              "price": 3958
+            },
+            {
+              "months": 6,
+              "price": 3885
+            },
+            {
+              "months": 7,
+              "price": 3833
+            },
+            {
+              "months": 8,
+              "price": 4859
+            },
+            {
+              "months": 9,
+              "price": 3764
+            },
+            {
+              "months": 10,
+              "price": 4677
+            },
+            {
+              "months": 11,
+              "price": 4943
+            },
+            {
+              "months": 12,
+              "price": 3703
+            },
+            {
+              "months": 13,
+              "price": 3741
+            },
+            {
+              "months": 14,
+              "price": 3703
+            },
+            {
+              "months": 15,
+              "price": 3736
+            },
+            {
+              "months": 16,
+              "price": 3703
+            },
+            {
+              "months": 17,
+              "price": 3703
+            },
+            {
+              "months": 18,
+              "price": 3703
+            }
+          ],
+          "availableDate": "2026-12-13",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-12-13&UnitId=30&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0725",
+          "floorplanName": "bhra6.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 786,
+          "price": 3499,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4707
+            },
+            {
+              "months": 3,
+              "price": 4049
+            },
+            {
+              "months": 4,
+              "price": 3865
+            },
+            {
+              "months": 5,
+              "price": 3755
+            },
+            {
+              "months": 6,
+              "price": 3682
+            },
+            {
+              "months": 7,
+              "price": 4780
+            },
+            {
+              "months": 8,
+              "price": 3591
+            },
+            {
+              "months": 9,
+              "price": 4545
+            },
+            {
+              "months": 10,
+              "price": 4819
+            },
+            {
+              "months": 11,
+              "price": 3527
+            },
+            {
+              "months": 12,
+              "price": 3548
+            },
+            {
+              "months": 13,
+              "price": 3499
+            },
+            {
+              "months": 14,
+              "price": 3541
+            },
+            {
+              "months": 15,
+              "price": 3499
+            },
+            {
+              "months": 16,
+              "price": 3499
+            },
+            {
+              "months": 17,
+              "price": 3499
+            },
+            {
+              "months": 18,
+              "price": 3499
+            }
+          ],
+          "availableDate": "2027-01-17",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2027-01-17&UnitId=76&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0812",
+          "floorplanName": "bhre3.1 Studio",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 543,
+          "price": 2382,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 3139
+            },
+            {
+              "months": 3,
+              "price": 2855
+            },
+            {
+              "months": 4,
+              "price": 5830
+            },
+            {
+              "months": 5,
+              "price": 5235
+            },
+            {
+              "months": 6,
+              "price": 2571
+            },
+            {
+              "months": 7,
+              "price": 3444
+            },
+            {
+              "months": 8,
+              "price": 3532
+            },
+            {
+              "months": 9,
+              "price": 2476
+            },
+            {
+              "months": 10,
+              "price": 2457
+            },
+            {
+              "months": 11,
+              "price": 5806
+            },
+            {
+              "months": 12,
+              "price": 3846
+            },
+            {
+              "months": 13,
+              "price": 2418
+            },
+            {
+              "months": 14,
+              "price": 2409
+            },
+            {
+              "months": 15,
+              "price": 3054
+            },
+            {
+              "months": 16,
+              "price": 2394
+            },
+            {
+              "months": 17,
+              "price": 2387
+            },
+            {
+              "months": 18,
+              "price": 2382
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-10-08",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=208&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0906",
+          "floorplanName": "bhra3.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 703,
+          "price": 3238,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4386
+            },
+            {
+              "months": 3,
+              "price": 7791
+            },
+            {
+              "months": 4,
+              "price": 3688
+            },
+            {
+              "months": 5,
+              "price": 3495
+            },
+            {
+              "months": 6,
+              "price": 3421
+            },
+            {
+              "months": 7,
+              "price": 3369
+            },
+            {
+              "months": 8,
+              "price": 3330
+            },
+            {
+              "months": 9,
+              "price": 4163
+            },
+            {
+              "months": 10,
+              "price": 3275
+            },
+            {
+              "months": 11,
+              "price": 4033
+            },
+            {
+              "months": 12,
+              "price": 4252
+            },
+            {
+              "months": 13,
+              "price": 3238
+            },
+            {
+              "months": 14,
+              "price": 3262
+            },
+            {
+              "months": 15,
+              "price": 3238
+            },
+            {
+              "months": 16,
+              "price": 3259
+            },
+            {
+              "months": 17,
+              "price": 3238
+            },
+            {
+              "months": 18,
+              "price": 3238
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-09-12",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=59&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0918",
+          "floorplanName": "bhra12.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 864,
+          "price": 3592,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4753
+            },
+            {
+              "months": 3,
+              "price": 8570
+            },
+            {
+              "months": 4,
+              "price": 4050
+            },
+            {
+              "months": 5,
+              "price": 3847
+            },
+            {
+              "months": 6,
+              "price": 3774
+            },
+            {
+              "months": 7,
+              "price": 3722
+            },
+            {
+              "months": 8,
+              "price": 3683
+            },
+            {
+              "months": 9,
+              "price": 4611
+            },
+            {
+              "months": 10,
+              "price": 3628
+            },
+            {
+              "months": 11,
+              "price": 4471
+            },
+            {
+              "months": 12,
+              "price": 4716
+            },
+            {
+              "months": 13,
+              "price": 3592
+            },
+            {
+              "months": 14,
+              "price": 3619
+            },
+            {
+              "months": 15,
+              "price": 3592
+            },
+            {
+              "months": 16,
+              "price": 3615
+            },
+            {
+              "months": 17,
+              "price": 3592
+            },
+            {
+              "months": 18,
+              "price": 3592
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-09-09",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=32&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1022",
+          "floorplanName": "bhra11.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 858,
+          "price": 3753,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 11293
+            },
+            {
+              "months": 3,
+              "price": 4299
+            },
+            {
+              "months": 4,
+              "price": 4117
+            },
+            {
+              "months": 5,
+              "price": 4008
+            },
+            {
+              "months": 6,
+              "price": 3935
+            },
+            {
+              "months": 7,
+              "price": 5116
+            },
+            {
+              "months": 8,
+              "price": 4923
+            },
+            {
+              "months": 9,
+              "price": 4870
+            },
+            {
+              "months": 10,
+              "price": 4740
+            },
+            {
+              "months": 11,
+              "price": 4998
+            },
+            {
+              "months": 12,
+              "price": 3753
+            },
+            {
+              "months": 13,
+              "price": 3753
+            },
+            {
+              "months": 14,
+              "price": 3753
+            },
+            {
+              "months": 15,
+              "price": 3753
+            },
+            {
+              "months": 16,
+              "price": 3753
+            },
+            {
+              "months": 17,
+              "price": 3753
+            },
+            {
+              "months": 18,
+              "price": 3753
+            }
+          ],
+          "availableDate": "2027-01-01",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2027-01-01&UnitId=27&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1308",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 5544,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 7302
+            },
+            {
+              "months": 3,
+              "price": 7156
+            },
+            {
+              "months": 4,
+              "price": 6361
+            },
+            {
+              "months": 5,
+              "price": 6423
+            },
+            {
+              "months": 6,
+              "price": 5983
+            },
+            {
+              "months": 7,
+              "price": 5889
+            },
+            {
+              "months": 8,
+              "price": 5819
+            },
+            {
+              "months": 9,
+              "price": 8159
+            },
+            {
+              "months": 10,
+              "price": 7606
+            },
+            {
+              "months": 11,
+              "price": 7399
+            },
+            {
+              "months": 12,
+              "price": 6664
+            },
+            {
+              "months": 13,
+              "price": 6561
+            },
+            {
+              "months": 14,
+              "price": 5607
+            },
+            {
+              "months": 15,
+              "price": 5691
+            },
+            {
+              "months": 16,
+              "price": 5583
+            },
+            {
+              "months": 17,
+              "price": 5648
+            },
+            {
+              "months": 18,
+              "price": 5544
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-09-01",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=186&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1503",
+          "floorplanName": "bhrb6.2 2 BR, 2 BTH,",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1201,
+          "price": 5007,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 23169
+            },
+            {
+              "months": 3,
+              "price": 5914
+            },
+            {
+              "months": 4,
+              "price": 10055
+            },
+            {
+              "months": 5,
+              "price": 5466
+            },
+            {
+              "months": 6,
+              "price": 5360
+            },
+            {
+              "months": 7,
+              "price": 5284
+            },
+            {
+              "months": 8,
+              "price": 6890
+            },
+            {
+              "months": 9,
+              "price": 6543
+            },
+            {
+              "months": 10,
+              "price": 6211
+            },
+            {
+              "months": 11,
+              "price": 6215
+            },
+            {
+              "months": 12,
+              "price": 5095
+            },
+            {
+              "months": 13,
+              "price": 5184
+            },
+            {
+              "months": 14,
+              "price": 5071
+            },
+            {
+              "months": 15,
+              "price": 5043
+            },
+            {
+              "months": 16,
+              "price": 6059
+            },
+            {
+              "months": 17,
+              "price": 5018
+            },
+            {
+              "months": 18,
+              "price": 5007
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-09-10",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=168&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1505",
+          "floorplanName": "bhra7.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 787,
+          "price": 3619,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4535
+            },
+            {
+              "months": 3,
+              "price": 4169
+            },
+            {
+              "months": 4,
+              "price": 3985
+            },
+            {
+              "months": 5,
+              "price": 3875
+            },
+            {
+              "months": 6,
+              "price": 3802
+            },
+            {
+              "months": 7,
+              "price": 4939
+            },
+            {
+              "months": 8,
+              "price": 3711
+            },
+            {
+              "months": 9,
+              "price": 4699
+            },
+            {
+              "months": 10,
+              "price": 4959
+            },
+            {
+              "months": 11,
+              "price": 3636
+            },
+            {
+              "months": 12,
+              "price": 3619
+            },
+            {
+              "months": 13,
+              "price": 3619
+            },
+            {
+              "months": 14,
+              "price": 3619
+            },
+            {
+              "months": 15,
+              "price": 3619
+            },
+            {
+              "months": 16,
+              "price": 3619
+            },
+            {
+              "months": 17,
+              "price": 3619
+            },
+            {
+              "months": 18,
+              "price": 3619
+            }
+          ],
+          "availableDate": "2027-01-04",
+          "availableNow": false,
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2027-01-04&UnitId=96&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1605",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 5539,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 7297
+            },
+            {
+              "months": 3,
+              "price": 7151
+            },
+            {
+              "months": 4,
+              "price": 6356
+            },
+            {
+              "months": 5,
+              "price": 6418
+            },
+            {
+              "months": 6,
+              "price": 5979
+            },
+            {
+              "months": 7,
+              "price": 5884
+            },
+            {
+              "months": 8,
+              "price": 5814
+            },
+            {
+              "months": 9,
+              "price": 8152
+            },
+            {
+              "months": 10,
+              "price": 7600
+            },
+            {
+              "months": 11,
+              "price": 7392
+            },
+            {
+              "months": 12,
+              "price": 6659
+            },
+            {
+              "months": 13,
+              "price": 6555
+            },
+            {
+              "months": 14,
+              "price": 5602
+            },
+            {
+              "months": 15,
+              "price": 5686
+            },
+            {
+              "months": 16,
+              "price": 5578
+            },
+            {
+              "months": 17,
+              "price": 5642
+            },
+            {
+              "months": 18,
+              "price": 5539
+            }
+          ],
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-09-09",
+          "url": "https://www.1225oldtown.com/OnlineLeasing.aspx?SearchUrl=https%3A%2F%2Fwww.1225oldtown.com%2FOnlineLeasing.aspx&MoveInDate=2026-11-17&UnitId=185&LeaseTerm=18"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Limited-Time Offer: Now Offering $1,500 Off Base Rent on Select Units! — Contact us today to schedule a tour."
+      ]
+    },
+    {
+      "buildingId": "old-town-park-1",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/availability-tower-1",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "2313",
+          "floorplanName": "S2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 565,
+          "price": 2466,
+          "priceMax": 2487,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139574&UnitID=35648567&header=1"
+        },
+        {
+          "unitNumber": "1012",
+          "floorplanName": "S2A",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 560,
+          "price": 2690,
+          "priceMax": 2713,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139575&UnitID=35648431&header=1"
+        },
+        {
+          "unitNumber": "2312",
+          "floorplanName": "S2A",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 560,
+          "price": 2745,
+          "priceMax": 2769,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139575&UnitID=35648566&header=1"
+        },
+        {
+          "unitNumber": "2111",
+          "floorplanName": "A1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 680,
+          "price": 3359,
+          "priceMax": 3514,
+          "availableDate": "2026-12-18",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139576&UnitID=35648535&header=1"
+        },
+        {
+          "unitNumber": "1004",
+          "floorplanName": "A2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 690,
+          "outdoorSqft": 69,
+          "price": 3623,
+          "priceMax": 3827,
+          "availableDate": "2026-11-26",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139577&UnitID=35648423&header=1"
+        },
+        {
+          "unitNumber": "2002",
+          "floorplanName": "A3",
+          "beds": 1,
+          "baths": null,
+          "sqft": 740,
+          "outdoorSqft": 65,
+          "price": 3805,
+          "priceMax": 3943,
+          "availableDate": "2026-12-07",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139578&UnitID=35648511&header=1"
+        },
+        {
+          "unitNumber": "1906",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 705,
+          "outdoorSqft": 65,
+          "price": 3689,
+          "priceMax": 3822,
+          "availableDate": "2026-12-12",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139579&UnitID=35648500&header=1"
+        },
+        {
+          "unitNumber": "2306",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 705,
+          "outdoorSqft": 65,
+          "price": 3471,
+          "priceMax": 3667,
+          "availableDate": "2026-11-28",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139579&UnitID=35648560&header=1"
+        },
+        {
+          "unitNumber": "2906",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 705,
+          "outdoorSqft": 65,
+          "price": 3852,
+          "priceMax": 3991,
+          "availableDate": "2027-01-22",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139579&UnitID=35648633&header=1"
+        },
+        {
+          "unitNumber": "1910",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3384,
+          "priceMax": 3541,
+          "availableDate": "2026-12-15",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139580&UnitID=35648504&header=1"
+        },
+        {
+          "unitNumber": "2810",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3529,
+          "priceMax": 3669,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139580&UnitID=35648629&header=1"
+        },
+        {
+          "unitNumber": "0203",
+          "floorplanName": "A6",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 855,
+          "outdoorSqft": 69,
+          "price": 3631,
+          "priceMax": 3872,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139582&UnitID=35648305&header=1"
+        },
+        {
+          "unitNumber": "2603",
+          "floorplanName": "A6",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 830,
+          "outdoorSqft": 69,
+          "price": 3921,
+          "priceMax": 4182,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139582&UnitID=35648602&header=1"
+        },
+        {
+          "unitNumber": "0622",
+          "floorplanName": "B1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 930,
+          "outdoorSqft": 66,
+          "price": 4381,
+          "priceMax": 4761,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139583&UnitID=35648382&header=1"
+        },
+        {
+          "unitNumber": "1708",
+          "floorplanName": "B2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1080,
+          "outdoorSqft": 114,
+          "price": 4793,
+          "priceMax": 4967,
+          "availableDate": "2026-12-19",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139584&UnitID=35648472&header=1"
+        },
+        {
+          "unitNumber": "0708",
+          "floorplanName": "B3",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1085,
+          "outdoorSqft": 57,
+          "price": 4788,
+          "priceMax": 5203,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139585&UnitID=35648390&header=1"
+        },
+        {
+          "unitNumber": "0207",
+          "floorplanName": "B4",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1105,
+          "outdoorSqft": 114,
+          "price": 4629,
+          "priceMax": 5030,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139586&UnitID=35648309&header=1"
+        },
+        {
+          "unitNumber": "0619",
+          "floorplanName": "S3A-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 565,
+          "price": 2545,
+          "priceMax": 2587,
+          "availableDate": "2026-12-10",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=5355927&UnitID=35648379&header=1"
+        },
+        {
+          "unitNumber": "0709",
+          "floorplanName": "S5",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 625,
+          "price": 2505,
+          "priceMax": 2526,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=5393559&UnitID=35648391&header=1"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Limited-Time Specials — Receive up to a $1,000 Rent Credit! — Call our leasing team to learn more."
+      ]
+    },
+    {
+      "buildingId": "old-town-park-2",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/availability-tower-2",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "2912",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 510,
+          "outdoorSqft": 93,
+          "price": 2519,
+          "priceMax": 2562,
+          "availableDate": "2026-12-10",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158320&UnitID=16936329&header=1"
+        },
+        {
+          "unitNumber": "3412",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 510,
+          "outdoorSqft": 93,
+          "price": 2590,
+          "priceMax": 2634,
+          "availableDate": "2026-12-06",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158320&UnitID=16936322&header=1"
+        },
+        {
+          "unitNumber": "3712",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 510,
+          "outdoorSqft": 93,
+          "price": 2700,
+          "priceMax": 2723,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158320&UnitID=16936320&header=1"
+        },
+        {
+          "unitNumber": "2604",
+          "floorplanName": "S2-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 550,
+          "price": 2535,
+          "priceMax": 2556,
+          "availableDate": "2026-11-19",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158330&UnitID=16936390&header=1"
+        },
+        {
+          "unitNumber": "0802",
+          "floorplanName": "S3",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 565,
+          "price": 2459,
+          "priceMax": 2500,
+          "availableDate": "2026-12-29",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158324&UnitID=16936411&header=1"
+        },
+        {
+          "unitNumber": "1510",
+          "floorplanName": "A1M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 54,
+          "price": 3430,
+          "priceMax": 3588,
+          "availableDate": "2026-12-22",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158327&UnitID=16936073&header=1"
+        },
+        {
+          "unitNumber": "3510",
+          "floorplanName": "A1M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 54,
+          "price": 3612,
+          "priceMax": 3779,
+          "availableDate": "2026-12-05",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158327&UnitID=16936057&header=1"
+        },
+        {
+          "unitNumber": "1807",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 46,
+          "price": 3456,
+          "priceMax": 3651,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158340&UnitID=16936137&header=1"
+        },
+        {
+          "unitNumber": "2107",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 46,
+          "price": 3471,
+          "priceMax": 3597,
+          "availableDate": "2026-12-07",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158340&UnitID=16936139&header=1"
+        },
+        {
+          "unitNumber": "2607",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 46,
+          "price": 3522,
+          "priceMax": 3720,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158340&UnitID=16936131&header=1"
+        },
+        {
+          "unitNumber": "3307",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 46,
+          "price": 3618,
+          "priceMax": 3822,
+          "availableDate": "2026-11-28",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158340&UnitID=16936126&header=1"
+        },
+        {
+          "unitNumber": "2203",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3631,
+          "priceMax": 3872,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936166&header=1"
+        },
+        {
+          "unitNumber": "2803",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3631,
+          "priceMax": 3872,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936160&header=1"
+        },
+        {
+          "unitNumber": "3303",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3921,
+          "priceMax": 4063,
+          "availableDate": "2026-12-09",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936153&header=1"
+        },
+        {
+          "unitNumber": "3503",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3853,
+          "priceMax": 4108,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936155&header=1"
+        },
+        {
+          "unitNumber": "3603",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3977,
+          "priceMax": 4121,
+          "availableDate": "2026-12-26",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936156&header=1"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "B1-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1020,
+          "outdoorSqft": 61,
+          "price": 4501,
+          "priceMax": 4891,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158344&UnitID=16936179&header=1"
+        },
+        {
+          "unitNumber": "0901",
+          "floorplanName": "B1-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1020,
+          "outdoorSqft": 61,
+          "price": 4771,
+          "priceMax": 4944,
+          "availableDate": "2027-01-21",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158344&UnitID=16936180&header=1"
+        },
+        {
+          "unitNumber": "3111",
+          "floorplanName": "C1-1",
+          "beds": 3,
+          "baths": null,
+          "sqft": 1235,
+          "outdoorSqft": 54,
+          "price": 6899,
+          "priceMax": 7149,
+          "availableDate": "2027-02-05",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158347&UnitID=16936291&header=1"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Limited-Time Specials — Receive up to a $1,000 Rent Credit! — Call our leasing team to learn more."
+      ]
+    },
+    {
+      "buildingId": "old-town-park-3",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/availability-tower-3",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "3603",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2449,
+          "priceMax": 2470,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573186&UnitID=28539092&header=1"
+        },
+        {
+          "unitNumber": "3703",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2433,
+          "priceMax": 2454,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573186&UnitID=28539106&header=1"
+        },
+        {
+          "unitNumber": "3803",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2560,
+          "priceMax": 2603,
+          "availableDate": "2026-12-13",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573186&UnitID=28539119&header=1"
+        },
+        {
+          "unitNumber": "3605",
+          "floorplanName": "S3-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2449,
+          "priceMax": 2470,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573188&UnitID=28539094&header=1"
+        },
+        {
+          "unitNumber": "3904",
+          "floorplanName": "S4",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2605,
+          "priceMax": 2627,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573193&UnitID=28539133&header=1"
+        },
+        {
+          "unitNumber": "1207",
+          "floorplanName": "A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 568,
+          "outdoorSqft": 160,
+          "price": 3096,
+          "availableDate": "2027-01-02",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573200&UnitID=28538772&header=1"
+        },
+        {
+          "unitNumber": "3907",
+          "floorplanName": "A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 568,
+          "outdoorSqft": 160,
+          "price": 3546,
+          "availableDate": "2026-11-25",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573200&UnitID=28539135&header=1"
+        },
+        {
+          "unitNumber": "2406",
+          "floorplanName": "A2-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 641,
+          "outdoorSqft": 100,
+          "price": 4012,
+          "priceMax": 4239,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573204&UnitID=28538939&header=1"
+        },
+        {
+          "unitNumber": "2606",
+          "floorplanName": "A2-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 641,
+          "outdoorSqft": 100,
+          "price": 3790,
+          "priceMax": 4004,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573204&UnitID=28538964&header=1"
+        },
+        {
+          "unitNumber": "2513",
+          "floorplanName": "A3-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 642,
+          "outdoorSqft": 144,
+          "price": 3566,
+          "priceMax": 3707,
+          "availableDate": "2026-11-28",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573206&UnitID=28538960&header=1"
+        },
+        {
+          "unitNumber": "3613",
+          "floorplanName": "A3-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 642,
+          "outdoorSqft": 144,
+          "price": 3682,
+          "priceMax": 3828,
+          "availableDate": "2026-11-20",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573206&UnitID=28539102&header=1"
+        },
+        {
+          "unitNumber": "0808",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 867,
+          "outdoorSqft": 194,
+          "price": 4272,
+          "priceMax": 4642,
+          "availableDate": "2026-11-23",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573211&UnitID=28538717&header=1"
+        },
+        {
+          "unitNumber": "2108",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 867,
+          "outdoorSqft": 194,
+          "price": 4452,
+          "priceMax": 4614,
+          "availableDate": "2026-12-08",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573211&UnitID=28538899&header=1"
+        },
+        {
+          "unitNumber": "2408",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 867,
+          "outdoorSqft": 194,
+          "price": 4522,
+          "priceMax": 4914,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573211&UnitID=28538941&header=1"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 976,
+          "outdoorSqft": 94,
+          "price": 4452,
+          "priceMax": 4614,
+          "availableDate": "2026-12-16",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573213&UnitID=28538696&header=1"
+        },
+        {
+          "unitNumber": "0801",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 976,
+          "outdoorSqft": 94,
+          "price": 4096,
+          "priceMax": 4451,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573213&UnitID=28538710&header=1"
+        },
+        {
+          "unitNumber": "0901",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 976,
+          "outdoorSqft": 94,
+          "price": 4512,
+          "priceMax": 4904,
+          "availableDate": "2026-11-26",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573213&UnitID=28538724&header=1"
+        }
+      ],
+      "alsoListed": [
+        {
+          "unitNumber": "4003",
+          "floorplanName": "PH3-1",
+          "beds": null,
+          "sqft": 2039,
+          "outdoorSqft": 1400,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "note": "Penthouse — Contact for Pricing",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        }
+      ],
+      "notices": [
+        "Limited-Time Specials — Receive up to a $1,000 Rent Credit! — Call our leasing team to learn more."
+      ]
+    },
+    {
+      "buildingId": "the-leo",
+      "status": "ok",
+      "source": {
+        "adapter": "leo",
+        "fetchedUrl": "https://leochicago.com/floorplans/",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "705",
+          "floorplanName": "1 BR",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 712,
+          "price": 3093,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-09-22",
+          "url": "https://leochicago.com/floorplans/unit-e1a5c099698f1638b126d177d7799a8d/"
+        },
+        {
+          "unitNumber": "602",
+          "floorplanName": "Jr 1 Bedroom",
+          "beds": 0,
+          "planType": "Jr 1 Bedroom",
+          "baths": 1,
+          "sqft": 508,
+          "price": 2635,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "vacantSince": "2026-11-10",
+          "url": "https://leochicago.com/floorplans/unit-65693080ad3a2ae53adc5aa46c23d990/"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Receive a 1/2 month free on our final availability for 2026! — Ask about limited-time incentives! Schedule a tour with our leasing team to explore The Leo today.",
+        "Prices listed may include concessions (free rent) and/or special offers."
+      ]
+    },
+    {
+      "buildingId": "stead-220",
+      "status": "ok",
+      "source": {
+        "adapter": "stead220",
+        "fetchedUrl": "https://stead220.com/floorplans",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 01",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2475,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/1",
+          "sourceUpdatedAt": "2026-09-17T20:57:40.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR + Den - Unit 02",
+          "beds": 1,
+          "planType": "1 Bed + Den",
+          "baths": 1,
+          "sqft": null,
+          "price": 3650,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/2",
+          "sourceUpdatedAt": "2026-10-13T17:10:09.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 03",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 2950,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/3",
+          "sourceUpdatedAt": "2026-09-29T22:54:57.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 04",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3175,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/4",
+          "sourceUpdatedAt": "2026-09-29T22:58:45.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR - Unit 06",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3665,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/6",
+          "sourceUpdatedAt": "2026-10-09T14:53:50.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR - Unit 07",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3460,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/7",
+          "sourceUpdatedAt": "2026-10-30T18:53:35.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 08",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2625,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/8",
+          "sourceUpdatedAt": "2026-11-06T22:07:10.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 2BR - Unit 09",
+          "beds": 2,
+          "baths": 2,
+          "sqft": null,
+          "price": 4670,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/9",
+          "sourceUpdatedAt": "2026-10-22T15:45:45.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 10",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3350,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/10",
+          "sourceUpdatedAt": "2026-10-22T15:44:47.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 2BR - Unit 12",
+          "beds": 2,
+          "baths": 2,
+          "sqft": null,
+          "price": 4990,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/12",
+          "sourceUpdatedAt": "2026-09-18T21:55:53.000Z"
+        },
+        {
+          "unitNumber": "2802",
+          "floorplanName": "PH Medium 1BR - Unit 2802",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3785,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/2802",
+          "sourceUpdatedAt": "2026-07-09T21:40:11.000Z"
+        },
+        {
+          "unitNumber": "2803",
+          "floorplanName": "PH Medium 1BR - Unit 2803",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3805,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/2803",
+          "sourceUpdatedAt": "2026-07-09T21:39:37.000Z"
+        },
+        {
+          "unitNumber": "2809",
+          "floorplanName": "PH Medium Studio - Unit 2809",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 3410,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/2809",
+          "sourceUpdatedAt": "2026-07-09T21:39:22.000Z"
+        }
+      ],
+      "alsoListed": [
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium Studio - Unit 05",
+          "beds": 0,
+          "baths": 1,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "note": "Contact for Pricing",
+          "url": "https://stead220.com/floorplans/5"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 13",
+          "beds": 0,
+          "baths": 1,
+          "availableDate": "2026-11-17",
+          "availableNow": true,
+          "note": "Contact for Pricing",
+          "url": "https://stead220.com/floorplans/13"
+        }
+      ]
+    }
+  ]
+}
