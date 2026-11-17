@@ -531,6 +531,18 @@ describe("buildData: warnings and notes that must not vanish", () => {
   const brief = (): WeekdayBrief =>
     JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "brief.json"), "utf8")) as WeekdayBrief;
 
+  it("carries what the latest run could not read to the building's page — and only the latest run's", () => {
+    setup();
+    const gap = "The building’s own website refused the tracker this run (HTTP 403).";
+    write("2026-11-16T18:00:00Z", { units: [unit("101", 2000)], gaps: [gap] });
+    buildData(ROOT);
+    expect(readHistory().gaps).toEqual([gap]);
+    // the next run reads the page: nothing is reported as unread any more
+    write("2026-11-17T18:00:00Z", { units: [unit("101", 2000)] });
+    buildData(ROOT);
+    expect(readHistory()).not.toHaveProperty("gaps");
+  });
+
   it("keeps a warning through a second run on the same day (judged against yesterday, like the brief)", () => {
     setup();
     write("2026-11-10T18:00:00Z", { units: [unit("705", 3275), unit("602", 2790)] });

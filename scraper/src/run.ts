@@ -16,7 +16,7 @@ import {
   type UnitListing,
 } from "../../shared/src/types";
 import { resolveAdapter } from "./adapters/index";
-import { SiteBlockedError, type AdapterContext } from "./adapters/types";
+import { SiteBlockedError, type Adapter, type AdapterContext } from "./adapters/types";
 import { makeFixtureFetch, makeRecorder } from "./fixtures";
 import { httpFetch, sleep } from "./http";
 
@@ -106,16 +106,18 @@ export function quarantineInvalidBuildings(snapshot: Snapshot): string[] {
   return bad;
 }
 
-async function scrapeOne(
+export async function scrapeOne(
   root: string,
   building: BuildingConfig,
   opts: RefreshOptions,
+  /** The adapter to run; tests pass their own. */
+  adapter: Adapter = resolveAdapter(building.adapter),
 ): Promise<ScrapeResult> {
-  const adapter = resolveAdapter(building.adapter);
   const fixtureDir = join(root, "scraper", "fixtures", building.id);
   const recorder = opts.capture ? makeRecorder(fixtureDir) : null;
   const alsoListed: AlsoListed[] = [];
   const notices: string[] = [];
+  const gaps: string[] = [];
   // What was actually requested, so a snapshot says where its numbers came from.
   const requested: string[] = [];
   const baseFetch = opts.fixtures ? makeFixtureFetch(fixtureDir) : httpFetch;
@@ -138,6 +140,9 @@ async function scrapeOne(
     reportNotice: (text) => {
       if (!notices.includes(text)) notices.push(text);
     },
+    reportGap: (text) => {
+      if (!gaps.includes(text)) gaps.push(text);
+    },
   };
   console.log(`Scraping ${building.name} (${adapter.id})...`);
   try {
@@ -154,6 +159,7 @@ async function scrapeOne(
       // what lets the next run say a row without a price is new.
       alsoListed: clean.alsoListed,
       ...(notices.length > 0 ? { notices } : {}),
+      ...(gaps.length > 0 ? { gaps } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -292,6 +298,7 @@ export function flagGroupOutages(
       e.status = "error";
       e.error = `all ${members.length} "${group}" pages listed nothing in the same run — the site's availability feed is probably down (one empty tower alone would be recorded as fully leased)`;
       delete e.notices;
+      delete e.gaps;
       flagged.push(e.buildingId);
     }
   }

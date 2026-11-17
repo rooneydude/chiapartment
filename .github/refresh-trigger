@@ -1,2 +1,2 @@
-# retry 2026-11-17 scrape after empty-buildings flag validation abort
+# 2026-11-17: refresh after the fee and unread-page fix, so the new fields are in the day's snapshot
 # (no flags: scrape all buildings)

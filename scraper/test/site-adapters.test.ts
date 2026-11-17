@@ -178,18 +178,26 @@ describe("sightmap adapter (1225 Old Town, captured 2026-11-15)", () => {
 describe("sightmap adapter (marketing page is optional)", () => {
   it("lists every unit even when the marketing page is refused or missing", async () => {
     const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "1225-old-town"));
-    for (const body of [
-      new Response('{"message":"Access denied by Imunify360 bot-protection."}', { status: 200 }),
-      new Response("nope", { status: 403 }),
-    ]) {
+    for (const [body, said] of [
+      [new Response('{"message":"Access denied by Imunify360 bot-protection."}', { status: 200 }), /refused the tracker this run \(a bot-protection page\)/],
+      [new Response("nope", { status: 403 }), /refused the tracker this run \(HTTP 403\)/],
+      [new Response("oops", { status: 500 }), /could not be read this run \(HTTP 500\)/],
+      // answers, but with something else: no offers and no dates on it is not "the building has none"
+      [
+        new Response(`<html><body><h1>We’ll be right back</h1>${"<p>Scheduled maintenance.</p>".repeat(900)}</body></html>`, { status: 200 }),
+        /answered this run, but not with its floor-plan page\./,
+      ],
+    ] as const) {
       const logs: string[] = [];
       const notices: string[] = [];
+      const gaps: string[] = [];
       const ctx: AdapterContext = {
         fetch: (async (input: string | URL | Request) =>
           String(input).includes("1225oldtown.com/floorplans") ? body.clone() : base(input)) as typeof fetch,
         log: (m) => logs.push(m),
         now: () => CAPTURED,
         reportNotice: (t) => notices.push(t),
+        reportGap: (t) => gaps.push(t),
       };
       const listings = await sightmap.scrape(buildingById("1225-old-town"), ctx);
       expect(listings).toHaveLength(15);
@@ -197,7 +205,19 @@ describe("sightmap adapter (marketing page is optional)", () => {
       expect(listings.every((l) => l.vacantSince === undefined)).toBe(true);
       expect(notices).toEqual([]);
       expect(logs.some((m) => m.includes("specials and vacancy dates skipped"))).toBe(true);
+      // The snapshot says what is missing and why — an offer that simply
+      // vanishes would read as "the building withdrew it".
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toMatch(said);
+      expect(gaps[0]).toMatch(/special offers and “vacant since” dates .* missing from this snapshot/);
     }
+  });
+
+  it("reports nothing as unread when the marketing page answers", async () => {
+    const gaps: string[] = [];
+    const ctx: AdapterContext = { ...ctxFor("1225-old-town"), reportGap: (t) => gaps.push(t) };
+    await sightmap.scrape(buildingById("1225-old-town"), ctx);
+    expect(gaps).toEqual([]);
   });
 
   it("parses announcements and vacancy dates out of a marketing page", async () => {
@@ -219,7 +239,140 @@ describe("sightmap adapter (marketing page is optional)", () => {
     expect(extras.vacantSince.get("10028890")).toBe("2026-09-01");
     expect(extras.vacantSince.get("10028757")).toBe("2026-12-26");
     expect(extras.vacantSince.has("x")).toBe(false);
-    expect(parseMarketingPage("<html></html>")).toEqual({ notices: [], vacantSince: new Map() });
+    expect(extras.recognised).toBe(true);
+    expect(parseMarketingPage("<html></html>")).toEqual({ notices: [], vacantSince: new Map(), recognised: false });
+  });
+});
+
+describe("sightmap adapter (required charges the site puts no number on)", () => {
+  it("names them next to the fees it can add up (the feed as captured on 15 Nov)", async () => {
+    const { listings } = await run(sightmap, "1225-old-town");
+    for (const l of listings) {
+      expect(l.monthlyFees).toEqual({ min: 100, max: 230 });
+      expect(l.monthlyFeesUnpriced).toEqual([
+        "Utility - Electric - Third Party: Usage-Based (Utilities)",
+        "Renters Liability Insurance - Third Party: Varies",
+      ]);
+    }
+  });
+
+  it("does not let base rent pass for the monthly bill when the bundle's amount becomes “Varies” (17 Nov)", async () => {
+    // What the building's feed did overnight: the required utility bundle
+    // lost its $100–$230, and the total the site headlines fell to base rent.
+    const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "1225-old-town"));
+    const fetchChanged = (async (input: string | URL | Request) => {
+      const res = await base(input);
+      if (!String(input).includes("/sightmaps/")) return res;
+      const body = (await res.json()) as {
+        data: { units: { total_additional_expenses: number[]; expense_amounts: Record<string, object> }[] };
+      };
+      for (const u of body.data.units) {
+        u.total_additional_expenses = [0, 0];
+        u.expense_amounts["833"] = {
+          expense_id: "833",
+          min_amount: null,
+          max_amount: null,
+          amount: null,
+          text_amount: "Varies",
+          display_amount: "Varies",
+        };
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const listings = await sightmap.scrape(buildingById("1225-old-town"), {
+      fetch: fetchChanged,
+      log: () => {},
+      now: () => CAPTURED,
+    });
+    expect(listings).toHaveLength(15);
+    for (const l of listings) {
+      UnitListingSchema.parse(l);
+      expect(l.monthlyFees).toBeUndefined(); // no amount is published: none is invented
+      expect(l.monthlyFeesUnpriced).toEqual([
+        "Utility - Electric - Third Party: Usage-Based (Utilities)",
+        "Utility Billing Bundle: Varies",
+        "Renters Liability Insurance - Third Party: Varies",
+      ]);
+    }
+  });
+
+  it("repeats only what the feed says: nothing optional, included, situational, switched off, one-off — or priced another way", async () => {
+    const { unpricedMonthlyCharges } = await import("../src/adapters/sightmap");
+    const unit = { id: "1", unit_number: "101", floor_id: "f", floor_plan_id: "p", area: 500, price: 2000, available_on: null };
+    const charge = (extra: object) => ({ id: 833, label: "Utility Billing Bundle", is_required: true, frequency: "month", ...extra });
+    const withAmount = (expense: object, amount: object | undefined) =>
+      unpricedMonthlyCharges({
+        ...unit,
+        static_expenses: [{ key: "monthly", expenses: [expense] }],
+        expense_amounts: amount === undefined ? {} : { "833": amount },
+      });
+    const varies = { amount: null, text_amount: "Varies", display_amount: "Varies" };
+    expect(withAmount(charge({}), varies)).toEqual(["Utility Billing Bundle: Varies"]);
+    // a zero beside the word is still "no amount"
+    expect(withAmount(charge({}), { amount: "0.00", text_amount: "Varies" })).toEqual(["Utility Billing Bundle: Varies"]);
+    for (const [expense, amount] of [
+      [charge({ is_required: false }), varies],
+      [charge({ is_required: undefined }), varies],
+      [charge({ is_enabled: false }), varies],
+      [charge({ is_included: true }), { text_amount: "Included" }],
+      [charge({ is_situational: true }), varies],
+      [charge({ frequency: "one time" }), varies],
+      [charge({}), { amount: "100.00" }],
+      [charge({}), { amount: 100 }],
+      [charge({}), { min_amount: "$1,100.00", max_amount: "$1,300.00" }],
+      [charge({}), { percentage_amount: "3.00", display_amount: "3% of Base Rent" }],
+      [charge({}), { stepped_amounts: [{ amount: "25.00" }], display_amount: "$25.00 - $35.00" }],
+      [charge({}), { amount: null }], // no amount and no words: nothing to repeat
+      [charge({}), undefined], // the feed says nothing about what it costs
+    ] as const) {
+      expect(withAmount(expense, amount)).toEqual([]);
+    }
+  });
+
+  it("cannot cost the building its prices, whatever shape the feed's charges take next", async () => {
+    const { unpricedMonthlyCharges } = await import("../src/adapters/sightmap");
+    const unit = { id: "1", unit_number: "101", floor_id: "f", floor_plan_id: "p", area: 500, price: 2000, available_on: null };
+    for (const bent of [
+      { static_expenses: { monthly: { expenses: [] } } },
+      { static_expenses: true },
+      { static_expenses: [null, 7, "monthly", { key: "monthly", expenses: { "833": {} } }] },
+      { static_expenses: [{ key: "monthly", expenses: [null, 3, { id: {}, label: 833, is_required: true }] }] },
+      { static_expenses: [{ key: "monthly", expenses: [{ id: 833, label: "Bundle", is_required: true }] }], expense_amounts: [{ display_amount: 0 }] },
+      { static_expenses: [{ key: "monthly", expenses: [{ id: 833, label: "Bundle", is_required: true }] }], expense_amounts: { "833": { display_amount: 0, text_amount: false } } },
+    ]) {
+      expect(unpricedMonthlyCharges({ ...unit, ...bent })).toEqual([]);
+    }
+    // and through the whole scrape: one unit's charges bent out of shape, every unit still listed
+    const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "1225-old-town"));
+    const listings = await sightmap.scrape(buildingById("1225-old-town"), {
+      fetch: (async (input: string | URL | Request) => {
+        const res = await base(input);
+        if (!String(input).includes("/sightmaps/")) return res;
+        const body = (await res.json()) as { data: { units: { static_expenses: unknown }[] } };
+        body.data.units[0]!.static_expenses = { monthly: { expenses: { "833": {} } } };
+        return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    });
+    expect(listings).toHaveLength(15);
+    expect(listings.filter((l) => l.monthlyFeesUnpriced === undefined)).toHaveLength(1);
+  });
+
+  it("says nothing about charges for a feed that does not list any", async () => {
+    const { unpricedMonthlyCharges } = await import("../src/adapters/sightmap");
+    const bare = { id: "1", unit_number: "101", floor_id: "f", floor_plan_id: "p", area: 500, price: 2000, available_on: null };
+    expect(unpricedMonthlyCharges(bare)).toEqual([]);
+    expect(
+      unpricedMonthlyCharges({
+        ...bare,
+        static_expenses: [
+          { key: "monthly", expenses: [{ id: 1, label: "Trash", is_required: true }, { id: 2, label: "Pet Rent", is_required: false }] },
+          { key: "other", expenses: [{ id: 3, label: "Application Fee", is_required: true }] },
+        ],
+        expense_amounts: { "1": { amount: "25.00" }, "2": { text_amount: "Varies" } },
+      }),
+    ).toEqual([]); // the required monthly one has a number; the others are optional or one-off
   });
 });
 

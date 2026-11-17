@@ -164,3 +164,64 @@ describe("weekday brief", () => {
     });
   });
 });
+
+describe("weekday brief: what the building page says, the digest says too", () => {
+  const gap = "The building’s own website refused the tracker this run (HTTP 403).";
+  const studio = {
+    ...unit("0812", 0, 2382),
+    monthlyFeesUnpriced: ["Utility Billing Bundle: Varies"],
+  };
+
+  it("names required charges that have no amount, and what the latest run could not read", () => {
+    const b = briefBuilding(
+      {
+        id: "x",
+        name: "X",
+        history: history({
+        latest: { timestamp: "2026-11-17T14:09:20Z", units: [studio, unit("0704", 2, 4874)] },
+        lastAttempt: { timestamp: "2026-11-17T14:09:20Z", status: "ok" },
+        gaps: [gap],
+        }),
+      },
+      [0, 2],
+    );
+    expect(b.gaps).toEqual([gap]);
+    expect((b.listings ?? []).find((l) => l.unitNumber === "0812")?.monthlyFeesUnpriced).toEqual([
+      "Utility Billing Bundle: Varies",
+    ]);
+    expect((b.listings ?? []).find((l) => l.unitNumber === "0704")).not.toHaveProperty("monthlyFeesUnpriced");
+  });
+
+  it("says neither when there is neither", () => {
+    const b = briefBuilding(
+      {
+        id: "x",
+        name: "X",
+        history: history({
+        latest: { timestamp: "2026-11-17T14:09:20Z", units: [unit("0704", 2, 4874)] },
+        lastAttempt: { timestamp: "2026-11-17T14:09:20Z", status: "ok" },
+        }),
+      },
+      [0, 2],
+    );
+    expect(b).not.toHaveProperty("gaps");
+    expect((b.listings ?? [])[0]).not.toHaveProperty("monthlyFeesUnpriced");
+  });
+
+  it("still says what could not be read when the newest attempt failed outright", () => {
+    const b = briefBuilding(
+      {
+        id: "x",
+        name: "X",
+        history: history({
+        latest: { timestamp: "2026-11-16T17:01:38Z", units: [studio] },
+        lastAttempt: { timestamp: "2026-11-17T14:09:20Z", status: "error", error: "refused", blocked: true },
+        gaps: [gap],
+        }),
+      },
+      [0, 2],
+    );
+    expect(b.status).toBe("error");
+    expect(b.gaps).toEqual([gap]);
+  });
+});

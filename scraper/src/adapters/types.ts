@@ -25,6 +25,12 @@ export interface AdapterContext {
   reportAlsoListed?: (row: AlsoListed) => void;
   /** Record a building-wide notice the site prints (special / concession). */
   reportNotice?: (text: string) => void;
+  /**
+   * Record, in plain words, something this run could not read although the
+   * scrape goes on — an optional page that refused the request, for example.
+   * It is shown on the building's page next to the data it explains.
+   */
+  reportGap?: (text: string) => void;
 }
 
 /**

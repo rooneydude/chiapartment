@@ -89,7 +89,7 @@
       "neighborhood": "Old Town",
       "dataNotes": [
         "Per apartment, from the building's SightMap feed: the advertised base rent and the lease length it is for, the price of every other lease length for that apartment's move-in date, the move-in date, and the mandatory monthly fees.",
-        "The site headlines rent plus a required $100–$230 utility bundle. The Rent column here is base rent; a row's detail adds the fees and the total whenever the snapshot recorded them."
+        "The Rent column here is base rent. The building also requires monthly charges on top of it (a utility bundle, electricity, renter's insurance). When its feed puts amounts on them, a row's detail adds them up to the figure the site headlines; when it only says “Varies”, the detail names them instead."
       ],
       "publishes": {"leaseLength": true, "leaseTable": true, "moveInDate": true, "sqft": true}
     },

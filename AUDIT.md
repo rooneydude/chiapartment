@@ -385,6 +385,26 @@ in the browser:
   per-building job with the leasing sites' floor plans), and the default
   camera does not yet turn to the side with the most listed units.
 
+## Addendum — the day of the merge (17 Nov 2026)
+
+- **The first refresh after the merge failed, because of a bug in this
+  audit's own workflow change.** The new check on the "buildings" input
+  rejected an empty list — which is the normal case — so the run stopped
+  before scraping anything, and every scheduled run would have too. It had
+  not been tested with an empty value. It was fixed within five minutes (pull
+  request #92, opened by the repository's Cursor agent) and the refresh that
+  followed succeeded: 5 of 6 buildings read, The Leo refused.
+- **1225 stopped publishing the amount of its utility bundle that day.** Its
+  feed had priced it at $100–$230 a month; from 17 Nov it says "Varies", and
+  the site headlines base rent alone. The scraper now records required
+  monthly charges that have no amount (`monthlyFeesUnpriced`) and the row
+  detail names them, so base rent is not mistaken for the monthly bill.
+- **1225's own website answers GitHub's runners with HTTP 403** (it answered
+  normally from elsewhere the same hour). Special offers and "vacant since"
+  dates come from that page. Nothing works around the refusal; the snapshot
+  now records what the run could not read (`gaps`) and the building's page
+  says so, instead of yesterday's offer silently disappearing.
+
 ---
 
 # Previous audit — 8 Sep 2026

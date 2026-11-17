@@ -162,6 +162,13 @@ export const UnitListingSchema = z.object({
    * rent + this). Usage-based and third-party costs are not included.
    */
   monthlyFees: z.object({ min: z.number().nonnegative(), max: z.number().nonnegative() }).optional(),
+  /**
+   * Required monthly charges the site lists WITHOUT an amount, in the site's
+   * own words — "Utility Billing Bundle: Varies". They are owed on top of
+   * `price` (and of `monthlyFees`, which only counts charges the site puts a
+   * number on), so a rent shown without them is not the whole monthly bill.
+   */
+  monthlyFeesUnpriced: z.array(z.string()).optional(),
   /** Lease term (months) the advertised `price` applies to, when the site says. */
   leaseTermMonths: z.number().int().positive().nullable().optional(),
   /**
@@ -266,6 +273,13 @@ export const BuildingSnapshotSchema = z.object({
   alsoListed: z.array(AlsoListedSchema).optional(),
   /** Building-wide notices the site prints (specials, concessions). */
   notices: z.array(z.string()).optional(),
+  /**
+   * What this run could NOT read although the scrape as a whole succeeded —
+   * an optional page that refused the request, say — in plain words. Shown
+   * on the building's page, so a detail that is missing because it could not
+   * be read is not mistaken for one the building withdrew.
+   */
+  gaps: z.array(z.string()).optional(),
 });
 export type BuildingSnapshot = z.infer<typeof BuildingSnapshotSchema>;
 
@@ -414,6 +428,8 @@ export interface BriefListing {
   priceMax?: number;
   /** Mandatory monthly charges on top of base rent, when published. */
   monthlyFees?: { min: number; max: number };
+  /** Required monthly charges the site lists without an amount ("Utility Billing Bundle: Varies"). */
+  monthlyFeesUnpriced?: string[];
   availableDate: string | null;
   availableNow?: boolean;
   vacantSince?: string;
@@ -487,6 +503,11 @@ export interface WeekdayBriefBuilding {
   alsoListed?: AlsoListedCompiled[];
   /** Building-wide notices the site prints (specials). */
   notices?: string[];
+  /**
+   * What the latest ok scrape could not read (a page that refused the
+   * tracker): a notice or a date missing for that reason was not withdrawn.
+   */
+  gaps?: string[];
   /** With status "error": the site's bot protection refused the request. */
   blocked?: boolean;
   /** Rows that appeared on the site without a price or bed count since the prior day. */
@@ -585,6 +606,8 @@ export interface BuildingHistory {
   alsoListed: AlsoListedCompiled[];
   /** Building-wide notices (specials) from the latest ok scrape. */
   notices: string[];
+  /** What the latest ok scrape could not read (see BuildingSnapshot.gaps). Absent when nothing. */
+  gaps?: string[];
   /** Where the meaning of the stored prices changed — see MethodChange. */
   methodChanges?: MethodChange[];
 }

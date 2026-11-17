@@ -140,6 +140,8 @@ function UnitDetail({
   const cheapest = cheapestTerm(u);
   const shortest = shortestTermAtAdvertisedPrice(u);
   const mi = moveIn(u, asOf);
+  /** Required monthly charges the site lists in words only ("Varies"). */
+  const unpriced = u.monthlyFeesUnpriced ?? [];
   const facts: string[] = [];
   facts.push(
     `${u.planType ? `${u.planType} (${bedsLabel(u.beds)})` : bedsLabel(u.beds)}${u.baths != null ? ` · ${u.baths} bath` : ""}`,
@@ -201,8 +203,16 @@ function UnitDetail({
           <strong>
             {priceLabel(u.price + u.monthlyFees.min, (u.priceMax ?? u.price) + u.monthlyFees.max)}
           </strong>{" "}
-          a month, which is the figure the leasing site headlines. Usage-based utilities and
-          insurance are extra.
+          a month, which is the figure the leasing site headlines.
+          {unpriced.length === 0 ? " Usage-based utilities and insurance are extra." : ""}
+        </div>
+      )}
+      {unpriced.length > 0 && (
+        <div className="unit-detail-note">
+          {u.monthlyFees
+            ? "Also required every month, with no amount published by the site: "
+            : `${priceLabel(u.price, u.priceMax)} is base rent. Also required every month, but the site publishes no amount for ${unpriced.length === 1 ? "it" : "them"}: `}
+          <strong>{unpriced.join("; ")}</strong>.
         </div>
       )}
       {shortest !== null && u.leaseTermMonths != null && shortest < u.leaseTermMonths && (
