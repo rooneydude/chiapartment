@@ -190,7 +190,7 @@ const CARD_SELECTOR = "div,li,article,section,tr";
  * elements together ("<h3>A1</h3><span>1 Bed</span>" → "A11 Bed"), which
  * breaks the regexes below.
  */
-function spacedText($: cheerio.CheerioAPI, el: object): string {
+export function spacedText($: cheerio.CheerioAPI, el: object): string {
   const parts: string[] = [];
   (function walk(node: { children?: unknown[]; type?: string; data?: string }): void {
     if (node.type === "text" && typeof node.data === "string") {

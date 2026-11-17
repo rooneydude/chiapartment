@@ -3,16 +3,25 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { BuildingHistory } from "../../../shared/src/types";
-import { money, shortDate } from "../lib/format";
+import type { BuildingHistory, MethodChange } from "../../../shared/src/types";
+import { longDate, money, shortDate } from "../lib/format";
 import { useStore } from "../state/store";
 
 const SLOT_VARS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `var(--series-${n})`);
+
+/** "8 Sep 2026", or "15 – 18 Nov 2026"-style for a stretch of switches. */
+function methodChangeDates(m: MethodChange): string {
+  const from = longDate(m.t);
+  const to = m.until ? longDate(m.until) : from;
+  return from === to ? from : `${from} – ${to}`;
+}
 const MAX_PLAN_SERIES = 8;
 
 interface TooltipRow {
@@ -25,10 +34,13 @@ function ChartTooltip({
   active,
   label,
   payload,
+  termAt,
 }: {
   active?: boolean;
   label?: number;
   payload?: { name?: string; value?: number | string; stroke?: string }[];
+  /** series name → run time (ms) → lease term the price was quoted for. */
+  termAt?: Map<string, Map<number, number>>;
 }) {
   if (!active || !payload?.length || label === undefined) return null;
   const rows: TooltipRow[] = payload
@@ -39,15 +51,21 @@ function ChartTooltip({
   return (
     <div className="viz-tooltip">
       <div className="t">{shortDate(new Date(label).toISOString())}</div>
-      {shown.map((r) => (
-        <div className="row" key={r.name}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span className="swatch" style={{ background: r.color, width: 8, height: 8, borderRadius: 2, display: "inline-block" }} />
-            {r.name}
-          </span>
-          <strong>{money(r.value)}</strong>
-        </div>
-      ))}
+      {shown.map((r) => {
+        const term = termAt?.get(r.name)?.get(label);
+        return (
+          <div className="row" key={r.name}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span className="swatch" style={{ background: r.color, width: 8, height: 8, borderRadius: 2, display: "inline-block" }} />
+              {r.name}
+            </span>
+            <strong>
+              {money(r.value)}
+              {term !== undefined && <span className="tooltip-term"> {term}mo</span>}
+            </strong>
+          </div>
+        );
+      })}
       {rows.length > shown.length && (
         <div className="t" style={{ marginTop: 4 }}>
           +{rows.length - shown.length} more
@@ -60,30 +78,81 @@ function ChartTooltip({
 export default function PriceHistoryChart({
   history,
   visibleUnits,
+  visiblePlans,
+  visiblePlanListings,
 }: {
   history: BuildingHistory;
   /** Unit numbers passing the current filters. */
   visibleUnits: Set<string>;
+  /** Floor plans of the listings passing the current filters. */
+  visiblePlans: Set<string>;
+  /**
+   * Listings passing the filters that have no unit number (a site that lists
+   * floor-plan stacks): their history is kept per plan, under these names.
+   */
+  visiblePlanListings: Set<string>;
 }) {
   const chartMode = useStore((s) => s.chartMode);
   const setChartMode = useStore((s) => s.setChartMode);
   const selectedUnit = useStore((s) => s.selectedUnit);
+  const selectedPlan = useStore((s) => s.selectedPlan);
   const hoveredUnit = useStore((s) => s.hoveredUnit);
   const selectUnit = useStore((s) => s.selectUnit);
+  const selectPlan = useStore((s) => s.selectPlan);
 
-  // Stable slot assignment: alphabetical over ALL plans ever seen, so colors
-  // never shift when filters change series membership.
   const allPlans = useMemo(() => Object.keys(history.perFloorplan).sort(), [history]);
-  const planSlot = useMemo(() => {
-    const map = new Map<string, number>();
-    allPlans.forEach((p, i) => map.set(p, i));
-    return map;
-  }, [allPlans]);
-  const plans = allPlans.slice(0, MAX_PLAN_SERIES);
+  // Which plans get a line: first the plans of the listings the filters are
+  // showing (the cheapest studio must not lose its line to eight one-bedroom
+  // plans), then the other plans listed right now, then the longest
+  // histories. A plan name seen in a single run and gone again (a one-off
+  // label) draws nothing useful and is left out.
+  const { plans, plansLeftOut } = useMemo(() => {
+    const latestT = history.latest?.timestamp;
+    const ranked = allPlans
+      .map((plan) => {
+        const series = history.perFloorplan[plan] ?? [];
+        return {
+          plan,
+          n: series.length,
+          current: series[series.length - 1]?.t === latestT,
+          visible: visiblePlans.has(plan),
+        };
+      })
+      .filter((x) => x.current || x.n >= 2)
+      .sort(
+        (a, b) =>
+          Number(b.visible) - Number(a.visible) ||
+          Number(b.current) - Number(a.current) ||
+          b.n - a.n ||
+          a.plan.localeCompare(b.plan),
+      );
+    return {
+      // Alphabetical among the ones drawn, so the legend reads in order.
+      plans: ranked
+        .slice(0, MAX_PLAN_SERIES)
+        .map((x) => x.plan)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+      plansLeftOut: Math.max(0, ranked.length - MAX_PLAN_SERIES),
+    };
+  }, [allPlans, history, visiblePlans]);
+  // One colour per line drawn: by position among the plotted plans, so no two share one.
+  const planColor = useMemo(
+    () => new Map(plans.map((p, i) => [p, SLOT_VARS[i % SLOT_VARS.length]!])),
+    [plans],
+  );
 
+  // Units view: one line per listing the filters show — by unit number, or by
+  // plan name for the listings that have none.
   const unitNumbers = useMemo(
     () => Object.keys(history.perUnit).filter((u) => visibleUnits.has(u)),
     [history, visibleUnits],
+  );
+  const planListings = useMemo(
+    () =>
+      Object.keys(history.perFloorplan)
+        .filter((p) => visiblePlanListings.has(p) && !visibleUnits.has(p))
+        .sort(),
+    [history, visiblePlanListings, visibleUnits],
   );
 
   const rows = useMemo(() => {
@@ -103,11 +172,44 @@ export default function PriceHistoryChart({
           if (row) row[u] = p.price;
         }
       }
+      for (const plan of planListings) {
+        for (const p of history.perFloorplan[plan] ?? []) {
+          const row = byT.get(p.t);
+          if (row) row[plan] = p.minPrice;
+        }
+      }
     }
     return [...byT.entries()]
       .map(([t, values]) => ({ t: new Date(t).getTime(), ...values }))
       .sort((a, b) => a.t - b.t);
-  }, [history, chartMode, unitNumbers]);
+  }, [history, chartMode, unitNumbers, planListings]);
+
+  // Lease term behind each price point, for the tooltip — and whether the
+  // visible series mix lease lengths at all.
+  const { termAt, mixedTerms } = useMemo(() => {
+    const map = new Map<string, Map<number, number>>();
+    const terms = new Set<number>();
+    const series: [string, { t: string; term?: number }[]][] =
+      chartMode === "floorplans"
+        ? plans.map((p) => [p, history.perFloorplan[p] ?? []])
+        : [
+            ...unitNumbers.map((u): [string, { t: string; term?: number }[]] => [u, history.perUnit[u] ?? []]),
+            ...planListings.map((p): [string, { t: string; term?: number }[]] => [p, history.perFloorplan[p] ?? []]),
+          ];
+    for (const [name, points] of series) {
+      const byTime = new Map<number, number>();
+      for (const p of points) {
+        if (p.term === undefined) continue;
+        byTime.set(new Date(p.t).getTime(), p.term);
+        terms.add(p.term);
+      }
+      if (byTime.size > 0) map.set(name, byTime);
+    }
+    return { termAt: map, mixedTerms: terms.size > 1 };
+  }, [history, chartMode, plans, unitNumbers, planListings]);
+
+  // Points where what the stored prices MEAN changed (not the prices).
+  const methodChanges = history.methodChanges ?? [];
 
   const single = history.runs.length < 2;
 
@@ -118,12 +220,14 @@ export default function PriceHistoryChart({
         <span className="seg">
           <button
             className={chartMode === "floorplans" ? "on" : ""}
+            aria-pressed={chartMode === "floorplans"}
             onClick={() => setChartMode("floorplans")}
           >
             Floorplans
           </button>
           <button
             className={chartMode === "units" ? "on" : ""}
+            aria-pressed={chartMode === "units"}
             onClick={() => setChartMode("units")}
           >
             Units
@@ -131,24 +235,55 @@ export default function PriceHistoryChart({
         </span>
         {chartMode === "units" && (
           <span className="hint">
-            {selectedUnit ? `unit ${selectedUnit} highlighted` : "click a unit row to highlight"}
+            {selectedUnit
+              ? `unit ${selectedUnit} highlighted`
+              : selectedPlan && planListings.includes(selectedPlan)
+                ? `${selectedPlan} highlighted`
+                : "click a row, or a line, to highlight it"}
           </span>
         )}
-        {single && <span className="hint">one snapshot so far — history builds with each refresh</span>}
+        {single && (
+          <span className="hint">
+            {history.runs.length === 0
+              ? "no successful scrape yet — history builds with each refresh"
+              : "one snapshot so far — history builds with each refresh"}
+          </span>
+        )}
       </div>
+      {mixedTerms && (
+        <div className="chart-note">
+          Each point is the rent recorded that day. The lease length it was quoted for changed
+          over time (hover a point to see it), so a step in a line can be a different lease
+          length rather than a price change.
+        </div>
+      )}
+      {methodChanges.length > 0 && (
+        <div className="chart-note">
+          <strong>Dashed lines</strong> mark where the recorded number changed meaning, not
+          price:
+          {methodChanges.map((m) => (
+            <span className="chart-note-item" key={m.t}>
+              <strong>{methodChangeDates(m)}</strong> — {m.note}
+            </span>
+          ))}
+        </div>
+      )}
       {chartMode === "floorplans" && (
         <div className="legend-row">
           {plans.map((p) => (
             <span className="key" key={p}>
               <span
                 className="swatch"
-                style={{ background: SLOT_VARS[planSlot.get(p)! % SLOT_VARS.length] }}
+                style={{ background: planColor.get(p) }}
               />
               {p}
             </span>
           ))}
-          {allPlans.length > plans.length && (
-            <span className="key">+{allPlans.length - plans.length} more plans (see units view)</span>
+          {plansLeftOut > 0 && (
+            <span className="key">
+              +{plansLeftOut} more plan{plansLeftOut === 1 ? "" : "s"} — filter the list above to
+              chart {plansLeftOut === 1 ? "it" : "them"}
+            </span>
           )}
         </div>
       )}
@@ -175,16 +310,38 @@ export default function PriceHistoryChart({
               domain={["auto", "auto"]}
             />
             <Tooltip
-              content={<ChartTooltip />}
+              content={<ChartTooltip termAt={termAt} />}
               cursor={{ stroke: "var(--baseline)", strokeDasharray: "3 3" }}
             />
+            {methodChanges
+              .filter((m) => m.until)
+              .map((m) => (
+                <ReferenceArea
+                  key={`${m.t}-stretch`}
+                  x1={new Date(m.t).getTime()}
+                  x2={new Date(m.until!).getTime()}
+                  fill="var(--text-muted)"
+                  fillOpacity={0.14}
+                  stroke="none"
+                  ifOverflow="hidden"
+                />
+              ))}
+            {methodChanges.map((m) => (
+              <ReferenceLine
+                key={m.t}
+                x={new Date(m.until ?? m.t).getTime()}
+                stroke="var(--text-muted)"
+                strokeDasharray="5 4"
+                ifOverflow="hidden"
+              />
+            ))}
             {chartMode === "floorplans"
               ? plans.map((p) => (
                   <Line
                     key={p}
                     dataKey={p}
                     name={p}
-                    stroke={SLOT_VARS[planSlot.get(p)! % SLOT_VARS.length]}
+                    stroke={planColor.get(p)}
                     strokeWidth={2}
                     dot={single ? { r: 4 } : false}
                     activeDot={{ r: 4 }}
@@ -192,8 +349,9 @@ export default function PriceHistoryChart({
                     isAnimationActive={false}
                   />
                 ))
-              : unitNumbers.map((u) => {
-                  const emphasized = u === selectedUnit || u === hoveredUnit;
+              : [...unitNumbers, ...planListings].map((u) => {
+                  const isPlan = !visibleUnits.has(u);
+                  const emphasized = isPlan ? u === selectedPlan : u === selectedUnit || u === hoveredUnit;
                   return (
                     <Line
                       key={u}
@@ -206,7 +364,11 @@ export default function PriceHistoryChart({
                       connectNulls={false}
                       isAnimationActive={false}
                       style={{ cursor: "pointer" }}
-                      onClick={() => selectUnit(u === selectedUnit ? null : u)}
+                      onClick={() =>
+                        isPlan
+                          ? selectPlan(u === selectedPlan ? null : u)
+                          : selectUnit(u === selectedUnit ? null : u)
+                      }
                     />
                   );
                 })}

@@ -5,7 +5,7 @@
   --surface-1: #fcfcfb;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --text-muted: #898781;
+  --text-muted: #6b6a65;
   --grid-line: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
@@ -48,7 +48,7 @@
     --series-7: #9085e9;
     --series-8: #e66767;
     --delta-good: #0ca30c;
-    --delta-bad: #d03b3b;
+    --delta-bad: #ef6a6a;
     --context-line: #45443f;
     --accent-soft: rgba(57, 135, 229, 0.16);
   }
@@ -73,7 +73,7 @@
   --series-7: #9085e9;
   --series-8: #e66767;
   --delta-good: #0ca30c;
-  --delta-bad: #d03b3b;
+  --delta-bad: #ef6a6a;
   --context-line: #45443f;
   --accent-soft: rgba(57, 135, 229, 0.16);
 }
@@ -107,7 +107,7 @@ button {
 
 /* ---- shell ---- */
 .shell {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px 48px;
 }
@@ -139,6 +139,7 @@ button {
 }
 
 .theme-btn {
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   width: 30px;
@@ -350,6 +351,11 @@ table.units td.num.price-cell {
   color: var(--series-1);
 }
 
+/* Back on the site after an absence — quieter than a first appearance. */
+.badge.back {
+  color: var(--text-secondary);
+}
+
 /* ---- building page ---- */
 .bldg-head {
   display: flex;
@@ -371,12 +377,18 @@ table.units td.num.price-cell {
 
 .bldg-grid {
   display: grid;
-  grid-template-columns: minmax(430px, 1fr) minmax(380px, 1fr);
+  /* The listing table carries rent, lease and move-in columns — it gets the
+     wider share; minmax(0, …) lets it shrink and scroll instead of
+     overflowing its panel. */
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
   gap: 16px;
   align-items: start;
 }
 
-@media (max-width: 980px) {
+/* The unit table needs about 800 px for all nine columns. Side by side with
+   the 3D view it only gets that on a wide screen; below, the 3D view goes
+   under the table instead of cutting its last columns off. */
+@media (max-width: 1320px) {
   .bldg-grid {
     grid-template-columns: 1fr;
   }
@@ -454,8 +466,45 @@ table.units td.num.price-cell {
 /* ---- table ---- */
 .tbl-wrap {
   overflow-x: auto;
-  max-height: 460px;
+  max-height: 560px;
   overflow-y: auto;
+  /* Shadows at the left / right edge while there is more table that way. */
+  background:
+    linear-gradient(to right, var(--surface-1) 40%, transparent) left / 30px 100% no-repeat local,
+    linear-gradient(to left, var(--surface-1) 40%, transparent) right / 30px 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--text-primary) 16%, transparent), transparent)
+      left / 10px 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--text-primary) 16%, transparent), transparent)
+      right / 10px 100% no-repeat scroll;
+}
+
+/* The sort control in a column header and the open/close control in a row
+   are real buttons (reachable with Tab, worked with Enter or Space) that look
+   like the text they replace. */
+table.units th .sort-btn,
+table.units td .row-toggle {
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+table.units th .sort-btn {
+  display: block;
+  width: 100%;
+}
+
+table.units th .sort-btn:focus-visible,
+table.units td .row-toggle:focus-visible,
+.chip:focus-visible,
+.seg button:focus-visible,
+.theme-btn:focus-visible,
+.retry-btn:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 table.units {
@@ -493,6 +542,21 @@ table.units td {
   white-space: nowrap;
 }
 
+/* A rent range ("$2,457–$2,478") may wrap after its dash rather than push
+   the lease and move-in columns off a narrow screen. */
+table.units td.price-cell {
+  white-space: normal;
+}
+
+/* The sixth column is Lease. Where no listing has a lease length (the site
+   publishes none) it is a column of dashes: below 900 px it gives way. */
+@media (max-width: 900px) {
+  table.units.no-lease th:nth-child(6),
+  table.units.no-lease td.lease-col {
+    display: none;
+  }
+}
+
 table.units tbody tr {
   cursor: pointer;
 }
@@ -524,9 +588,350 @@ table.units tbody tr.sel {
   color: var(--text-secondary);
 }
 
+/* ---- listing table: lease terms, move-in, detail rows ---- */
+.muted {
+  color: var(--text-muted);
+}
+
+table.units .caret {
+  display: inline-block;
+  width: 1.1em;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+table.units .plan-name {
+  display: inline-block;
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* A floorplan-level listing shows its plan name where the unit number goes. */
+table.units .plan-as-unit {
+  display: inline-block;
+  max-width: 20ch;
+  white-space: normal;
+  vertical-align: top;
+}
+
+table.units .lease-col {
+  line-height: 1.25;
+}
+
+table.units .lease-term {
+  font-variant-numeric: tabular-nums;
+}
+
+.lease-key {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+table.units .lease-compare {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+table.units .price-fallback {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+table.units .special-mark {
+  margin-left: 4px;
+  cursor: help;
+}
+
+.badge.now {
+  color: var(--delta-good);
+  border-color: color-mix(in srgb, var(--delta-good) 45%, transparent);
+  background: color-mix(in srgb, var(--delta-good) 9%, transparent);
+}
+
+table.units tbody tr.open td {
+  border-bottom-color: transparent;
+}
+
+table.units tbody tr.detail-row,
+table.units tbody tr.empty-row {
+  cursor: default;
+}
+
+table.units tbody tr.detail-row:hover,
+table.units tbody tr.empty-row:hover {
+  background: none;
+}
+
+table.units tbody tr.detail-row td {
+  padding: 0 10px 12px 28px;
+  white-space: normal;
+  box-shadow: inset 3px 0 0 var(--series-1);
+  background: var(--accent-soft);
+}
+
+table.units tbody tr.empty-row td {
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.unit-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  /* On a phone the table scrolls sideways; keep the detail panel pinned to
+     the visible part instead of running off-screen with the table. */
+  position: sticky;
+  left: 28px;
+  max-width: min(100%, calc(100vw - 96px));
+}
+
+.unit-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.unit-detail-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.unit-detail-note {
+  max-width: 68ch;
+}
+
+.lease-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.lease-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.lease-cell .lease-months {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lease-cell .lease-price {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.lease-cell .lease-extra {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lease-cell.cheapest .lease-price,
+.lease-cell.cheapest .lease-extra {
+  color: var(--delta-good);
+}
+
+.lease-cell.advertised {
+  border-color: var(--series-1);
+  box-shadow: inset 0 0 0 1px var(--series-1);
+}
+
+.lease-cell.compare .lease-months::after {
+  content: " ★";
+  color: var(--status-warning);
+}
+
+.unit-link {
+  align-self: flex-start;
+  color: var(--series-1);
+  font-weight: 600;
+}
+
+.unit-link:hover,
+.also-listed a:hover {
+  text-decoration: underline;
+}
+
+.also-listed {
+  padding: 10px 16px 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--grid-line);
+}
+
+.also-listed-title {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.also-listed ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.also-listed a {
+  color: var(--series-1);
+  font-weight: 600;
+}
+
+.also-listed .also-bits {
+  color: var(--text-muted);
+}
+
+/* On a phone the table keeps unit, type, rent, lease length and move-in
+   date on screen; the rest is in each row's detail panel. */
+@media (max-width: 640px) {
+  /* One scroll, the page's: no list-within-a-page to get stuck in. */
+  .tbl-wrap {
+    max-height: none;
+  }
+
+  table.units .hide-sm {
+    display: none;
+  }
+
+  table.units th,
+  table.units td {
+    padding-left: 8px;
+    padding-right: 6px;
+  }
+
+  table.units .plan-name {
+    display: none;
+  }
+
+  /* A move-in date in another year ("Jan 17, 2027") may take two lines. */
+  table.units td.movein-col {
+    white-space: normal;
+  }
+
+  /* Lease length and move-in date stay on screen: a long plan name wraps. */
+  table.units .plan-as-unit {
+    max-width: 12ch;
+  }
+
+  .topbar {
+    align-items: center;
+  }
+
+  .topbar .sub {
+    display: none;
+  }
+}
+
+/* The narrowest phones: tighter cells, so the move-in column stays on screen. */
+@media (max-width: 380px) {
+  table.units {
+    font-size: 12.5px;
+  }
+
+  table.units th,
+  table.units td {
+    padding-left: 5px;
+    padding-right: 4px;
+  }
+}
+
+/* What a "—" in the table means, and what this site publishes at all. */
+.table-footnote {
+  padding: 8px 16px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 96ch;
+}
+
+.data-notes {
+  padding: 10px 16px 12px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--grid-line);
+}
+
+.data-notes-title {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.data-notes ul {
+  margin: 0;
+  padding-left: 18px;
+  max-width: 96ch;
+}
+
+.data-notes li + li {
+  margin-top: 3px;
+}
+
+.filters select {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.stat-term {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.card-movein {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
 /* ---- chart ---- */
 .chart-box {
   padding: 8px 10px 12px;
+}
+
+.chart-note {
+  padding: 6px 16px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 96ch;
+}
+
+.chart-note-item {
+  display: block;
+  margin-top: 3px;
+  padding-left: 10px;
+  border-left: 2px solid var(--grid-line);
+}
+
+.viz-tooltip .tooltip-term {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .legend-row {
@@ -636,6 +1041,30 @@ table.units tbody tr.sel {
 .scene-btn.on {
   border-color: var(--series-1);
   color: var(--series-1);
+}
+
+/* The time of day the scene is lit for: a sun or moon, the hour, a slider. */
+.scene-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.scene-time-value {
+  min-width: 7ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.scene-time input[type="range"] {
+  width: 110px;
+  accent-color: var(--series-1);
 }
 
 .scene-empty {
@@ -751,4 +1180,232 @@ table.units tbody tr.sel {
   padding: 60px 0;
   text-align: center;
   color: var(--text-muted);
+}
+
+.error-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.retry-btn {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+}
+
+.retry-btn:hover {
+  border-color: var(--series-1);
+}
+
+/* One panel of a page that could not be shown (no WebGL, a failed download):
+   the rest of the page keeps working. */
+.panel-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.panel-fallback strong {
+  color: var(--text-primary);
+}
+
+.card-problem {
+  border-style: dashed;
+}
+
+/* ---- 3D: unit marks — the legend overlay and the label at a mark ---- */
+/* The scene's bottom edge: the button on the left, the notes on the right, in one row
+   across the panel. Where the panel is too narrow for that (a phone) the row wraps
+   instead of overlapping: the button keeps the bottom line, so it does not move from
+   under the pointer, and the notes stack above it. */
+.scene-overlay {
+  right: 12px;
+  flex-wrap: wrap-reverse;
+  /* the row spans the panel: only what is in it takes the pointer, the canvas keeps the rest */
+  pointer-events: none;
+}
+
+.scene-overlay > * {
+  pointer-events: auto;
+}
+
+.scene-overlay .scene-note {
+  position: static;
+}
+
+/* the position note, always last, keeps the right-hand edge */
+.scene-overlay .scene-note:last-child {
+  margin-left: auto;
+}
+
+/* Top-left of the scene panel; the compass keeps the top-right corner
+   (92px disc + margins), the buttons and notes the bottom edge (up to
+   three lines of them on a phone: button, view note, position note). */
+.scene-legend {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  max-width: min(196px, calc(100% - 128px));
+  max-height: calc(100% - 124px);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+  backdrop-filter: blur(4px);
+}
+
+.scene-legend-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 4px 9px 4px 7px;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.scene-legend-caret {
+  width: 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.scene-legend-n {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.scene-legend-body {
+  padding: 0 9px 6px 7px;
+}
+
+.scene-legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.scene-legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.5px 0;
+}
+
+/* One row per size: chip, name, how many, lowest rent (right-aligned). */
+.scene-legend-sizes li {
+  color: var(--text-primary);
+}
+
+.scene-legend-sizes li.off {
+  opacity: 0.5;
+}
+
+.scene-legend-chip {
+  flex: none;
+  width: 14px;
+  height: 9px;
+  margin: 0 4px;
+  border-radius: 1.5px;
+  /* the same dark edge the marks carry on the tower */
+  box-shadow: 0 0 0 1px rgba(14, 19, 26, 0.35);
+}
+
+.scene-legend-from {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scene-legend ul.scene-legend-kinds {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.scene-legend-glyph {
+  flex: none;
+  color: var(--text-primary);
+}
+
+.scene-legend-kinds .scene-legend-n {
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.scene-legend-note {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+/* Covers the canvas, above the other overlays; holds the label of the hovered mark. */
+.scene-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+/* The label of the hovered mark, positioned by the canvas (bottom edge 12px above the mark). */
+.mark-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  width: max-content;
+  max-width: min(310px, 72vw);
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--surface-1) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.mark-label.muted {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* "#2906 · ", "1 BR · ", ...: a piece never breaks inside, and keeps its trailing space. */
+.mark-label > span {
+  white-space: pre;
+}
+
+.mark-label > .mark-label-chip {
+  flex: none;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 1.5px;
+  box-shadow: 0 0 0 1px rgba(14, 19, 26, 0.35);
 }

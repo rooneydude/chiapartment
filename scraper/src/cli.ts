@@ -1,5 +1,28 @@
+import { appendFileSync, readFileSync } from "node:fs";
+import { SnapshotSchema } from "../../shared/src/types";
 import { buildData } from "./build-data";
-import { refresh } from "./run";
+import { describeRun, refresh } from "./run";
+
+/**
+ * Tell the CI run what happened, where a person will see it: a per-building
+ * table on the run's summary page, and step outputs (`ok`, `total`,
+ * `failed`) the workflow uses to fail loudly when nothing could be scraped.
+ * A no-op outside GitHub Actions.
+ */
+function reportRun(snapshotFile: string): void {
+  const snap = SnapshotSchema.parse(JSON.parse(readFileSync(snapshotFile, "utf8")));
+  const run = describeRun(snap);
+  if (process.env["GITHUB_OUTPUT"]) {
+    appendFileSync(
+      process.env["GITHUB_OUTPUT"],
+      `ok=${run.ok}\ntotal=${run.total}\nfailed=${run.failed.join(",")}\n`,
+    );
+  }
+  if (process.env["GITHUB_STEP_SUMMARY"]) {
+    appendFileSync(process.env["GITHUB_STEP_SUMMARY"], run.markdown);
+  }
+  if (run.ok === 0) console.error(`No building could be scraped (${run.failed.join(", ")}).`);
+}
 
 function parseFlags(argv: string[]): Map<string, string | boolean> {
   const flags = new Map<string, string | boolean>();
@@ -20,7 +43,7 @@ try {
   switch (command) {
     case "refresh": {
       const buildingsFlag = flags.get("buildings");
-      await refresh(root, {
+      const file = await refresh(root, {
         fixtures: flags.get("fixtures") === true,
         capture: flags.get("capture") === true,
         commit: flags.get("commit") === true,
@@ -29,6 +52,7 @@ try {
             ? buildingsFlag.split(",").map((s) => s.trim())
             : null,
       });
+      reportRun(file);
       break;
     }
     case "build-data":
@@ -61,7 +85,7 @@ try {
     }
     default:
       console.error(
-        `Usage: tsx scraper/src/cli.ts <refresh|build-data|skyline|unitmap> [--fixtures] [--capture] [--commit] [--buildings=a,b]`,
+        `Usage: tsx scraper/src/cli.ts <refresh|build-data|skyline|unitmap|alerts> [--fixtures] [--capture] [--commit] [--buildings=a,b] [--out=dir]`,
       );
       process.exit(2);
   }

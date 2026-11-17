@@ -59,6 +59,49 @@ describe("parseAvailableDate", () => {
   it("returns null for garbage", () => {
     expect(parseAvailableDate("call for details", ref)).toBeNull();
     expect(parseAvailableDate(null, ref)).toBeNull();
+    expect(parseAvailableDate(undefined, ref)).toBeNull();
+    expect(parseAvailableDate("not available", ref)).toBeNull();
+  });
+
+  // Old Town Park prints future move-in days as M/D/YYYY. The parser used to
+  // know only "Mon DD", so every future-dated unit lost its date.
+  it("parses US numeric dates (the Old Town Park format)", () => {
+    const nov = new Date("2026-11-15T14:00:00Z");
+    expect(parseAvailableDate("12/18/2026", nov)).toBe("2026-12-18");
+    expect(parseAvailableDate("1/2/2027", nov)).toBe("2027-01-02");
+    expect(parseAvailableDate("11/26/2026", nov)).toBe("2026-11-26");
+    expect(parseAvailableDate("Available 12/7/2026", nov)).toBe("2026-12-07");
+    expect(parseAvailableDate("1/22/27", nov)).toBe("2027-01-22");
+    expect(parseAvailableDate("12-18-2026", nov)).toBe("2026-12-18");
+  });
+
+  it("infers the year for a numeric month/day", () => {
+    const nov = new Date("2026-11-15T14:00:00Z");
+    expect(parseAvailableDate("12/18", nov)).toBe("2026-12-18");
+    expect(parseAvailableDate("1/5", nov)).toBe("2027-01-05"); // already past this year
+    expect(parseAvailableDate("11/10", nov)).toBe("2026-11-10"); // within the grace week
+  });
+
+  it("parses ordinal and long month names (the SightMap display format)", () => {
+    const nov = new Date("2026-11-15T14:00:00Z");
+    expect(parseAvailableDate("Available Dec 26th", nov)).toBe("2026-12-26");
+    expect(parseAvailableDate("Available Jan 1st", nov)).toBe("2027-01-01");
+    expect(parseAvailableDate("December 26, 2026", nov)).toBe("2026-12-26");
+    expect(parseAvailableDate("Move-in: Nov 22nd", nov)).toBe("2026-11-22");
+  });
+
+  it("rejects impossible calendar days instead of rolling them over", () => {
+    expect(parseAvailableDate("2/31/2027", ref)).toBeNull();
+    expect(parseAvailableDate("2026-02-31", ref)).toBeNull();
+    expect(parseAvailableDate("13/5/2026", ref)).toBeNull();
+  });
+
+  it("treats 'now' as the CHICAGO day, even after UTC has rolled over", () => {
+    // 02:30 UTC on Nov 16 is 8:30 pm on Nov 15 in Chicago.
+    const lateEvening = new Date("2026-11-16T02:30:00Z");
+    expect(parseAvailableDate("Available Now", lateEvening)).toBe("2026-11-15");
+    expect(parseAvailableDate("Available", lateEvening)).toBe("2026-11-15");
+    expect(parseAvailableDate("available now!", lateEvening)).toBe("2026-11-15");
   });
 });
 
@@ -107,5 +150,43 @@ describe("parseLeaseTermMonths", () => {
     expect(parseLeaseTermMonths("")).toBeNull();
     expect(parseLeaseTermMonths("Available Aug 15")).toBeNull();
     expect(parseLeaseTermMonths("99 months")).toBeNull();
+  });
+});
+
+describe("parseAvailableDate never invents a date", () => {
+  const on = (day: string) => new Date(`${day}T18:00:00Z`);
+
+  it("does not read the start of a year, a quantity or an ordinary word as a day", () => {
+    const ref = on("2026-11-15");
+    // A month and a year name no day.
+    expect(parseAvailableDate("Available December 2026", ref)).toBeNull();
+    expect(parseAvailableDate("Available January 2028", ref)).toBeNull();
+    // Quantities are not dates.
+    expect(parseAvailableDate("Available in 1-2 weeks", ref)).toBeNull();
+    expect(parseAvailableDate("1/2 month free", ref)).toBeNull();
+    expect(parseAvailableDate("2/2 bath", ref)).toBeNull();
+    // A word that merely starts like a month.
+    expect(parseAvailableDate("Junior 1 Bedroom", ref)).toBeNull();
+    expect(parseAvailableDate("Marble 12 counters", ref)).toBeNull();
+    // Real dates still parse, in every form the sites use.
+    expect(parseAvailableDate("Available December 26, 2026", ref)).toBe("2026-12-26");
+    expect(parseAvailableDate("Dec. 26th", ref)).toBe("2026-12-26");
+    expect(parseAvailableDate("12/10/2026", ref)).toBe("2026-12-10");
+    expect(parseAvailableDate("12-10-2026", ref)).toBe("2026-12-10");
+    expect(parseAvailableDate("1/2/27", ref)).toBe("2027-01-02");
+    expect(parseAvailableDate("12/18", ref)).toBe("2026-12-18");
+    expect(parseAvailableDate("Sept 5", on("2026-08-01"))).toBe("2026-09-05");
+    expect(parseAvailableDate("May 3", on("2026-04-01"))).toBe("2026-05-03");
+  });
+
+  it("reads a year-less date just after New Year as the day that just passed", () => {
+    // Seen on 2 Jan 2027, "Dec 28" was five days ago — not next December.
+    expect(parseAvailableDate("Dec 28", on("2027-01-02"))).toBe("2026-12-28");
+    expect(parseAvailableDate("12/30", on("2027-01-02"))).toBe("2026-12-30");
+    // And one that is further back than a week means the coming one.
+    expect(parseAvailableDate("Dec 20", on("2027-01-02"))).toBe("2027-12-20");
+    // Just before New Year, January is next month.
+    expect(parseAvailableDate("Jan 5", on("2026-12-20"))).toBe("2027-01-05");
+    expect(parseAvailableDate("Feb 29", on("2027-06-01"))).toBe("2028-02-29");
   });
 });

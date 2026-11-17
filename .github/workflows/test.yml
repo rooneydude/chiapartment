@@ -20,3 +20,6 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # The dashboard bundle must build from the committed history too —
+      # catches a broken page before the deploy job does.
+      - run: npm run build

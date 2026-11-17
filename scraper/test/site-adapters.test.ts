@@ -1,12 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BuildingsConfigSchema, UnitListingSchema, type OmittedListing } from "../../shared/src/types";
-import { leo, isWafPage, parseLeoPage } from "../src/adapters/leo";
-import { oldtownpark } from "../src/adapters/oldtownpark";
-import { sightmap } from "../src/adapters/sightmap";
-import { stead220 } from "../src/adapters/stead220";
-import type { AdapterContext } from "../src/adapters/types";
+import {
+  AlsoListedSchema,
+  BuildingsConfigSchema,
+  UnitListingSchema,
+  type AlsoListed,
+  type UnitListing,
+} from "../../shared/src/types";
+import { leaseTermsFrom, leo, isWafPage, parseLeoCards, parseLeoInventory, parseLeoPage } from "../src/adapters/leo";
+import { oldtownpark, parseOldTownParkPage } from "../src/adapters/oldtownpark";
+import { leasingUrlForDate, parseLeaseTable, parseMarketingPage, sightmap } from "../src/adapters/sightmap";
+import { extractSsrData, parseSteadFloorplans, stead220 } from "../src/adapters/stead220";
+import { SiteBlockedError, type AdapterContext } from "../src/adapters/types";
 import { makeFixtureFetch } from "../src/fixtures";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -15,127 +21,363 @@ const config = BuildingsConfigSchema.parse(
 );
 const buildingById = (id: string) => config.buildings.find((b) => b.id === id)!;
 
-function ctxFor(buildingId: string): AdapterContext {
+/** The moment the current fixtures were captured (2026-11-15, 7:55 am Chicago). */
+const CAPTURED = new Date("2026-11-15T13:55:39Z");
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+interface Run {
+  listings: UnitListing[];
+  alsoListed: AlsoListed[];
+  notices: string[];
+  logs: string[];
+}
+
+function ctxFor(dir: string, into?: Partial<Run>, now: Date = CAPTURED): AdapterContext {
   return {
-    fetch: makeFixtureFetch(join(ROOT, "scraper", "fixtures", buildingId)),
-    log: () => {},
+    fetch: makeFixtureFetch(join(ROOT, "scraper", "fixtures", dir)),
+    log: (m) => into?.logs?.push(m),
+    now: () => now,
+    reportAlsoListed: (row) => into?.alsoListed?.push(row),
+    reportNotice: (text) => into?.notices?.push(text),
   };
 }
 
-describe("oldtownpark adapter (real captured page)", () => {
-  it("parses every unit card on the tower-1 availability page", async () => {
-    const listings = await oldtownpark.scrape(buildingById("old-town-park-1"), ctxFor("old-town-park-1"));
-    expect(listings.length).toBeGreaterThanOrEqual(25); // page had 29 unit cards
-    for (const l of listings) UnitListingSchema.parse(l);
-    // Real unit numbers, not card indexes.
-    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
-    // Plan names are clean slugs, no template whitespace.
-    expect(listings.every((l) => !/\s{2,}|\n/.test(l.floorplanName))).toBe(true);
-    // Sane Chicago rents.
-    expect(listings.every((l) => l.price >= 1500 && l.price <= 15000)).toBe(true);
-    // Ranges preserved when present.
-    expect(listings.some((l) => l.priceMax !== undefined && l.priceMax > l.price)).toBe(true);
-    // Cards carry "Total SQFT: N" — every listing gets sqft now.
-    expect(listings.every((l) => l.sqft !== null)).toBe(true);
-    // Bare "Available" labels resolve to an ISO date.
-    expect(listings.every((l) => l.availableDate === null || /^\d{4}-\d{2}-\d{2}$/.test(l.availableDate))).toBe(true);
-  });
-});
+/** When the legacy fixtures were captured (early August 2026). */
+const LEGACY_CAPTURED = new Date("2026-08-04T15:00:00Z");
 
-describe("oldtownpark adapter (placeholder pricing)", () => {
-  it("skips $0 call-for-pricing rows instead of failing the whole run", async () => {
-    const html = `
-      <div class="js-plan-group" data-plan-slug="s1" data-cat="Convertible">
-        <div class="yard__unit" data-unit="1501" data-rent-min="3200" data-rent-max="3400">
-          Available Now Total SQFT: 565
-        </div>
-        <div class="yard__unit" data-unit="1502" data-rent-min="0" data-rent-max="0">
-          Available Now Total SQFT: 565
-        </div>
-      </div>`;
-    const ctx: AdapterContext = {
-      fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
-      log: () => {},
-    };
-    const listings = await oldtownpark.scrape(buildingById("old-town-park-3"), ctx);
-    expect(listings.map((l) => l.unitNumber)).toEqual(["1501"]);
-    for (const l of listings) UnitListingSchema.parse(l);
-  });
-});
+async function run(
+  adapter: { scrape: (typeof sightmap)["scrape"] },
+  buildingId: string,
+  dir = buildingId,
+  now: Date = dir.startsWith("legacy-") ? LEGACY_CAPTURED : CAPTURED,
+): Promise<Run> {
+  const out: Run = { listings: [], alsoListed: [], notices: [], logs: [] };
+  out.listings = await adapter.scrape(buildingById(buildingId), ctxFor(dir, out, now));
+  for (const l of out.listings) UnitListingSchema.parse(l);
+  for (const a of out.alsoListed) AlsoListedSchema.parse(a);
+  return out;
+}
 
-describe("sightmap adapter (real captured payload)", () => {
-  it("maps every available unit with dates, sqft, and clean plan names", async () => {
-    const listings = await sightmap.scrape(buildingById("1225-old-town"), ctxFor("1225-old-town"));
-    expect(listings.length).toBeGreaterThanOrEqual(4);
-    for (const l of listings) UnitListingSchema.parse(l);
-    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
-    expect(listings.every((l) => l.availableDate === null || /^\d{4}-\d{2}-\d{2}$/.test(l.availableDate))).toBe(true);
-    expect(listings.filter((l) => l.sqft !== null).length).toBeGreaterThanOrEqual(4);
-    // Plan names never leak serialized JSON.
-    expect(listings.every((l) => !l.floorplanName.includes("{"))).toBe(true);
-    // Structural spot-check only — prices drift between fixture captures.
-    const known = listings.find((l) => l.unitNumber === "0624");
-    expect(known).toMatchObject({ beds: 0, sqft: 546 });
-    expect(known!.price).toBeGreaterThan(1800);
-    expect(known!.price).toBeLessThan(3200);
-  });
-});
+/** Invariants every adapter's output must satisfy, whatever the site. */
+function expectSaneListings(listings: UnitListing[], today = "2026-11-15"): void {
+  const seen = new Set<string>();
+  for (const l of listings) {
+    expect(l.price).toBeGreaterThanOrEqual(400);
+    expect(l.price).toBeLessThanOrEqual(25000);
+    if (l.priceMax !== undefined) expect(l.priceMax).toBeGreaterThan(l.price);
+    if (l.availableDate !== null) expect(l.availableDate).toMatch(ISO_DAY);
+    // The flag and the date may never contradict each other.
+    if (l.availableNow === false) expect(l.availableDate! > today).toBe(true);
+    if (l.availableNow === true) expect(l.availableDate).toBe(today);
+    if (l.leaseTerms) {
+      const months = l.leaseTerms.map((t) => t.months);
+      expect(months).toEqual([...months].sort((a, b) => a - b));
+      expect(new Set(months).size).toBe(months.length);
+    }
+    expect(l.floorplanName).not.toMatch(/[{}\n]|\s{2,}/);
+    const key = l.unitNumber ? `u:${l.unitNumber}` : `f:${l.floorplanName}:${l.beds}`;
+    expect(seen.has(key)).toBe(false);
+    seen.add(key);
+  }
+}
 
-describe("leo adapter (real captured page)", () => {
-  it("parses unit-level cards with sqft and baths", async () => {
-    const listings = await leo.scrape(buildingById("the-leo"), ctxFor("the-leo"));
-    expect(listings.length).toBeGreaterThanOrEqual(8); // page had 9 cards
-    for (const l of listings) UnitListingSchema.parse(l);
-    // Cards are unit-level on this site.
-    expect(listings.filter((l) => l.unitNumber !== null).length).toBeGreaterThanOrEqual(8);
-    expect(listings.every((l) => l.sqft !== null && l.baths !== null)).toBe(true);
-    const studio408 = listings.find((l) => l.unitNumber === "408");
-    expect(studio408).toMatchObject({ beds: 0, sqft: 467, baths: 1 });
-    expect(studio408!.price).toBeGreaterThan(1800);
-    expect(studio408!.price).toBeLessThan(3200);
-  });
+// ---------------------------------------------------------------------------
+// 1225 Old Town — SightMap
+// ---------------------------------------------------------------------------
 
-  it("prefers the embedded Jonah JSON over card markup", () => {
-    const html = readFileSync(join(ROOT, "scraper", "fixtures", "the-leo", "00-floorplans.html"), "utf8");
-    const listings = parseLeoPage(html, "https://leochicago.com/");
-    expect(listings.length).toBeGreaterThanOrEqual(8);
-    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
-    // Unix available_date on the JSON blob becomes an ISO day.
-    expect(listings.every((l) => l.availableDate === null || /^\d{4}-\d{2}-\d{2}$/.test(l.availableDate))).toBe(true);
-  });
-
-  it("recognizes Imunify360 WAF bodies so we retry instead of treating them as empty inventory", () => {
-    expect(
-      isWafPage(
-        JSON.stringify({
-          message: "Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted",
-        }),
+describe("sightmap adapter (1225 Old Town, captured 2026-11-15)", () => {
+  it("records EVERY unit the site lists, at the site's own price and lease term", async () => {
+    const { listings, logs } = await run(sightmap, "1225-old-town");
+    const payload = JSON.parse(
+      readFileSync(
+        join(ROOT, "scraper/fixtures/1225-old-town/00-app-api-v1-60p7xoklv7n-sightmaps-87594.json"),
+        "utf8",
       ),
-    ).toBe(true);
-    expect(isWafPage("<html><body>floorplans</body></html>")).toBe(false);
-    expect(parseLeoPage('{"message":"Access denied by Imunify360 bot-protection."}', "https://leochicago.com/")).toEqual(
-      [],
+    ) as { data: { units: { unit_number: string; price: number }[] } };
+    // The old lease cap dropped 8 of these 15. Nothing may be dropped now.
+    expect(listings).toHaveLength(payload.data.units.length);
+    expect(listings).toHaveLength(15);
+    for (const raw of payload.data.units) {
+      const l = listings.find((x) => x.unitNumber === raw.unit_number)!;
+      expect(l.price).toBe(raw.price); // headline price, never re-priced
+      expect(l.leaseTermMonths).toBe(18);
+    }
+    expectSaneListings(listings);
+    expect(logs).toContain("15 units in the feed → 15 listed (15 with a lease-term price table), 0 also listed");
+  });
+
+  it("attaches the full lease-term price table to every unit", async () => {
+    const { listings } = await run(sightmap, "1225-old-town");
+    for (const l of listings) {
+      expect(l.leaseTerms!.map((t) => t.months)).toEqual([
+        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+      ]);
+      // The headline price is the table's price at the headline term.
+      expect(l.leaseTerms!.find((t) => t.months === l.leaseTermMonths)!.price).toBe(l.price);
+    }
+    const u0509 = listings.find((l) => l.unitNumber === "0509")!;
+    expect(u0509.leaseTerms!.find((t) => t.months === 12)!.price).toBe(4955);
+    expect(u0509.leaseTerms!.find((t) => t.months === 13)!.price).toBe(3774);
+  });
+
+  it("keeps future move-in units, with their real dates", async () => {
+    const { listings } = await run(sightmap, "1225-old-town");
+    const future = listings.filter((l) => l.availableNow === false);
+    const now = listings.filter((l) => l.availableNow === true);
+    expect(future.map((l) => l.unitNumber).sort()).toEqual(
+      ["0625", "0701", "0704", "0705", "0718", "0725", "1022", "1505"].sort(),
     );
+    expect(now).toHaveLength(7);
+    expect(listings.find((l) => l.unitNumber === "0625")).toMatchObject({
+      availableDate: "2026-12-26",
+      availableNow: false,
+      price: 3529,
+      beds: 1,
+      sqft: 786,
+    });
+    expect(listings.find((l) => l.unitNumber === "0704")!.availableDate).toBe("2027-01-19");
+    // A 12-month lease on 0625 costs exactly its headline price — the unit
+    // the old cap threw away as having "no in-cap price".
+    const u0625 = listings.find((l) => l.unitNumber === "0625")!;
+    expect(u0625.leaseTerms!.find((t) => t.months === 12)!.price).toBe(3529);
+  });
+
+  it("links each unit to the site's own apply page for that unit and term", async () => {
+    const { listings } = await run(sightmap, "1225-old-town");
+    for (const l of listings) {
+      expect(l.url).toMatch(/^https:\/\/www\.1225oldtown\.com\/OnlineLeasing\.aspx\?/);
+      expect(l.url).toContain("LeaseTerm=18");
+      expect(l.url).toContain(`MoveInDate=${l.availableDate}`);
+    }
+  });
+
+  it("records the mandatory monthly fees the site adds on top of base rent", async () => {
+    const { listings } = await run(sightmap, "1225-old-town");
+    // The site headlines "$2,482 – $2,612" for 0812: $2,382 base + $100–$230.
+    expect(listings.every((l) => l.monthlyFees?.min === 100 && l.monthlyFees?.max === 230)).toBe(true);
+  });
+
+  it("picks up the site-wide special and real vacancy dates from the marketing page", async () => {
+    const { listings, notices } = await run(sightmap, "1225-old-town");
+    expect(notices).toEqual([
+      "Limited-Time Offer: Now Offering $1,500 Off Base Rent on Select Units! — Contact us today to schedule a tour.",
+    ]);
+    // SightMap only says "today" for a vacant unit; the marketing page knows
+    // 1308 has been sitting empty since September 1st.
+    expect(listings.find((l) => l.unitNumber === "1308")).toMatchObject({
+      availableDate: "2026-11-15",
+      availableNow: true,
+      vacantSince: "2026-09-01",
+    });
+    // Units that are not vacant yet have no vacancy date.
+    expect(listings.filter((l) => l.availableNow === false).every((l) => l.vacantSince === undefined)).toBe(true);
+    expect(listings.filter((l) => l.availableNow === true).every((l) => typeof l.vacantSince === "string")).toBe(true);
   });
 });
 
-describe("stead220 adapter (real captured page)", () => {
-  it("parses floorplan cards with honest floorplan-level listings", async () => {
-    const listings = await stead220.scrape(buildingById("stead-220"), ctxFor("stead-220"));
-    expect(listings.length).toBeGreaterThanOrEqual(10);
-    for (const l of listings) UnitListingSchema.parse(l);
-    // No fabricated unit numbers — plan cards are stacks, not units.
-    expect(listings.every((l) => l.unitNumber === null || /^\d{3,4}[A-Z]?$/i.test(l.unitNumber))).toBe(true);
-    // Plan identity carries the stack tag.
-    expect(listings.some((l) => /unit\s*\d+/i.test(l.floorplanName))).toBe(true);
-    const studio = listings.find((l) => l.beds === 0);
-    expect(studio).toBeDefined();
-    expect(studio!.price).toBeGreaterThanOrEqual(2000);
+describe("sightmap adapter (marketing page is optional)", () => {
+  it("lists every unit even when the marketing page is refused or missing", async () => {
+    const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "1225-old-town"));
+    for (const body of [
+      new Response('{"message":"Access denied by Imunify360 bot-protection."}', { status: 200 }),
+      new Response("nope", { status: 403 }),
+    ]) {
+      const logs: string[] = [];
+      const notices: string[] = [];
+      const ctx: AdapterContext = {
+        fetch: (async (input: string | URL | Request) =>
+          String(input).includes("1225oldtown.com/floorplans") ? body.clone() : base(input)) as typeof fetch,
+        log: (m) => logs.push(m),
+        now: () => CAPTURED,
+        reportNotice: (t) => notices.push(t),
+      };
+      const listings = await sightmap.scrape(buildingById("1225-old-town"), ctx);
+      expect(listings).toHaveLength(15);
+      expect(listings.every((l) => (l.leaseTerms?.length ?? 0) === 17)).toBe(true);
+      expect(listings.every((l) => l.vacantSince === undefined)).toBe(true);
+      expect(notices).toEqual([]);
+      expect(logs.some((m) => m.includes("specials and vacancy dates skipped"))).toBe(true);
+    }
+  });
+
+  it("parses announcements and vacancy dates out of a marketing page", async () => {
+    const { parseMarketingPage } = await import("../src/adapters/sightmap");
+    const html = `<html><head>
+      <script type="application/ld+json">{"@graph":[{"@type":"ApartmentComplex","jonah:announcements":[
+        {"jonah:name":"Two Months Free","jonah:description":"On 14-month leases."},
+        {"jonah:name":"Two Months Free","jonah:description":"On 14-month leases."}]}]}</script>
+      <script type="application/ld+json">{ not json</script></head><body>
+      <script id="jd-fp-data-script-app" type="application/json">${JSON.stringify({
+        units: [
+          { id_value: "10028890", available_date: 1788238800 },
+          { id_value: "10028757", available_date: "1798264800" },
+          { id_value: "x", available_date: null },
+        ],
+      })}</script></body></html>`;
+    const extras = parseMarketingPage(html);
+    expect(extras.notices).toEqual(["Two Months Free — On 14-month leases."]);
+    expect(extras.vacantSince.get("10028890")).toBe("2026-09-01");
+    expect(extras.vacantSince.get("10028757")).toBe("2026-12-26");
+    expect(extras.vacantSince.has("x")).toBe(false);
+    expect(parseMarketingPage("<html></html>")).toEqual({ notices: [], vacantSince: new Map() });
   });
 });
 
-describe("sightmap lease-term cap", () => {
-  it("extracts term→price pairs from unknown matrix shapes", async () => {
+describe("sightmap adapter (lease-term API behaviour)", () => {
+  const payload = (units: object[]) => ({
+    data: {
+      floors: [],
+      floor_plans: [{ id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1 }],
+      units,
+    },
+  });
+  const unit = (over: object) => ({
+    id: "u1",
+    unit_number: "0901",
+    floor_id: "f",
+    floor_plan_id: "p1",
+    price: 2200,
+    area: 500,
+    available_on: "2026-12-26",
+    display_available_on: "Available Dec 26th",
+    display_lease_term: "18 Months",
+    leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1?sightmap_id=1&currency_code=USD",
+    ...over,
+  });
+
+  it("asks for the lease table on the unit's own move-in day", async () => {
+    // The real API answers {"options": []} for a not-yet-vacant unit unless
+    // the request names a date on/after its move-in day.
+    const asked: string[] = [];
+    const ctx: AdapterContext = {
+      fetch: (async (url: string | URL | Request) => {
+        const u = String(url);
+        if (!u.includes("/leasing/")) return new Response(JSON.stringify(payload([unit({})])));
+        asked.push(u);
+        const options = new URL(u).searchParams.get("date") === "2026-12-26"
+          ? [
+              { lease_term: 12, price: 2450, apply_url: "https://example.com/apply?t=12" },
+              { lease_term: 18, price: 2200, apply_url: "https://example.com/apply?t=18" },
+            ]
+          : [];
+        return new Response(JSON.stringify({ data: { default_option: 0, options } }));
+      }) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    const [l] = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    expect(asked).toHaveLength(1);
+    expect(new URL(asked[0]!).searchParams.get("date")).toBe("2026-12-26");
+    expect(l).toMatchObject({
+      unitNumber: "0901",
+      price: 2200,
+      leaseTermMonths: 18,
+      leaseTerms: [
+        { months: 12, price: 2450 },
+        { months: 18, price: 2200 },
+      ],
+      availableDate: "2026-12-26",
+      availableNow: false,
+      url: "https://example.com/apply?t=18",
+    });
+  });
+
+  it("never drops a unit because of its lease term or a failed lease-table request", async () => {
+    const logs: string[] = [];
+    const ctx: AdapterContext = {
+      fetch: (async (url: string | URL | Request) => {
+        if (String(url).includes("/leasing/")) return new Response("nope", { status: 500 });
+        return new Response(
+          JSON.stringify(
+            payload([
+              unit({ display_lease_term: "24 Months", price: 2100 }),
+              unit({ id: "u2", unit_number: "0902", leasing_price_url: null, display_lease_term: null }),
+            ]),
+          ),
+        );
+      }) as typeof fetch,
+      log: (m) => logs.push(m),
+      now: () => CAPTURED,
+    };
+    const listings = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    expect(listings.map((l) => l.unitNumber)).toEqual(["0901", "0902"]);
+    expect(listings[0]).toMatchObject({ price: 2100, leaseTermMonths: 24 });
+    expect(listings[0]!.leaseTerms).toBeUndefined();
+    expect(listings[1]!.leaseTermMonths).toBeNull();
+    expect(logs.some((m) => m.includes("lease terms for unit 0901 unavailable"))).toBe(true);
+  });
+
+  it("flags a vacant unit as available now from either the label or the date", async () => {
+    const ctx: AdapterContext = {
+      fetch: (async () =>
+        new Response(
+          JSON.stringify(
+            payload([
+              unit({ available_on: "2026-11-15", display_available_on: "Available Now", leasing_price_url: null }),
+              unit({ id: "u2", unit_number: "0902", available_on: "2026-11-10", display_available_on: null, leasing_price_url: null }),
+              unit({ id: "u3", unit_number: "0903", available_on: null, display_available_on: null, leasing_price_url: null }),
+            ]),
+          ),
+        )) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    const listings = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    expect(listings.map((l) => [l.unitNumber, l.availableDate, l.availableNow])).toEqual([
+      ["0901", "2026-11-15", true],
+      // A date in the past means "now": listed with today's date, like every other building.
+      ["0902", "2026-11-15", true],
+      ["0903", null, undefined],
+    ]);
+  });
+
+  it("dates a vacant unit with today even before the feed's daily rebuild", async () => {
+    // The feed is rebuilt about 5 am Chicago and stamps vacant units with that day; at
+    // 2 am on the 16th it still says the 15th. The unit can be moved into today, the 16th —
+    // and its lease table is still asked for with the feed's own date.
+    const asked: string[] = [];
+    const ctx: AdapterContext = {
+      fetch: (async (url: string | URL | Request) => {
+        const href = String(url);
+        if (!href.includes("/leasing/")) {
+          return new Response(JSON.stringify(payload([unit({ available_on: "2026-11-15", display_available_on: "Available Now" })])));
+        }
+        asked.push(href);
+        return new Response(JSON.stringify({ data: { options: [{ lease_term: 18, price: 2200 }] } }));
+      }) as typeof fetch,
+      log: () => {},
+      now: () => new Date("2026-11-16T08:00:00Z"),
+    };
+    const [l] = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    expect(l).toMatchObject({ availableDate: "2026-11-16", availableNow: true, leaseTerms: [{ months: 18, price: 2200 }] });
+    expect(asked).toHaveLength(1);
+    expect(new URL(asked[0]!).searchParams.get("date")).toBe("2026-11-15");
+  });
+
+  it("builds dated leasing URLs without disturbing the other parameters", () => {
+    const base = "https://sightmap.com/app/api/v1/leasing/x/unit/1?sightmap_id=87594&currency_code=USD";
+    expect(leasingUrlForDate(base, "2026-12-26")).toBe(`${base}&date=2026-12-26`);
+    expect(leasingUrlForDate(base, null)).toBe(base);
+    expect(leasingUrlForDate(base, "12/26/2026")).toBe(base);
+  });
+
+  it("parses the documented options shape and tolerates unknown shapes", async () => {
+    const t = parseLeaseTable({
+      data: {
+        default_option: 1,
+        options: [
+          { lease_term: 18, price: 3774, apply_url: "https://x.example/a?LeaseTerm=18" },
+          { lease_term: 12, price: 4955.4, apply_url: "javascript:alert(1)" },
+          { lease_term: 99, price: 100 }, // junk row
+        ],
+      },
+    });
+    expect(t.terms).toEqual([
+      { months: 12, price: 4955 },
+      { months: 18, price: 3774 },
+    ]);
+    expect([...t.applyUrls.keys()]).toEqual([18]);
+
     const { extractTermPrices } = await import("../src/adapters/sightmap");
     const m1 = extractTermPrices({
       data: { prices: [
@@ -152,114 +394,1270 @@ describe("sightmap lease-term cap", () => {
     expect(m2.get(14)).toBe(2395);
     expect(m2.get(15)).toBe(2295);
     expect(extractTermPrices({ nothing: true }).size).toBe(0);
+    expect(parseLeaseTable({ terms: [{ months: 14, rent: 2395 }] }).terms).toEqual([
+      { months: 14, price: 2395 },
+    ]);
+    expect(parseLeaseTable(null).terms).toEqual([]);
   });
+});
 
-  it("re-prices over-cap advertised prices from the leasing matrix", async () => {
-    const payload = {
-      data: {
-        floors: [],
-        floor_plans: [{ id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1 }],
-        units: [
-          {
-            id: "u1", unit_number: "0901", floor_id: "f", floor_plan_id: "p1",
-            price: 2200, area: 500, available_on: null,
-            display_lease_term: "16 Months",
-            leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1",
-          },
-          {
-            id: "u2", unit_number: "0902", floor_id: "f", floor_plan_id: "p1",
-            price: 2400, area: 500, available_on: null,
-            display_lease_term: "12 Months",
-            leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u2",
-          },
-        ],
-      },
-    };
-    const matrix = {
-      data: { prices: [
-        { lease_term: 12, price: 2450 },
-        { lease_term: 14, price: 2380 },
-        { lease_term: 16, price: 2200 },
-      ]},
-    };
-    const ctx = {
-      fetch: (async (url: string | URL | Request) => {
-        const u = String(url);
-        if (u.includes("/leasing/")) return new Response(JSON.stringify(matrix));
-        return new Response(JSON.stringify(payload));
-      }) as typeof fetch,
-      log: () => {},
-      maxLeaseTermMonths: 14,
-    };
-    const building = { ...buildingById("1225-old-town") };
-    const listings = await sightmap.scrape(building, ctx);
-    const over = listings.find((l) => l.unitNumber === "0901")!;
-    // 16-month teaser replaced by the cheapest ≤14-month price.
-    expect(over.price).toBe(2380);
-    expect(over.leaseTermMonths).toBe(14);
-    const within = listings.find((l) => l.unitNumber === "0902")!;
-    // Already within cap: advertised price kept, no matrix fetch needed.
-    expect(within.price).toBe(2400);
-    expect(within.leaseTermMonths).toBe(12);
+describe("sightmap adapter (rows that are not ordinary units)", () => {
+  const plans = [
+    { id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1, bedroom_label: "Studio" },
+    // The real payload carries this placeholder: no label, no bathrooms.
+    { id: "tmp", name: "TEMP", bedroom_count: 0, bathroom_count: 0, bedroom_label: null, filter_label: "Coming Soon" },
+    { id: "cv", name: '{"name":"bhre1.1 Convertible ","provider_id":"28"}', bedroom_count: 0, bathroom_count: 1, bedroom_label: "Studio", filter_label: "bhre1.1 Convertible" },
+  ];
+  const u = (over: object) => ({
+    id: "u1",
+    unit_number: "0901",
+    floor_id: "f",
+    floor_plan_id: "p1",
+    price: 2200,
+    area: 500,
+    available_on: "2026-11-15",
+    display_available_on: "Available Now",
+    display_lease_term: "12 Months",
+    leasing_price_url: null,
+    ...over,
   });
-
-  it("omits over-cap units when the matrix has no in-cap price", async () => {
-    const payload = {
-      data: {
-        floors: [],
-        floor_plans: [{ id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1 }],
-        units: [
-          {
-            id: "u1",
-            unit_number: "0901",
-            floor_id: "f",
-            floor_plan_id: "p1",
-            price: 2200,
-            area: 500,
-            available_on: null,
-            display_lease_term: "18 Months",
-            leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1",
-          },
-        ],
-      },
-    };
-    const matrix = { data: { options: [{ lease_term: 18, price: 2200 }] } };
-    const omitted: OmittedListing[] = [];
+  const scrape = async (units: object[]) => {
+    const alsoListed: AlsoListed[] = [];
+    const logs: string[] = [];
     const ctx: AdapterContext = {
-      fetch: (async (url: string | URL | Request) => {
-        const u = String(url);
-        if (u.includes("/leasing/")) return new Response(JSON.stringify(matrix));
-        return new Response(JSON.stringify(payload));
-      }) as typeof fetch,
-      log: () => {},
-      maxLeaseTermMonths: 14,
-      reportOmitted: (row) => omitted.push(row),
+      fetch: (async (input: string | URL | Request) =>
+        String(input).includes("sightmaps/")
+          ? new Response(JSON.stringify({ data: { floors: [], floor_plans: plans, units } }))
+          : new Response("", { status: 404 })) as typeof fetch,
+      log: (m) => logs.push(m),
+      now: () => CAPTURED,
+      reportAlsoListed: (row) => alsoListed.push(row),
     };
     const listings = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    return { listings, alsoListed, logs };
+  };
+
+  it("does not file a 'Coming Soon' placeholder plan as a studio", async () => {
+    const { listings, alsoListed } = await scrape([
+      u({}),
+      u({ id: "u2", unit_number: "0902", floor_plan_id: "tmp" }),
+    ]);
+    expect(listings.map((l) => l.unitNumber)).toEqual(["0901"]);
+    expect(alsoListed).toEqual([
+      expect.objectContaining({
+        unitNumber: "0902",
+        beds: null,
+        price: 2200,
+        note: "Coming Soon — bed count not published",
+      }),
+    ]);
+  });
+
+  it("keeps unpriced and plan-less rows on the record instead of skipping them silently", async () => {
+    const { listings, alsoListed, logs } = await scrape([
+      u({ price: 0 }),
+      u({ id: "u2", unit_number: "0902", floor_plan_id: "missing" }),
+    ]);
     expect(listings).toEqual([]);
-    expect(omitted).toHaveLength(1);
-    expect(omitted).toHaveLength(1);
-    expect(omitted[0]).toMatchObject({
-      unitNumber: "0901",
-      advertisedPrice: 2200,
-      leaseTermMonths: 18,
-      reason: "over-cap",
-      beds: 0,
+    expect(alsoListed.map((a) => [a.unitNumber, a.note, a.beds])).toEqual([
+      ["0901", "No price published", 0],
+      ["0902", "Floor plan not published", null],
+    ]);
+    expect(logs.filter((m) => m.includes("also-listed"))).toHaveLength(2);
+  });
+
+  it("labels convertible plans, which the site files under studios", async () => {
+    const { listings } = await scrape([u({ floor_plan_id: "cv" }), u({ id: "u2", unit_number: "0902" })]);
+    expect(listings.map((l) => [l.unitNumber, l.beds, l.planType])).toEqual([
+      ["0901", 0, "Convertible"],
+      ["0902", 0, undefined],
+    ]);
+  });
+
+  it("asks the start-dates endpoint when the payload's date gets an empty table", async () => {
+    const asked: string[] = [];
+    const ctx: AdapterContext = {
+      fetch: (async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("sightmaps/")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                floors: [],
+                floor_plans: plans,
+                units: [
+                  u({
+                    available_on: "2026-12-01",
+                    display_available_on: "Available Dec 1st",
+                    leasing_price_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1?sightmap_id=1",
+                    leasing_start_dates_url: "https://sightmap.com/app/api/v1/leasing/x/unit/u1/start-dates",
+                  }),
+                ],
+              },
+            }),
+          );
+        }
+        if (!url.includes("/leasing/")) return new Response("", { status: 404 }); // marketing page
+        asked.push(url);
+        if (url.includes("start-dates")) {
+          return new Response(JSON.stringify({ data: ["2026-12-04", "2026-12-03", "garbage"] }));
+        }
+        const options =
+          new URL(url).searchParams.get("date") === "2026-12-03" ? [{ lease_term: 12, price: 2200 }] : [];
+        return new Response(JSON.stringify({ data: { default_option: 0, options } }));
+      }) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    const [l] = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    expect(asked.map((a) => new URL(a).searchParams.get("date") ?? "start-dates")).toEqual([
+      "2026-12-01",
+      "start-dates",
+      "2026-12-03",
+    ]);
+    expect(l!.leaseTerms).toEqual([{ months: 12, price: 2200 }]);
+    // The listing still says what the site says about move-in.
+    expect(l!.availableDate).toBe("2026-12-01");
+  });
+
+  it("keeps lease-term rows above the ordinary rent ceiling (short leases are quoted that high)", () => {
+    const t = parseLeaseTable({
+      data: { options: [{ lease_term: 2, price: 28174 }, { lease_term: 12, price: 5095 }] },
+    });
+    expect(t.terms).toEqual([
+      { months: 2, price: 28174 },
+      { months: 12, price: 5095 },
+    ]);
+  });
+});
+
+describe("sightmap adapter (a feed that is not what it used to be)", () => {
+  const plan = (over: object) => ({ id: "p1", name: "S1", bedroom_count: 0, bathroom_count: 1, bedroom_label: "Studio", ...over });
+  const unit = (over: object) => ({
+    id: "u1",
+    unit_number: "0901",
+    floor_id: "f",
+    floor_plan_id: "p1",
+    price: 2200,
+    area: 500,
+    available_on: "2026-11-15",
+    display_available_on: "Available Now",
+    display_lease_term: "18 Months",
+    leasing_price_url: null,
+    ...over,
+  });
+  const scrape = async (data: object, lease?: (url: string, n: number) => Response) => {
+    const alsoListed: AlsoListed[] = [];
+    const logs: string[] = [];
+    let leaseRequests = 0;
+    const ctx: AdapterContext = {
+      fetch: (async (input: string | URL | Request) => {
+        const href = String(input);
+        if (href.includes("/leasing/")) return lease!(href, ++leaseRequests);
+        return href.includes("sightmaps/")
+          ? new Response(JSON.stringify({ data }))
+          : new Response("", { status: 404 });
+      }) as typeof fetch,
+      log: (m) => logs.push(m),
+      now: () => CAPTURED,
+      reportAlsoListed: (row) => alsoListed.push(row),
+    };
+    const listings = await sightmap.scrape({ ...buildingById("1225-old-town") }, ctx);
+    for (const l of listings) UnitListingSchema.parse(l);
+    for (const a of alsoListed) AlsoListedSchema.parse(a);
+    return { listings, alsoListed, logs, leaseRequests: () => leaseRequests };
+  };
+
+  it("never returns a listing without a whole bed count — it would sink the whole run", async () => {
+    for (const bad of [null, undefined, "1", 1.5, -1]) {
+      const { listings, alsoListed } = await scrape({
+        floors: [],
+        floor_plans: [plan({}), plan({ id: "odd", bedroom_count: bad, bedroom_label: "1 Bed", filter_label: "A1 1 Bed" })],
+        units: [unit({}), unit({ id: "u2", unit_number: "0509", floor_plan_id: "odd" })],
+      });
+      expect(listings.map((l) => l.unitNumber)).toEqual(["0901"]);
+      expect(alsoListed).toEqual([
+        expect.objectContaining({ unitNumber: "0509", beds: null, price: 2200, note: "A1 1 Bed — bed count not published" }),
+      ]);
+    }
+  });
+
+  it("names a unit by whatever the feed calls it, and never skips one silently", async () => {
+    const { listings, alsoListed, logs } = await scrape({
+      floors: [],
+      floor_plans: [plan({})],
+      units: [
+        unit({}),
+        unit({ id: "u2", unit_number: null, label: "0902" }),
+        unit({ id: "u3", unit_number: "", display_unit_number: "APT 0903" }),
+        unit({ id: "u4", unit_number: 904 }),
+        unit({ id: "u5", unit_number: null }),
+      ],
+    });
+    expect(listings.map((l) => l.unitNumber)).toEqual(["0901", "0902", "0903", "904"]);
+    expect(alsoListed).toEqual([
+      expect.objectContaining({ unitNumber: null, note: "Unit number not published", price: 2200, beds: 0 }),
+    ]);
+    expect(logs.join("\n")).toContain("5 units in the feed → 4 listed (0 with a lease-term price table), 1 also listed");
+  });
+
+  it("treats a feed in which no unit can be named as a changed feed", async () => {
+    await expect(
+      scrape({ floors: [], floor_plans: [plan({})], units: [unit({ unit_number: undefined, number: "0901" }), unit({ id: "u2", unit_number: undefined, number: "0902" })] }),
+    ).rejects.toThrow(/lists 2 units but none carries a unit number/);
+    await expect(scrape({ floors: [] })).rejects.toThrow(/answered without a unit list/);
+  });
+
+  it("says so when two units share a number", async () => {
+    const { listings, logs } = await scrape({
+      floors: [],
+      floor_plans: [plan({})],
+      units: [unit({}), unit({ id: "u2", price: 2300 }), unit({ id: "u3", unit_number: "0902" })],
+    });
+    expect(listings.map((l) => l.unitNumber)).toEqual(["0901", "0902"]);
+    expect(logs.join("\n")).toContain("1 unit number(s) appear more than once in the feed");
+    expect(logs.join("\n")).toContain("3 units in the feed → 2 listed");
+  });
+
+  it("stops asking for lease tables once the lease-price API refuses — and keeps every unit", async () => {
+    const leasing = "https://sightmap.com/app/api/v1/leasing/x/unit/";
+    const units = ["0901", "0902", "0903", "0904", "0905"].map((n, i) =>
+      unit({ id: `u${i}`, unit_number: n, leasing_price_url: `${leasing}${i}?sightmap_id=1` }),
+    );
+    const { listings, logs, leaseRequests } = await scrape({ floors: [], floor_plans: [plan({})], units }, (_url, n) =>
+      n <= 2
+        ? new Response(JSON.stringify({ data: { options: [{ lease_term: 18, price: 2200 }] } }))
+        : new Response("Too many requests", { status: 429 }),
+    );
+    expect(listings).toHaveLength(5);
+    expect(listings.map((l) => (l.leaseTerms ? 1 : 0))).toEqual([1, 1, 0, 0, 0]);
+    // The third request was refused; the fourth and fifth were never sent.
+    expect(leaseRequests()).toBe(3);
+    expect(logs.join("\n")).toContain("the lease-price API refused the request for unit 0903");
+    expect(logs.join("\n")).toContain("5 listed (2 with a lease-term price table)");
+  });
+
+  it("records a refusal by the API itself as a refusal, whatever shape it takes", async () => {
+    const refuse = (body: string, status: number): AdapterContext => ({
+      fetch: (async () => new Response(body, { status, headers: { "content-type": "text/html" } })) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    });
+    const b = { ...buildingById("1225-old-town") };
+    await expect(sightmap.scrape(b, refuse("Forbidden", 403))).rejects.toBeInstanceOf(SiteBlockedError);
+    await expect(sightmap.scrape(b, refuse("slow down", 429))).rejects.toBeInstanceOf(SiteBlockedError);
+    await expect(
+      sightmap.scrape(b, refuse("<html><head><title>Just a moment...</title></head><body></body></html>", 200)),
+    ).rejects.toBeInstanceOf(SiteBlockedError);
+    const down = await sightmap.scrape(b, refuse("Bad gateway", 502)).catch((e: unknown) => e);
+    expect(down).not.toBeInstanceOf(SiteBlockedError);
+    expect((down as Error).message).toContain("HTTP 502");
+  });
+
+  it("shortens a long announcement instead of dropping it", () => {
+    const finePrint = " *Offer valid on select homes for a limited time. Restrictions apply; minimum lease term required. Pricing and availability are subject to change without notice. See a leasing associate for complete details and qualifying floor plans.";
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "jonah:announcements": [{ "jonah:name": "Now Offering $1,500 Off Base Rent on Select Units!", "jonah:description": `Contact us today.${finePrint}${finePrint}` }],
+    })}</script>`;
+    const [notice] = parseMarketingPage(html).notices;
+    expect(notice!.startsWith("Now Offering $1,500 Off Base Rent on Select Units! — Contact us today.")).toBe(true);
+    expect(notice!.length).toBeLessThanOrEqual(301);
+    expect(notice!.endsWith("…")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Old Town Park
+// ---------------------------------------------------------------------------
+
+describe("oldtownpark adapter (captured 2026-11-15)", () => {
+  it("gives every unit its move-in date — 'Available' and M/D/YYYY alike", async () => {
+    for (const id of ["old-town-park-1", "old-town-park-2", "old-town-park-3"]) {
+      const { listings } = await run(oldtownpark, id);
+      expect(listings.length).toBeGreaterThanOrEqual(15);
+      expectSaneListings(listings);
+      // The regression: future-dated units used to come back with null.
+      expect(listings.filter((l) => l.availableDate === null)).toEqual([]);
+      expect(listings.some((l) => l.availableNow === false)).toBe(true);
+      expect(listings.some((l) => l.availableNow === true)).toBe(true);
+      expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
+    }
+  });
+
+  it("reads the printed dates exactly (tower 1)", async () => {
+    const { listings } = await run(oldtownpark, "old-town-park-1");
+    expect(listings).toHaveLength(19);
+    const by = (n: string) => listings.find((l) => l.unitNumber === n)!;
+    expect(by("2111")).toMatchObject({ availableDate: "2026-12-18", availableNow: false, price: 3359, priceMax: 3514, beds: 1 });
+    expect(by("2906")).toMatchObject({ availableDate: "2027-01-22", availableNow: false });
+    expect(by("2313")).toMatchObject({ availableDate: "2026-11-15", availableNow: true, price: 2457, priceMax: 2478, beds: 0 });
+    expect(by("0619")).toMatchObject({ availableDate: "2026-12-10", beds: 0 });
+  });
+
+  it("separates interior from outdoor square footage", async () => {
+    const { listings } = await run(oldtownpark, "old-town-park-1");
+    const by = (n: string) => listings.find((l) => l.unitNumber === n)!;
+    expect(by("1004")).toMatchObject({ sqft: 690, outdoorSqft: 69 }); // "Total SQFT: 759"
+    expect(by("2313").sqft).toBe(565);
+    expect(by("2313").outdoorSqft).toBeUndefined(); // "Outdoor: 0"
+    expect(listings.every((l) => l.sqft !== null)).toBe(true);
+  });
+
+  it("deep-links each unit to its page in the leasing portal", async () => {
+    const { listings } = await run(oldtownpark, "old-town-park-1");
+    const u = listings.find((l) => l.unitNumber === "2313")!;
+    expect(u.url).toContain("oldtownpark.securecafe.com");
+    expect(u.url).toContain("UnitID=35648567");
+    expect(u.url).not.toContain("&amp;");
+  });
+
+  it("reports penthouse / townhome rows instead of dropping them, and the site-wide special", async () => {
+    const { listings, alsoListed, notices } = await run(oldtownpark, "old-town-park-3");
+    expect(listings).toHaveLength(20);
+    expect(alsoListed.map((a) => a.unitNumber)).toEqual(["4003", "0105"]);
+    expect(alsoListed[0]).toMatchObject({
+      beds: null,
+      note: "Penthouse — Contact for Pricing",
+      sqft: 2039,
+      outdoorSqft: 1400,
+    });
+    expect(alsoListed[0]!.price).toBeUndefined(); // data-rent-min="23599" is not a quote
+    expect(alsoListed[1]).toMatchObject({
+      beds: null,
+      price: 8230,
+      priceMax: 8548,
+      note: "Townhomes — bed count not published",
+    });
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain("$1,000 Rent Credit");
+    // "Inquire" on a button is not "no price": those units stay regular listings.
+    expect(listings.find((l) => l.unitNumber === "1703")).toMatchObject({
+      price: 2330,
+      availableDate: "2026-11-26",
     });
   });
 
-  it("keeps real-fixture listings term-tagged and within the 14-month cap", async () => {
-    const omitted: { unitNumber: string | null }[] = [];
-    const listings = await sightmap.scrape(buildingById("1225-old-town"), {
-      ...ctxFor("1225-old-town"),
-      maxLeaseTermMonths: 14,
-      reportOmitted: (row) => omitted.push(row),
+  it("treats a tower with the availability block but no rows as fully leased, not broken", async () => {
+    const fullyLeased = `<section><div class="yard__availability"></div>
+      <div class="yard__no-results"><h3>ONE Old Town Park is fully leased.</h3></div></section>`;
+    const ctx = (html: string): AdapterContext => ({
+      fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+      log: () => {},
+      now: () => CAPTURED,
     });
-    const tagged = listings.filter((l) => l.leaseTermMonths != null);
-    expect(tagged.length).toBe(listings.length); // every 1225 unit carries a term
-    expect(tagged.every((l) => l.leaseTermMonths! <= 14)).toBe(true);
-    // Over-cap teasers with no in-cap matrix price are omitted, not quoted.
-    expect(listings.find((l) => l.unitNumber === "1308")).toBeUndefined();
-    expect(omitted.some((o) => o.unitNumber === "1308")).toBe(true);
+    await expect(oldtownpark.scrape(buildingById("old-town-park-1"), ctx(fullyLeased))).resolves.toEqual([]);
+    // A page with neither rows nor the availability block is not "fully leased".
+    await expect(
+      oldtownpark.scrape(buildingById("old-town-park-1"), ctx(`<html><body>${"<p>Welcome to our new website</p>".repeat(900)}</body></html>`)),
+    ).rejects.toThrow(/page structure may have changed/);
+  });
+
+  it("keeps $0 placeholder rows out of the price list but on the record", () => {
+    const html = `
+      <div class="js-plan-group" data-plan-slug="s1" data-cat="Convertible">
+        <div class="yard__unit" data-unit="1501" data-rent-min="3200" data-rent-max="3400">
+          Available Now Total SQFT: 565
+        </div>
+        <div class="yard__unit" data-unit="1502" data-rent-min="0" data-rent-max="0">
+          Available Now Total SQFT: 565
+        </div>
+      </div>`;
+    const page = parseOldTownParkPage(html, "https://oldtownpark.com/availability-tower-3", CAPTURED);
+    expect(page.listings.map((l) => l.unitNumber)).toEqual(["1501"]);
+    expect(page.listings[0]).toMatchObject({ availableDate: "2026-11-15", availableNow: true, priceMax: 3400 });
+    expect(page.alsoListed).toEqual([
+      expect.objectContaining({ unitNumber: "1502", beds: 0, note: "No price published" }),
+    ]);
+  });
+});
+
+describe("oldtownpark adapter (plan types and integrity checks)", () => {
+  const page = (rows: string, bodyClass = "page-availability-tower-3") => `<html>
+    <body class="en-US template-availability ${bodyClass}"><div class="yard__availability">${rows}</div></body></html>`;
+  const group = (cat: string, feature: string, inner: string) =>
+    `<div class="js-plan-group" data-cat="${cat}" data-plan-slug="x"><p class="feature">${feature}</p>${inner}</div>`;
+  /** A unit row shaped like the real ones: unit, price element, date label, an empty tag cell. */
+  const row = (unit: string, attrs: string, price: string, label = "Available", tag = "") =>
+    `<div class="yard__unit bg-white js-plan-row" data-unit="${unit}" ${attrs}>
+       <div class="yard__unit__col yard__unit__col--1"><div class="yard__unit__inner">
+         <div class="dis-ib"><div class="content"><strong class="large">#${unit}</strong></div></div>
+         <div class="dis-ib align-r col-6"><div class="content"><strong class="large">${price}</strong></div></div>
+         <div class="col-6"><div class="content"><span class="label ">${label}</span></div></div>
+         <div class="col-6"><div class="content align-r">${tag}</div></div>
+       </div></div>
+       <div class="yard__unit__col yard__unit__col--2">Total SQFT: 915 Indoor: 858 Outdoor: 57</div></div>`;
+  const ctx = (html: string, logs: string[] = [], status = 200): AdapterContext => ({
+    fetch: async () => new Response(html, { status, headers: { "content-type": "text/html" } }),
+    log: (m) => logs.push(m),
+    now: () => CAPTURED,
+  });
+  const T3 = "https://oldtownpark.com/availability-tower-3";
+  const realTower3 = (): string =>
+    readFileSync(join(ROOT, "scraper/fixtures/old-town-park-3/00-availability-tower-3.html"), "utf8");
+  const parsed = (html: string) => parseOldTownParkPage(html, T3, CAPTURED);
+  const unitOf = (html: string, unit: string) => parsed(html).listings.find((l) => l.unitNumber === unit);
+
+  it("keeps the site's unit-type label where it says more than the bed count", async () => {
+    const { listings } = await run(oldtownpark, "old-town-park-3");
+    const by = (n: string) => listings.find((l) => l.unitNumber === n)!;
+    // Plan B is a JUNIOR two-bed; it used to pass for a regular 2 BR.
+    expect(by("2410")).toMatchObject({ beds: 2, planType: "Jr. 2 Bed", price: 3938 });
+    expect(by("0801")).toMatchObject({ beds: 2 });
+    expect(by("0801").planType).toBeUndefined(); // a plain "2 Bed"
+    expect(by("2605")).toMatchObject({ beds: 0, planType: "Convertible" });
+    const t1 = await run(oldtownpark, "old-town-park-1");
+    expect(t1.listings.find((l) => l.unitNumber === "0203")).toMatchObject({
+      beds: 1,
+      planType: "1 Bed + Flex",
+    });
+  });
+
+  it("trusts the printed price over the data attribute and says so", async () => {
+    const logs: string[] = [];
+    const html = page(
+      group(
+        "2-br",
+        "2 Bed",
+        row("0801", 'data-rent-min="4,096" data-rent-max="4462"', "$4,096 - $4,462") +
+          row("0901", 'data-rent-min="4000" data-rent-max="4000"', "$4,512 - $4,904", "11/26/2026"),
+      ),
+    );
+    const listings = await oldtownpark.scrape(buildingById("old-town-park-3"), ctx(html, logs));
+    expect(listings.map((l) => [l.unitNumber, l.price, l.priceMax, l.availableDate])).toEqual([
+      ["0801", 4096, 4462, "2026-11-15"], // "4,096" in the attribute is still 4096
+      ["0901", 4512, 4904, "2026-11-26"],
+    ]);
+    expect(logs.some((m) => m.includes("unit 0901: page prints $4512 but its data attribute says $4000"))).toBe(true);
+    expect(logs.some((m) => m.includes("2 rows on the page → 2 units"))).toBe(true);
+  });
+
+  it("reads the rent from the price element only — a promo tag is not a rent", () => {
+    const html = realTower3();
+    const real = unitOf(html, "1703")!;
+    expect(real).toMatchObject({ price: 2330, priceMax: 2369, availableDate: "2026-11-26" });
+    // The site prints a promo tag in the row's (today empty) right-hand cell.
+    const emptyTagCell = /(data-unit="1703"[\s\S]*?<div class="content content--availability-new align-r">)\s*(<\/div>)/;
+    expect(emptyTagCell.test(html)).toBe(true);
+    for (const tag of ['<span class="label label--special">$1,000 Rent Credit</span>', "<strong>Save $500</strong>"]) {
+      expect(unitOf(html.replace(emptyTagCell, `$1${tag}$2`), "1703")).toMatchObject({
+        price: 2330,
+        priceMax: 2369,
+        availableDate: "2026-11-26",
+      });
+    }
+    // A tag printed as a label BEFORE the date label does not blank the date.
+    const withTagFirst = html.replace(
+      /(data-unit="1703"[\s\S]*?)(<span class="label ">)/,
+      '$1<span class="label label--special">1 Month Free</span> $2',
+    );
+    expect(unitOf(withTagFirst, "1703")).toMatchObject({ price: 2330, availableDate: "2026-11-26" });
+  });
+
+  it("does not mistake a struck-through old price for the top of a range", () => {
+    const html = page(group("2-br", "2 Bed", row("1207", 'data-rent-min="3096" data-rent-max="3096"', "<s>$3,396</s> $3,096")));
+    const u = unitOf(html, "1207")!;
+    expect(u.price).toBe(3096);
+    expect(u.priceMax).toBeUndefined();
+  });
+
+  it("reads the same prices from the page with every space between tags removed", () => {
+    const html = realTower3();
+    const minified = html.replace(/>\s+</g, "><").replace(/\s{2,}/g, " ");
+    const key = (p: ReturnType<typeof parsed>) =>
+      p.listings.map((l) => [l.unitNumber, l.price, l.priceMax, l.availableDate, l.sqft]);
+    expect(key(parsed(minified))).toEqual(key(parsed(html)));
+    expect(parsed(minified).alsoListed).toHaveLength(2);
+  });
+
+  it("lists a unit without a price when the price slot prints words, whatever its hidden data says", () => {
+    const html = realTower3();
+    // The penthouse really prints "Contact for Pricing" and hides data-rent-min="23599".
+    expect(parsed(html).alsoListed.find((a) => a.unitNumber === "4003")).toMatchObject({
+      note: "Penthouse — Contact for Pricing",
+    });
+    for (const wording of ["Inquire for Pricing", "Call for Details", "Price Upon Request", "Pricing Coming Soon"]) {
+      const reworded = parsed(html.replace("Contact for Pricing", wording)).alsoListed.find((a) => a.unitNumber === "4003")!;
+      expect(reworded.price).toBeUndefined();
+      expect(reworded.note).toBe(`Penthouse — ${wording}`);
+    }
+    // An ordinary unit whose price is withdrawn while its attributes keep the old numbers.
+    const withdrawn = page(
+      group("2-br", "2 Bed", row("0801", 'data-rent-min="4096" data-rent-max="4462"', "Call for Details") + row("0802", 'data-rent-min="4096" data-rent-max="4462"', "$0")),
+    );
+    const p = parsed(withdrawn);
+    expect(p.listings).toEqual([]);
+    expect(p.alsoListed.map((a) => [a.unitNumber, a.beds, a.price, a.note])).toEqual([
+      ["0801", 2, undefined, "2 Bed — Call for Details"],
+      ["0802", 2, undefined, "2 Bed — $0"],
+    ]);
+  });
+
+  it("publishes neither number when the printed price and the row's own data are far apart", () => {
+    const logs: string[] = [];
+    const html = page(group("convertible", "Convertible", row("1703", 'data-rent-min="2330" data-rent-max="2369"', "$1,000 Rent Credit")));
+    const p = parsed(html);
+    expect(p.listings).toEqual([]);
+    expect(p.alsoListed[0]).toMatchObject({ unitNumber: "1703", beds: 0 });
+    expect(p.alsoListed[0]!.price).toBeUndefined();
+    expect(p.alsoListed[0]!.note).toBe("Convertible — Price unclear on the site ($1,000 printed, $2,330 in its data)");
+    expect(p.remarks.join("\n")).toContain("too far apart to trust either");
+    void logs;
+  });
+
+  it("publishes a printed price above the ordinary rent ceiling instead of dropping the row", async () => {
+    const html = page(
+      group("penthouse", "Penthouse", row("4001", 'data-rent-min="28000" data-rent-max="28000"', "$28,000")),
+    );
+    const alsoListed: AlsoListed[] = [];
+    const c = ctx(html);
+    c.reportAlsoListed = (r) => alsoListed.push(r);
+    await expect(oldtownpark.scrape(buildingById("old-town-park-3"), c)).resolves.toEqual([]);
+    expect(alsoListed).toEqual([
+      expect.objectContaining({
+        unitNumber: "4001",
+        beds: null,
+        price: 28000,
+        sqft: 858,
+        outdoorSqft: 57,
+        note: "Penthouse — bed count not published",
+      }),
+    ]);
+  });
+
+  it("still finds every unit when the page's hooks are renamed — or fails, never a shorter list", async () => {
+    const html = realTower3();
+    const count = (p: ReturnType<typeof parsed>) => [p.listings.length, p.alsoListed.length, p.rowCount];
+    expect(count(parsed(html))).toEqual([20, 2, 22]);
+    // (a) the plan-group hook class is renamed: the rows are still unit rows.
+    expect(count(parsed(html.replaceAll("js-plan-group", "js-plan-panel")))).toEqual([20, 2, 22]);
+    // (b) data-unit is renamed: the unit number is printed in the row.
+    const noAttr = parsed(html.replaceAll("data-unit=", "data-unit-number="));
+    expect(count(noAttr)).toEqual([20, 2, 22]);
+    expect(noAttr.listings.map((l) => l.unitNumber)).toContain("1703");
+    // (c) data-cat is renamed: the printed type label still says what each plan is.
+    const noCat = parsed(html.replaceAll("data-cat=", "data-category="));
+    expect(count(noCat)).toEqual([20, 2, 22]);
+    expect(noCat.listings.find((l) => l.unitNumber === "2410")).toMatchObject({ beds: 2, planType: "Jr. 2 Bed" });
+    // (d) both the category and the type label are gone: nothing says what a row is — an error, not 22 mystery rows.
+    const blind = html.replaceAll("data-cat=", "data-category=").replaceAll('class="feature"', 'class="kind"');
+    await expect(oldtownpark.scrape(buildingById("old-town-park-3"), ctx(blind))).rejects.toThrow(
+      /none of its 22 unit rows names a unit type/,
+    );
+    // (e) rows that carry no unit number anywhere cannot be read: an error.
+    const anonymous = page(
+      group("2-br", "2 Bed", row("0801", "", "$4,096").replace('data-unit="0801"', "").replace("#0801", "")),
+    );
+    await expect(oldtownpark.scrape(buildingById("old-town-park-3"), ctx(anonymous))).rejects.toThrow(
+      /1 of 1 unit rows carry no unit number/,
+    );
+  });
+
+  it("does not read 'Unavailable' as available today", () => {
+    const bare = (head: string) =>
+      page(group("2-br", "2 Bed", `<div class="yard__unit" data-unit="0801" data-rent-min="4096"><div class="yard__unit__col--1">${head}</div></div>`));
+    expect(unitOf(bare("#801 Unavailable"), "0801")).toMatchObject({ availableDate: null });
+    expect(unitOf(bare("#801 Not available"), "0801")).toMatchObject({ availableDate: null });
+    expect(unitOf(bare("#801 Available"), "0801")).toMatchObject({ availableDate: "2026-11-15", availableNow: true });
+    expect(unitOf(bare("#801 12/26/2026"), "0801")).toMatchObject({ availableDate: "2026-12-26", availableNow: false });
+  });
+
+  it("shortens a long special instead of dropping it", () => {
+    const finePrint = " *Offer valid on select homes for a limited time. Restrictions apply; minimum lease term required. Pricing and availability are subject to change without notice. See a leasing associate for complete details and qualifying floor plans.";
+    const html = `${page("")}<div class="popup--promo"><div class="content"><h3>Limited-Time Specials</h3>
+      <p>Receive up to a $1,000 Rent Credit!${finePrint}${finePrint}</p></div></div>`;
+    const notice = parsed(html).notices[0]!;
+    expect(notice.startsWith("Limited-Time Specials — Receive up to a $1,000 Rent Credit!")).toBe(true);
+    expect(notice.length).toBeLessThanOrEqual(301);
+    expect(notice.endsWith("…")).toBe(true);
+  });
+
+  it("records a bot-protection page as a refusal, not as a changed page", async () => {
+    const challenge = "<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>";
+    await expect(oldtownpark.scrape(buildingById("old-town-park-3"), ctx(challenge))).rejects.toBeInstanceOf(SiteBlockedError);
+    await expect(oldtownpark.scrape(buildingById("old-town-park-3"), ctx("Forbidden", [], 403))).rejects.toBeInstanceOf(SiteBlockedError);
+    // An ordinary server error stays an ordinary failure.
+    const down = await oldtownpark.scrape(buildingById("old-town-park-3"), ctx("Bad gateway", [], 502)).catch((e: unknown) => e);
+    expect(down).not.toBeInstanceOf(SiteBlockedError);
+    expect((down as Error).message).toContain("HTTP 502");
+  });
+
+  it("refuses a page that belongs to another tower, and a building without a towerPath", async () => {
+    const html = page(
+      group("2-br", "2 Bed", row("0801", 'data-rent-min="4096" data-rent-max="4462"', "$4,096")),
+      "page-availability-tower-1",
+    );
+    await expect(oldtownpark.scrape(buildingById("old-town-park-3"), ctx(html))).rejects.toThrow(
+      /served the page for availability-tower-1, not availability-tower-3/,
+    );
+    const { adapterOptions: _dropped, ...noTower } = buildingById("old-town-park-3");
+    await expect(oldtownpark.scrape(noTower, ctx(html))).rejects.toThrow(/needs adapterOptions\.towerPath/);
+  });
+
+  it("reports duplicate unit rows instead of silently merging them", async () => {
+    const logs: string[] = [];
+    const html = page(
+      group(
+        "2-br",
+        "2 Bed",
+        row("0801", 'data-rent-min="4096" data-rent-max="4462"', "$4,096") +
+          row("0801", 'data-rent-min="4200" data-rent-max="4200"', "$4,200"),
+      ),
+    );
+    const listings = await oldtownpark.scrape(buildingById("old-town-park-3"), ctx(html, logs));
+    expect(listings).toHaveLength(1);
+    expect(logs.join("\n")).toContain("1 duplicate unit row(s)");
+    expect(logs.join("\n")).toContain("1 NOT accounted for");
+  });
+});
+
+describe("oldtownpark adapter (legacy Aug 2026 markup)", () => {
+  it("reads the August dates the old parser dropped, and the old special", async () => {
+    const out = await run(oldtownpark, "old-town-park-1", "legacy-2026-09/old-town-park-1");
+    const dated = out.listings.filter((l) => l.availableNow === false);
+    // 19 of the 28 rows on that capture were future-dated ("8/22/2026" …).
+    expect(out.listings).toHaveLength(28);
+    expect(dated).toHaveLength(19);
+    expect(out.listings.filter((l) => l.availableDate === null)).toEqual([]);
+    expect(out.listings.find((l) => l.unitNumber === "2313")!.availableDate).toBe("2026-08-22");
+    expect(out.notices[0]).toContain("Summer Savings");
+  });
+
+  it("still parses every unit card on the old tower-1 capture", async () => {
+    const { listings } = await run(oldtownpark, "old-town-park-1", "legacy-2026-09/old-town-park-1");
+    expect(listings.length).toBeGreaterThanOrEqual(25); // page had 29 unit cards
+    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
+    expect(listings.every((l) => l.price >= 1500 && l.price <= 15000)).toBe(true);
+    expect(listings.some((l) => l.priceMax !== undefined && l.priceMax > l.price)).toBe(true);
+    expect(listings.every((l) => l.sqft !== null)).toBe(true);
+    expect(listings.every((l) => l.availableDate === null || ISO_DAY.test(l.availableDate))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The Leo
+// ---------------------------------------------------------------------------
+
+describe("leo adapter (captured 2026-11-15)", () => {
+  it("parses the two listed units with the site's 'Available Now' flag", async () => {
+    const { listings, alsoListed, notices, logs } = await run(leo, "the-leo");
+    expectSaneListings(listings);
+    expect(alsoListed).toEqual([]);
+    expect(listings).toHaveLength(2);
+    expect(listings.find((l) => l.unitNumber === "705")).toMatchObject({
+      beds: 1,
+      baths: 1,
+      sqft: 712,
+      price: 3093,
+      floorplanName: "1 BR",
+      // The site says "Available Now"; its date (Sep 22) is when the unit
+      // became vacant, not when you could move in.
+      availableDate: "2026-11-15",
+      availableNow: true,
+      vacantSince: "2026-09-22",
+    });
+    expect(listings.find((l) => l.unitNumber === "705")!.planType).toBeUndefined();
+    // The junior one-bed is filed by the site under its own type, and the
+    // site's structured data counts it as 0 bedrooms — so it is studio-class
+    // here too, under its own name, not a "1 BR".
+    expect(listings.find((l) => l.unitNumber === "602")).toMatchObject({
+      beds: 0,
+      sqft: 508,
+      price: 2635,
+      floorplanName: "Jr 1 Bedroom",
+      planType: "Jr 1 Bedroom",
+      availableNow: true,
+      vacantSince: "2026-11-10",
+    });
+    // The JSON path, specifically: unit permalinks only exist there.
+    expect(listings.every((l) => /^https:\/\/leochicago\.com\/floorplans\/unit-/.test(l.url ?? ""))).toBe(true);
+    // What the site says about its prices is recorded with them.
+    expect(notices).toEqual([
+      "Receive a 1/2 month free on our final availability for 2026! — Ask about limited-time incentives! Schedule a tour with our leasing team to explore The Leo today.",
+      "Prices listed may include concessions (free rent) and/or special offers.",
+    ]);
+    expect(logs.join("\n")).toContain("2 unit(s) in the site's list → 2 priced");
+  });
+
+  it("asks for the page's real address (no redirect) and makes one request", async () => {
+    const urls: string[] = [];
+    const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "the-leo"));
+    const ctx: AdapterContext = {
+      fetch: (async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return base(input);
+      }) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    await leo.scrape(buildingById("the-leo"), ctx);
+    expect(urls).toEqual(["https://leochicago.com/floorplans/"]);
+  });
+
+  const blobPage = (units: unknown[], extra = ""): string =>
+    `<html><head><title>Floor plans</title></head><body>${extra}<script id="jd-fp-data-script-app" type="application/json">${JSON.stringify(
+      { version: "1.12.0", units, floorplans: [] },
+    )}</script></body></html>`;
+  const catalogue = (plans: { name: string; beds: number; available: number }[]): string =>
+    `<script type="application/ld+json">${JSON.stringify({
+      "@graph": [
+        {
+          "@type": "ApartmentComplex",
+          accommodationFloorPlan: plans.map((p) => ({
+            "@type": "FloorPlan",
+            name: p.name,
+            numberOfBedrooms: p.beds,
+            numberOfAvailableAccommodationUnits: p.available,
+          })),
+        },
+      ],
+    })}</script>`;
+  const serve = (body: string, status = 200, logs: string[] = [], notices: string[] = []): AdapterContext => ({
+    fetch: async () => new Response(body, { status, headers: { "content-type": "text/html" } }),
+    log: (m) => logs.push(m),
+    now: () => CAPTURED,
+    reportNotice: (t) => notices.push(t),
+  });
+
+  it("treats a real page with an empty inventory as 'nothing listed', not a failure", async () => {
+    const html = blobPage([], catalogue([{ name: "408", beds: 0, available: 0 }, { name: "705", beds: 1, available: 0 }]));
+    const logs: string[] = [];
+    const notices: string[] = [];
+    await expect(leo.scrape(buildingById("the-leo"), serve(html, 200, logs, notices))).resolves.toEqual([]);
+    expect(logs.join(" ")).toContain("lists nothing right now");
+    expect(notices).toEqual([
+      "The site lists no available apartments right now (2 floor plans in its catalogue, none marked available).",
+    ]);
+    expect(parseLeoInventory(html, "https://leochicago.com/", CAPTURED).sawInventory).toBe(true);
+    expect(parseLeoInventory("<html></html>", "https://leochicago.com/", CAPTURED).sawInventory).toBe(false);
+  });
+
+  it("does not record an empty building when the page's own catalogue contradicts it", async () => {
+    const html = blobPage([], catalogue([{ name: "705", beds: 1, available: 1 }]));
+    await expect(leo.scrape(buildingById("the-leo"), serve(html))).rejects.toThrow(/contradictory evidence/);
+  });
+
+  it("records a bot-protection refusal as blocked — no browser, no second request", async () => {
+    const waf = JSON.stringify({
+      message: "Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted",
+    });
+    let requests = 0;
+    const ctx: AdapterContext = {
+      fetch: async () => {
+        requests++;
+        return new Response(waf, { status: 200, headers: { "content-type": "application/json" } });
+      },
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    const err = await leo.scrape(buildingById("the-leo"), ctx).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SiteBlockedError);
+    expect((err as Error).message).toMatch(/bot protection refused the request \(HTTP 200, application\/json, \d+ bytes\)/);
+    expect(requests).toBe(1);
+
+    // A flat 403 and an HTML challenge page are refusals too.
+    await expect(leo.scrape(buildingById("the-leo"), serve("<html><body>403 Forbidden</body></html>", 403))).rejects.toBeInstanceOf(SiteBlockedError);
+    await expect(
+      leo.scrape(buildingById("the-leo"), serve("<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>")),
+    ).rejects.toBeInstanceOf(SiteBlockedError);
+    // A server error or an unrecognised page is an ordinary failure, with what was seen.
+    const plain = await leo.scrape(buildingById("the-leo"), serve("<html><head><title>Oops</title></head><body>maintenance</body></html>", 200)).catch((e: unknown) => e);
+    expect(plain).not.toBeInstanceOf(SiteBlockedError);
+    expect((plain as Error).message).toMatch(/no unit data found .*HTTP 200, text\/html, \d+ bytes, title "Oops"/);
+    const down = await leo.scrape(buildingById("the-leo"), serve("Bad gateway", 502)).catch((e: unknown) => e);
+    expect(down).not.toBeInstanceOf(SiteBlockedError);
+    expect((down as Error).message).toContain("HTTP 502");
+  });
+
+  it("never mistakes the real page for a challenge page, whatever words it contains", () => {
+    const real = blobPage([], "<!-- protected by imunify360 --><p>captcha</p>");
+    expect(isWafPage(real)).toBe(false);
+    expect(isWafPage(real, 403)).toBe(false);
+    // A full-size real page mentioning a captcha (contact form) is not a challenge either.
+    expect(isWafPage(`<html>${"x".repeat(30_000)} recaptcha</html>`)).toBe(false);
+    expect(isWafPage("<html><title>One moment, please...</title></html>")).toBe(true);
+    expect(isWafPage("")).toBe(false);
+  });
+
+  it("reports a unit without a price or bed count instead of silently dropping it", async () => {
+    const html = blobPage([
+      { apartment_number: "1201", bedrooms: "2", bathrooms: "2", square_feet: "1100", rent_min: "", price_display: "Contact Us", available_display: "Available Now" },
+      { apartment_number: "408", bedrooms: "Studio", bathrooms: "1", square_feet: "467", rent_min: "2350", rent_max: "2500", available_date: "1797400800", available_display: "Available Dec 16" },
+      { apartment_number: "PH1", bedrooms: "Penthouse", bathrooms: "2", square_feet: "1500", rent_min: "6100", available_display: "Available Now" },
+      { apartment_number: "PH2", bedrooms: "", bedrooms_display: "1 bed", bathrooms: "1", square_feet: "700", rent_min: "3100", available_display: "Available Now" },
+    ]);
+    const page = parseLeoInventory(html, "https://leochicago.com/", CAPTURED);
+    expect(page.unitCount).toBe(4);
+    expect(page.listings.map((l) => [l.unitNumber, l.beds, l.price])).toEqual([
+      ["408", 0, 2350],
+      // An empty bedroom field falls back to the display label; odd unit
+      // names are kept as the unit's identity.
+      ["PH2", 1, 3100],
+    ]);
+    expect(page.listings[0]).toMatchObject({
+      priceMax: 2500,
+      availableDate: "2026-12-16",
+      availableNow: false,
+    });
+    expect(page.alsoListed).toEqual([
+      expect.objectContaining({ unitNumber: "1201", beds: 2, note: "Contact Us", availableNow: true }),
+      expect.objectContaining({ unitNumber: "PH1", beds: null, price: 6100, note: "Bed count not published" }),
+    ]);
+    const logs: string[] = [];
+    await leo.scrape(buildingById("the-leo"), serve(html, 200, logs));
+    expect(logs.join("\n")).toContain("4 unit(s) in the site's list → 2 priced, 2 listed without a price or bed count");
+  });
+
+  it("classifies a non-numeric bedroom label the way the site's catalogue does", () => {
+    const junior = { apartment_number: "602", floorplan_title: "602", bedrooms: "JR 1 Bedroom", bedrooms_display: "JR 1 Bedroom", bathrooms: "1", square_feet: "508", rent_min: "2635", available_display: "Available Now" };
+    // With the catalogue: 0 bedrooms, as the site says.
+    const withCatalogue = parseLeoInventory(
+      blobPage([junior], catalogue([{ name: "602", beds: 0, available: 1 }])),
+      "https://leochicago.com/",
+      CAPTURED,
+    );
+    expect(withCatalogue.listings[0]).toMatchObject({ beds: 0, floorplanName: "JR 1 Bedroom", planType: "JR 1 Bedroom" });
+    expect(withCatalogue.catalogueAvailable).toBe(1);
+    // Without one, the digit in the label is the only clue left.
+    const without = parseLeoInventory(blobPage([junior]), "https://leochicago.com/", CAPTURED);
+    expect(without.listings[0]).toMatchObject({ beds: 1, planType: "JR 1 Bedroom" });
+    expect(without.catalogueAvailable).toBeNull();
+  });
+
+  it("rejects timestamps that are not a plausible day", () => {
+    const unit = (available_date: unknown) => ({ apartment_number: "705", bedrooms: "1", rent_min: "3093", available_date });
+    const day = (v: unknown) =>
+      parseLeoInventory(blobPage([unit(v)]), "https://leochicago.com/", CAPTURED).listings[0]!.availableDate;
+    expect(day("1797400800")).toBe("2026-12-16");
+    expect(day(1797400800)).toBe("2026-12-16");
+    // Milliseconds, zero, garbage: no date rather than a wrong one.
+    expect(day(1797400800000)).toBeNull();
+    expect(day("0")).toBeNull();
+    expect(day("soon")).toBeNull();
+  });
+});
+
+describe("leo adapter (what the widget can do, and what it must not hide)", () => {
+  const realLeo = (): string => readFileSync(join(ROOT, "scraper/fixtures/the-leo/00-floorplans.html"), "utf8");
+  /** The real Leo page with its unit list replaced by an edited copy of itself. */
+  const withUnits = (edit: (units: Record<string, unknown>[]) => unknown[]): string => {
+    const html = realLeo();
+    const m = /(<script[^>]*id="jd-fp-data-script-app"[^>]*>)([\s\S]*?)(<\/script>)/.exec(html)!;
+    const data = JSON.parse(m[2]!) as { units: Record<string, unknown>[] };
+    const edited = { ...data, units: edit(data.units) };
+    return html.replace(m[0], `${m[1]}${JSON.stringify(edited)}${m[3]}`);
+  };
+  /** Unit records from 1225's marketing page: the same widget, with lease terms switched on. */
+  const jonahUnitWithTerms = (): Record<string, unknown> => {
+    const html = readFileSync(join(ROOT, "scraper/fixtures/1225-old-town/01-floorplans.html"), "utf8");
+    const m = /<script[^>]*id="jd-fp-data-script-app"[^>]*>([\s\S]*?)<\/script>/.exec(html)!;
+    return (JSON.parse(m[1]!) as { units: Record<string, unknown>[] }).units[0]!;
+  };
+  const serve = (html: string, sink: { also: AlsoListed[]; logs: string[] } = { also: [], logs: [] }): AdapterContext => ({
+    fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+    log: (m) => sink.logs.push(m),
+    now: () => CAPTURED,
+    reportAlsoListed: (row) => sink.also.push(row),
+  });
+
+  it("reads lease-length prices in the widget's own format, should The Leo ever publish them", () => {
+    const sample = jonahUnitWithTerms();
+    expect((sample["lease_terms"] as unknown[]).length).toBe(17);
+    const table = leaseTermsFrom(sample);
+    expect(table).toHaveLength(17);
+    expect(table[0]).toEqual({ months: 2, price: 7302 });
+    expect(table[table.length - 1]).toEqual({ months: 18, price: 5544 });
+    // On a Leo unit: the table and the advertised term both come through.
+    const html = withUnits((units) => [
+      { ...units[0], lease_terms: sample["lease_terms"], price_entity: { ...(units[0]!["price_entity"] as object), term: "18", termDisplay: "18 months" } },
+      units[1]!,
+    ]);
+    const page = parseLeoInventory(html, "https://leochicago.com/", CAPTURED);
+    expect(page.listings[0]).toMatchObject({ unitNumber: "705", leaseTermMonths: 18 });
+    expect(page.listings[0]!.leaseTerms).toHaveLength(17);
+    expect(page.listings[1]!.leaseTerms).toBeUndefined();
+  });
+
+  it("stores base rent when the widget is set to show prices with required fees", () => {
+    // 1225's marketing page does this today: $5,644–$5,774 shown, $5,544 base rent.
+    const sample = jonahUnitWithTerms();
+    const html = withUnits(() => [{ ...sample, bedrooms: "3", permalink: "/floorplans/unit-x/" }]);
+    const [l] = parseLeoInventory(html, "https://leochicago.com/", CAPTURED).listings;
+    expect(l).toMatchObject({ unitNumber: "1308", price: 5544, monthlyFees: { min: 100, max: 230 }, leaseTermMonths: 18 });
+    expect(l!.priceMax).toBeUndefined();
+    // Today's Leo prices carry no fees: the advertised rent is the base rent.
+    const today = parseLeoInventory(realLeo(), "https://leochicago.com/", CAPTURED).listings;
+    expect(today.map((u) => [u.unitNumber, u.price, u.monthlyFees])).toEqual([
+      ["705", 3093, undefined],
+      ["602", 2635, undefined],
+    ]);
+  });
+
+  it("fails when the page lists unit records it cannot read — never 'the building is empty'", async () => {
+    // A widget update nests each record one level deeper, or renames its fields.
+    const nested = withUnits((units) => units.map((u) => ({ unit: u })));
+    await expect(leo.scrape(buildingById("the-leo"), serve(nested))).rejects.toThrow(
+      /lists 2 unit record\(s\) but none could be read/,
+    );
+    const renamed = withUnits((units) =>
+      units.map(({ apartment_number, title, floorplan_title, ...rest }) => ({
+        ...rest,
+        unit_number: apartment_number,
+        name: title,
+        plan: floorplan_title,
+      })),
+    );
+    await expect(leo.scrape(buildingById("the-leo"), serve(renamed))).rejects.toThrow(/none could be read/);
+    // One record still named: it is listed, and the unreadable one is counted, not hidden.
+    const sink = { also: [] as AlsoListed[], logs: [] as string[] };
+    const half = withUnits((units) => [units[0]!, { rent_min: "2635", bedrooms: "Studio" }]);
+    const listings = await leo.scrape(buildingById("the-leo"), serve(half, sink));
+    expect(listings.map((l) => l.unitNumber)).toEqual(["705"]);
+    expect(sink.logs.join("\n")).toContain("2 unit(s) in the site's list → 1 priced, 0 listed without a price or bed count, 1 unreadable");
+    // …and the catalogue still knows the other apartment is available.
+    expect(sink.also.map((a) => a.unitNumber)).toEqual(["602"]);
+  });
+
+  it("keeps an apartment its own catalogue marks available but its list has lost", async () => {
+    const sink = { also: [] as AlsoListed[], logs: [] as string[] };
+    const only705 = withUnits((units) => units.filter((u) => u["apartment_number"] === "705"));
+    const listings = await leo.scrape(buildingById("the-leo"), serve(only705, sink));
+    expect(listings.map((l) => l.unitNumber)).toEqual(["705"]);
+    expect(sink.also).toEqual([
+      expect.objectContaining({
+        unitNumber: "602",
+        beds: 0,
+        note: "Marked available in the site's catalogue, but missing from its unit list",
+      }),
+    ]);
+    expect(sink.logs.join("\n")).toContain("apartment 602 is marked available in the page's catalogue");
+    // The real page: list and catalogue agree, nothing extra is reported.
+    const real = { also: [] as AlsoListed[], logs: [] as string[] };
+    await leo.scrape(buildingById("the-leo"), serve(realLeo(), real));
+    expect(real.also).toEqual([]);
+  });
+});
+
+describe("leo adapter (legacy Aug 2026 capture)", () => {
+  const dir = join(ROOT, "scraper", "fixtures", "legacy-2026-09", "the-leo");
+
+  it("parses unit-level data with sqft, baths and future move-in dates", async () => {
+    const { listings } = await run(leo, "the-leo", "legacy-2026-09/the-leo");
+    expectSaneListings(listings, "2026-08-04");
+    expect(listings.map((l) => l.unitNumber).sort()).toEqual(
+      ["1309", "1310", "1401", "1801", "408", "501", "603", "707", "910"].sort(),
+    );
+    expect(listings.every((l) => l.sqft !== null && l.baths !== null)).toBe(true);
+    // Seen from early August, Aug 27 is a future move-in day.
+    expect(listings.find((l) => l.unitNumber === "408")).toMatchObject({
+      beds: 0,
+      sqft: 467,
+      baths: 1,
+      price: 2350,
+      floorplanName: "Studio",
+      availableDate: "2026-08-27",
+      availableNow: false,
+    });
+    // 1401 was already vacant then ("Available Now", since Jun 29).
+    expect(listings.find((l) => l.unitNumber === "1401")).toMatchObject({
+      availableDate: "2026-08-04",
+      availableNow: true,
+      vacantSince: "2026-06-29",
+    });
+    // One-beds with a den are their own product on the site, and here.
+    for (const unit of ["910", "1310"]) {
+      expect(listings.find((l) => l.unitNumber === unit)).toMatchObject({
+        beds: 1,
+        floorplanName: "1 Bedroom + Den",
+        planType: "1 Bedroom + Den",
+      });
+    }
+    expect(listings.find((l) => l.unitNumber === "603")).toMatchObject({ beds: 1, floorplanName: "1 BR" });
+    expect(listings.find((l) => l.unitNumber === "603")!.planType).toBeUndefined();
+    expect(listings.find((l) => l.unitNumber === "707")).toMatchObject({ beds: 2, floorplanName: "2 BR" });
+  });
+
+  it("prefers the embedded Jonah JSON over card markup", () => {
+    const html = readFileSync(join(dir, "00-floorplans.html"), "utf8");
+    const listings = parseLeoPage(html, "https://leochicago.com/");
+    expect(listings).toHaveLength(9);
+    // Dates and unit permalinks exist only in the JSON.
+    expect(listings.every((l) => l.availableDate !== null && ISO_DAY.test(l.availableDate))).toBe(true);
+    expect(listings.every((l) => /\/floorplans\/unit-/.test(l.url ?? ""))).toBe(true);
+  });
+
+  it("reads the cards of a page that lost its data script — a degraded reading, and says so", async () => {
+    // The rendered capture: the site's own script has removed the data node.
+    const html = readFileSync(join(dir, "05-floorplans.html"), "utf8");
+    expect(html.includes("jd-fp-data-script-app")).toBe(false);
+    const cards = parseLeoCards(html, "https://leochicago.com/");
+    expect(cards).toHaveLength(9);
+    expect(cards.every((l) => l.availableDate === null)).toBe(true);
+    expect(cards.find((l) => l.unitNumber === "408")).toMatchObject({ beds: 0, sqft: 467, baths: 1, price: 2350 });
+    for (const l of cards) UnitListingSchema.parse(l);
+
+    const notices: string[] = [];
+    const logs: string[] = [];
+    const ctx: AdapterContext = {
+      fetch: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+      log: (m) => logs.push(m),
+      now: () => LEGACY_CAPTURED,
+      reportNotice: (t) => notices.push(t),
+    };
+    await expect(leo.scrape(buildingById("the-leo"), ctx)).resolves.toHaveLength(9);
+    expect(notices[0]).toMatch(/move-in dates are not available for this run/);
+  });
+
+  it("card prices: the first dollar amount only, within sane bounds", () => {
+    const card = (price: string): string =>
+      `<a data-jd-fp-selector="floorplan-item" href="/floorplans/602/"><p class="jd-fp-card-info__title">602</p>
+       <p class="jd-fp-card-info__text"><span>JR 1 Bedroom</span><span>1 bath</span><span>508 sq. ft.</span></p>
+       <span data-jd-fp-adp="display">${price}</span></a>`;
+    expect(parseLeoCards(card("Starting at $2,635 - $2,900"), "https://leochicago.com/")).toEqual([
+      expect.objectContaining({ unitNumber: "602", price: 2635, planType: "JR 1 Bedroom" }),
+    ]);
+    expect(parseLeoCards(card("Contact Us"), "https://leochicago.com/")).toEqual([]);
+    expect(parseLeoCards(card("$26,352,900"), "https://leochicago.com/")).toEqual([]);
+  });
+
+  it("recognizes Imunify360 bodies, which never pass for an empty building", () => {
+    const waf = readFileSync(join(dir, "00-root.html"), "utf8");
+    expect(isWafPage(waf)).toBe(true);
+    expect(isWafPage("<html><body>floorplans</body></html>")).toBe(false);
+    expect(parseLeoPage(waf, "https://leochicago.com/")).toEqual([]);
+    expect(parseLeoInventory(waf, "https://leochicago.com/", CAPTURED).sawInventory).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stead 220
+// ---------------------------------------------------------------------------
+
+describe("stead220 adapter (captured 2026-11-15)", () => {
+  it("parses the floorplan catalogue honestly: stacks stay stacks, penthouses are units", async () => {
+    const { listings, alsoListed } = await run(stead220, "stead-220");
+    expectSaneListings(listings);
+    expect(listings).toHaveLength(13);
+    // No fabricated unit numbers below the penthouse floor.
+    expect(listings.filter((l) => l.unitNumber !== null).map((l) => l.unitNumber).sort()).toEqual([
+      "2802",
+      "2803",
+      "2809",
+    ]);
+    expect(listings.find((l) => l.floorplanName === "Large Studio - Unit 01")).toMatchObject({
+      unitNumber: null,
+      beds: 0,
+      baths: 1,
+      price: 2475,
+      availableDate: "2026-11-15",
+      availableNow: true,
+      url: "https://stead220.com/floorplans/1",
+    });
+    expect(listings.find((l) => l.floorplanName === "Medium 2BR - Unit 09")).toMatchObject({
+      beds: 2,
+      baths: 2,
+      price: 4670,
+    });
+    // A one-bed with a den is labelled as the site labels it.
+    expect(listings.find((l) => l.floorplanName === "Large 1BR + Den - Unit 02")).toMatchObject({
+      beds: 1,
+      planType: "1 Bed + Den",
+    });
+    expect(listings.filter((l) => l.planType !== undefined)).toHaveLength(1);
+    // "Contact for Pricing" plans are reported, not dropped.
+    expect(alsoListed.map((a) => [a.floorplanName, a.note, a.beds])).toEqual([
+      ["Medium Studio - Unit 05", "Contact for Pricing", 0],
+      ["Large Studio - Unit 13", "Contact for Pricing", 0],
+    ]);
+  });
+
+  it("records when the building last edited each price (its catalogue is hand-maintained)", async () => {
+    const { listings } = await run(stead220, "stead-220");
+    expect(listings.every((l) => typeof l.sourceUpdatedAt === "string")).toBe(true);
+    expect(listings.find((l) => l.unitNumber === "2802")!.sourceUpdatedAt).toBe("2026-07-09T21:40:11.000Z");
+  });
+
+  it("makes exactly one request (the plan pages carry no extra data)", async () => {
+    let requests = 0;
+    const base = makeFixtureFetch(join(ROOT, "scraper", "fixtures", "stead-220"));
+    const ctx: AdapterContext = {
+      fetch: (async (input: string | URL | Request) => {
+        requests++;
+        return base(input);
+      }) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+    };
+    await stead220.scrape(buildingById("stead-220"), ctx);
+    expect(requests).toBe(1);
+  });
+
+  it("falls back to card markup when the embedded data is missing, and vice versa", () => {
+    const html = readFileSync(join(ROOT, "scraper/fixtures/stead-220/00-floorplans.html"), "utf8");
+    expect(extractSsrData(html)).not.toBeNull();
+    const cardsOnly = html.replace("window.__SSR_DATA__=", "window.__NOPE__=");
+    expect(extractSsrData(cardsOnly)).toBeNull();
+    const a = parseSteadFloorplans(cardsOnly, "https://stead220.com/", CAPTURED);
+    expect(a.listings).toHaveLength(13);
+    expect(a.alsoListed).toHaveLength(2);
+    expect(a.listings.every((l) => l.sourceUpdatedAt === undefined)).toBe(true);
+    const full = parseSteadFloorplans(html, "https://stead220.com/", CAPTURED);
+    expect(a.listings.map((l) => [l.floorplanName, l.price, l.beds])).toEqual(
+      full.listings.map((l) => [l.floorplanName, l.price, l.beds]),
+    );
+    expect(parseSteadFloorplans("<html></html>", "https://stead220.com/", CAPTURED).planCount).toBe(0);
+  });
+
+  it("keeps a plan the site has switched off on the record as unavailable", () => {
+    const html = `<script>window.__SSR_DATA__=${JSON.stringify({
+      "units.list": [
+        { id: 1, unitNumber: 1, unitName: "Large Studio - Unit 01", bedrooms: "Studio", bathrooms: 1, startingPrice: 2475, priceDisplay: "$2,475", isActive: true, updatedAt: "2026-09-17T20:57:40.000Z" },
+        { id: 18, unitNumber: 2805, unitName: "PH Large 1BR - Unit 2805", bedrooms: "1 Bed", bathrooms: 1, startingPrice: 4150, priceDisplay: "$4,150", isPenthouse: true, isActive: false, updatedAt: "2026-05-29T23:10:50.000Z" },
+      ],
+    })};</script>`;
+    const page = parseSteadFloorplans(html, "https://stead220.com/", CAPTURED);
+    expect(page.planCount).toBe(2);
+    expect(page.listings.map((l) => l.floorplanName)).toEqual(["Large Studio - Unit 01"]);
+    expect(page.alsoListed).toEqual([
+      expect.objectContaining({ unitNumber: "2805", beds: 1, price: 4150, note: "Unavailable" }),
+    ]);
+  });
+
+  it("reads the first dollar amount of a card price, never the digits run together", () => {
+    const card = (price: string): string =>
+      `<div class="floorplan-card"><div aria-label="Large Studio - Unit 01 preview gallery"></div>
+       <span class="fp-availability-label">Available Now</span><h3 class="fp-card-name">STUDIO</h3>
+       <p class="fp-card-meta">LARGE · UNIT 01 · 1 BATH</p>${price}<a href="/floorplans/1">View</a></div>`;
+    const priceOf = (price: string) =>
+      parseSteadFloorplans(card(price), "https://stead220.com/", CAPTURED).listings[0]?.price;
+    expect(priceOf('<span class="fp-card-price-amount">$2,475</span>')).toBe(2475);
+    expect(priceOf('<span class="fp-card-price-amount">$2,475 - $2,700</span>')).toBe(2475);
+    expect(priceOf('<span class="fp-card-price-amount">$2,475.50</span>')).toBe(2475);
+    const unpriced = parseSteadFloorplans(
+      card('<p class="fp-card-price-contact">Contact for Pricing</p>'),
+      "https://stead220.com/",
+      CAPTURED,
+    );
+    expect(unpriced.listings).toEqual([]);
+    expect(unpriced.alsoListed).toEqual([expect.objectContaining({ note: "Contact for Pricing", beds: 0 })]);
+  });
+
+  it("reports waitlist plans as not available instead of listing them", () => {
+    const html = `<div class="floorplan-card"><div class="fp-card-carousel" aria-label="Large Studio - Unit 01 preview gallery"></div>
+      <span class="fp-availability-label">Join Waitlist</span><h3 class="fp-card-name">STUDIO</h3>
+      <p class="fp-card-meta">LARGE · UNIT 01 · 1 BATH</p><span class="fp-card-price-amount">$2,475</span>
+      <a href="/floorplans/1">View</a></div>`;
+    const page = parseSteadFloorplans(html, "https://stead220.com/", CAPTURED);
+    expect(page.listings).toEqual([]);
+    expect(page.alsoListed).toEqual([
+      expect.objectContaining({ floorplanName: "Large Studio - Unit 01", note: "Join Waitlist", price: 2475 }),
+    ]);
+  });
+});
+
+describe("stead220 adapter (plan identity survives front-end tweaks)", () => {
+  const real = (): string => readFileSync(join(ROOT, "scraper/fixtures/stead-220/00-floorplans.html"), "utf8");
+  const keys = (html: string): string[] =>
+    parseSteadFloorplans(html, "https://stead220.com/", CAPTURED).listings.map(
+      (l) => `${l.unitNumber ?? ""}|${l.floorplanName}|${l.beds}|${l.price}`,
+    );
+
+  it("takes plan names from the page's data, whatever the cards' first labelled element is", () => {
+    const html = real();
+    const want = keys(html);
+    expect(want).toHaveLength(13);
+    // (a) the card's stretch link gets the label its carousel link has.
+    const a = html.replaceAll('class="fp-card-cta-stretch"', 'aria-label="View this plan" class="fp-card-cta-stretch"');
+    expect(a).not.toBe(html);
+    expect(keys(a)).toEqual(want);
+    // (b) a favourites button becomes the first element of every card.
+    const b = html.replaceAll('<div class="fp-card-media">', '<button aria-label="Save to favorites"></button><div class="fp-card-media">');
+    expect(b).not.toBe(html);
+    expect(keys(b)).toEqual(want);
+    // (c) the meta line says "RESIDENCE 01" instead of "UNIT 01": cards still join their records by link.
+    const c = html.replace(/· UNIT (\d+) ·/g, "· RESIDENCE $1 ·");
+    expect(c).not.toBe(html);
+    const page = parseSteadFloorplans(c, "https://stead220.com/", CAPTURED);
+    expect(keys(c)).toEqual(want);
+    expect(page.alsoListed).toHaveLength(2);
+    expect(page.remarks).toEqual([]);
+    // Penthouses are still single units with their availability label.
+    expect(page.listings.filter((l) => l.unitNumber !== null).map((l) => [l.unitNumber, l.availableNow])).toEqual([
+      ["2802", true],
+      ["2803", true],
+      ["2809", true],
+    ]);
+  });
+
+  it("reads names from the cards themselves when the page carries no data blob", () => {
+    const cardsOnly = real().replace("window.__SSR_DATA__=", "window.__NOPE__=");
+    const b = cardsOnly.replaceAll('<div class="fp-card-media">', '<button aria-label="Save to favorites"></button><div class="fp-card-media">');
+    expect(keys(b)).toEqual(keys(real()));
+  });
+
+  it("reports a card that matches no data record instead of listing a plan twice", () => {
+    const html = real().replace('href="/floorplans/1" class="fp-card-cta-stretch"', 'href="/floorplans/99" class="fp-card-cta-stretch"');
+    const page = parseSteadFloorplans(html, "https://stead220.com/", CAPTURED);
+    expect(page.listings).toHaveLength(13);
+    expect(page.planCount).toBe(15);
+    expect(page.remarks.join("\n")).toMatch(/1 floor-plan card\(s\) match no record in the page's data \(99\)/);
+  });
+
+  it("believes the card when it withholds a price the data record still carries", () => {
+    const html = `<script>window.__SSR_DATA__=${JSON.stringify({
+      "units.list": [
+        { id: 5, unitNumber: 5, unitName: "Medium Studio - Unit 05", bedrooms: "Studio", bathrooms: 1, startingPrice: 2250, priceDisplay: "$2,250", isActive: true },
+      ],
+    })};</script>
+    <div class="floorplan-card"><a href="/floorplans/5" class="fp-card-cta-stretch"></a>
+      <span class="fp-availability-label">Available Now</span><h3 class="fp-card-name">STUDIO</h3>
+      <p class="fp-card-meta">MEDIUM · UNIT 05 · 1 BATH</p><p class="fp-card-price-contact">Contact for Pricing</p></div>`;
+    const page = parseSteadFloorplans(html, "https://stead220.com/", CAPTURED);
+    expect(page.listings).toEqual([]);
+    expect(page.alsoListed).toEqual([
+      expect.objectContaining({ floorplanName: "Medium Studio - Unit 05", beds: 0, note: "Contact for Pricing" }),
+    ]);
+    expect(page.alsoListed[0]!.price).toBeUndefined();
+  });
+
+  it("records a bot-protection page as a refusal", async () => {
+    const serve = (body: string, status: number): AdapterContext => ({
+      fetch: async () => new Response(body, { status, headers: { "content-type": "text/html" } }),
+      log: () => {},
+      now: () => CAPTURED,
+    });
+    const b = buildingById("stead-220");
+    await expect(stead220.scrape(b, serve("Forbidden", 403))).rejects.toBeInstanceOf(SiteBlockedError);
+    await expect(
+      stead220.scrape(b, serve("<html><head><title>Attention Required! | Cloudflare</title></head><body>Sorry, you have been blocked</body></html>", 200)),
+    ).rejects.toBeInstanceOf(SiteBlockedError);
+    const changed = await stead220.scrape(b, serve(`<html><body>${"<p>new site</p>".repeat(2500)}</body></html>`, 200)).catch((e: unknown) => e);
+    expect(changed).not.toBeInstanceOf(SiteBlockedError);
+    expect((changed as Error).message).toMatch(/page structure may have changed/);
+  });
+});
+
+describe("stead220 adapter (legacy Aug 2026 capture)", () => {
+  it("still parses the old floorplan cards", async () => {
+    const { listings } = await run(stead220, "stead-220", "legacy-2026-09/stead-220");
+    expect(listings.length).toBeGreaterThanOrEqual(10);
+    expect(listings.every((l) => l.unitNumber === null || /^\d{3,4}[A-Z]?$/i.test(l.unitNumber))).toBe(true);
+    expect(listings.some((l) => /unit\s*\d+/i.test(l.floorplanName))).toBe(true);
+    const studio = listings.find((l) => l.beds === 0);
+    expect(studio).toBeDefined();
+    expect(studio!.price).toBeGreaterThanOrEqual(2000);
+  });
+});
+
+describe("sightmap adapter (legacy Sep 2026 capture)", () => {
+  it("still maps the old payload, now without dropping its 18-month units", async () => {
+    const { listings } = await run(sightmap, "1225-old-town", "legacy-2026-09/1225-old-town");
+    expect(listings.length).toBeGreaterThanOrEqual(4);
+    expect(listings.every((l) => /^\d{3,4}$/.test(l.unitNumber ?? ""))).toBe(true);
+    expect(listings.every((l) => !l.floorplanName.includes("{"))).toBe(true);
+    expect(listings.every((l) => l.leaseTermMonths != null)).toBe(true);
+    const known = listings.find((l) => l.unitNumber === "0624");
+    expect(known).toMatchObject({ beds: 0, sqft: 546 });
+    // Unit 1308 was one of the over-cap teasers the cap used to throw away.
+    expect(listings.find((l) => l.unitNumber === "1308")).toBeDefined();
   });
 });

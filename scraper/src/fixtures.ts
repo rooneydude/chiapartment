@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -58,8 +58,15 @@ export function makeRecorder(fixtureDir: string) {
       entries.push({ match: url, file, contentType });
     },
     flush(): void {
-      if (entries.length > 0) {
-        writeFileSync(join(fixtureDir, "manifest.json"), JSON.stringify(entries, null, 2));
+      if (entries.length === 0) return;
+      writeFileSync(join(fixtureDir, "manifest.json"), JSON.stringify(entries, null, 2));
+      // A re-capture numbers its files afresh; payloads from an earlier
+      // capture that the new manifest no longer references would otherwise
+      // pile up as confusing dead fixtures. Only files this recorder could
+      // have written ("NN-slug.json|html") are ever removed.
+      const keep = new Set(entries.map((e) => e.file));
+      for (const f of readdirSync(fixtureDir)) {
+        if (/^\d{2}-.+\.(json|html)$/.test(f) && !keep.has(f)) unlinkSync(join(fixtureDir, f));
       }
     },
   };

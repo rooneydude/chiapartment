@@ -1,0 +1,7 @@
+[
+  {
+    "match": "https://leochicago.com/floorplans",
+    "file": "00-floorplans.html",
+    "contentType": "text/html"
+  }
+]
