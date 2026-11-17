@@ -428,6 +428,8 @@ export interface BriefListing {
   priceMax?: number;
   /** Mandatory monthly charges on top of base rent, when published. */
   monthlyFees?: { min: number; max: number };
+  /** Required monthly charges the site lists without an amount ("Utility Billing Bundle: Varies"). */
+  monthlyFeesUnpriced?: string[];
   availableDate: string | null;
   availableNow?: boolean;
   vacantSince?: string;
@@ -501,6 +503,11 @@ export interface WeekdayBriefBuilding {
   alsoListed?: AlsoListedCompiled[];
   /** Building-wide notices the site prints (specials). */
   notices?: string[];
+  /**
+   * What the latest ok scrape could not read (a page that refused the
+   * tracker): a notice or a date missing for that reason was not withdrawn.
+   */
+  gaps?: string[];
   /** With status "error": the site's bot protection refused the request. */
   blocked?: boolean;
   /** Rows that appeared on the site without a price or bed count since the prior day. */

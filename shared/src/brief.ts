@@ -34,6 +34,9 @@ function toBriefListing(u: UnitListing, asOf: string): BriefListing {
     price: u.price,
     ...(u.priceMax !== undefined ? { priceMax: u.priceMax } : {}),
     ...(u.monthlyFees ? { monthlyFees: u.monthlyFees } : {}),
+    ...(u.monthlyFeesUnpriced && u.monthlyFeesUnpriced.length > 0
+      ? { monthlyFeesUnpriced: u.monthlyFeesUnpriced }
+      : {}),
     availableDate: u.availableDate,
     ...(now !== null ? { availableNow: now } : {}),
     ...(u.vacantSince ? { vacantSince: u.vacantSince } : {}),
@@ -80,6 +83,7 @@ export function briefBuilding(
     (a) => a.beds === null || inFocus(a.beds),
   );
   const notices = history.notices ?? [];
+  const gaps = history.gaps && history.gaps.length > 0 ? { gaps: history.gaps } : {};
   const listings = history.latest
     ? history.latest.units
         .filter((u) => inFocus(u.beds))
@@ -109,6 +113,7 @@ export function briefBuilding(
       dateChanges: [],
       alsoListed,
       notices,
+      ...gaps,
     };
   }
 
@@ -134,6 +139,7 @@ export function briefBuilding(
       dateChanges: [],
       alsoListed,
       notices,
+      ...gaps,
     };
   }
 
@@ -197,6 +203,7 @@ export function briefBuilding(
     dateChanges: fd.dateChanges ?? [],
     alsoListed,
     notices,
+    ...gaps,
     ...(fd.newAlsoListed && fd.newAlsoListed.length > 0 ? { newUnpriced: fd.newAlsoListed } : {}),
   };
 }
