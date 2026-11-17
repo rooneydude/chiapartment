@@ -1,2 +1,2 @@
-# 2026-11-16: first refresh with the rewritten scrapers - runs when this change lands on the published branch
+# retry 2026-11-17 scrape after empty-buildings flag validation abort
 # (no flags: scrape all buildings)
