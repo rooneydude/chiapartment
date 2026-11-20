@@ -30,11 +30,14 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-# The snapshot is the point of the job; the rest is committed where it exists
-# (a first run has no skyline yet, and the step that makes one may fail).
+# The snapshot is the point of the job; the rest is committed where there is
+# something to commit (a first run has no skyline yet, and the step that
+# makes one may fail). A path git knows but the run removed is staged too.
 git add data/snapshots
 for path in data/skyline.geojson data/unitmaps scraper/fixtures; do
-  if [ -e "${path}" ]; then git add "${path}"; fi
+  if [ -e "${path}" ] || git ls-files --error-unmatch -- "${path}" > /dev/null 2>&1; then
+    git add -- "${path}"
+  fi
 done
 if git diff --cached --quiet; then
   echo "Nothing changed."
@@ -49,20 +52,26 @@ git commit -m "data: snapshot $(date -u +%FT%TZ)"
 # a conflict. The settings live in this checkout only (.git/config and
 # .git/info/attributes), and the merge program is copied there first, so it
 # is this run's copy that runs whatever landed.
-git_dir="$(git rev-parse --absolute-git-dir)"
-case "${git_dir}" in
-  *"'"*) ;; # a path the driver line below cannot quote: leave git to report a conflict
-  *)
-    cp -f "${here}/merge-unitmap.mjs" "${git_dir}/merge-unitmap.mjs"
-    git config merge.unit-map.driver "node '${git_dir}/merge-unitmap.mjs' %O %A %B"
-    git config merge.this-run.driver 'cp -f %B %A'
-    mkdir -p "${git_dir}/info"
-    if ! grep -qs 'merge=unit-map' "${git_dir}/info/attributes"; then
-      # (starting on a new line, whatever the file ended with)
-      printf '\n%s\n%s\n' 'data/unitmaps/** merge=unit-map' 'data/skyline.geojson merge=this-run' >> "${git_dir}/info/attributes"
-    fi
-    ;;
-esac
+#
+# None of this is needed by a run nothing raced with, so none of it may stop
+# one: if the set-up cannot be completed the step goes on to push, and only
+# a later conflict in one of these files stops it — as it always did.
+prepare_merging() {
+  local git_dir
+  git_dir="$(git rev-parse --absolute-git-dir)" || return 1
+  case "${git_dir}" in *"'"*) return 1 ;; esac # a path the driver line below cannot quote
+  cp -f "${here}/merge-unitmap.mjs" "${git_dir}/merge-unitmap.mjs" || return 1
+  git config merge.unit-map.driver "node '${git_dir}/merge-unitmap.mjs' %O %A %B" || return 1
+  git config merge.this-run.driver 'cp -f %B %A' || return 1
+  mkdir -p "${git_dir}/info" || return 1
+  if ! grep -qs 'merge=unit-map' "${git_dir}/info/attributes"; then
+    # (starting on a new line, whatever the file ended with)
+    printf '\n%s\n%s\n' 'data/unitmaps/** merge=unit-map' 'data/skyline.geojson merge=this-run' >> "${git_dir}/info/attributes" || return 1
+  fi
+}
+if ! prepare_merging; then
+  echo "::warning::The merging of unit maps could not be set up. Nothing is lost by that unless something lands on ${branch} during this push and changed a unit map too; the step would then stop."
+fi
 
 for attempt in 1 2 3; do
   if git push origin "HEAD:${branch}"; then

@@ -52,7 +52,8 @@ function mergeUnitMaps(base, landed, mine) {
     throw new Error(`the two files are for different buildings (${String(landed.buildingId)}, ${String(mine.buildingId)})`);
   }
   const before = base === null ? {} : base.units;
-  const units = {};
+  // No prototype: a unit called "__proto__" is a unit like any other.
+  const units = Object.create(null);
   // The order the file already has on the branch, then what only this run has.
   for (const unit of [...Object.keys(landed.units), ...Object.keys(mine.units).filter((u) => !has(landed.units, u))]) {
     const was = has(before, unit) ? before[unit] : undefined;

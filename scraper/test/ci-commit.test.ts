@@ -145,6 +145,32 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
     expect(git(runner, "status", "--short")).toBe("");
   });
 
+  it("pushes the snapshot even when the merging of unit maps cannot be set up", () => {
+    // What is set up before the push only matters when something else lands
+    // first. It must never be the reason an ordinary run commits nothing.
+    const { origin, runner } = world("no-setup");
+    rmSync(join(runner, ".git", "info"), { recursive: true, force: true });
+    writeFileSync(join(runner, ".git", "info"), "in the way: a file where git keeps a folder\n");
+    write(runner, "data/snapshots/2026-11-19T22-11-27Z.json", '{"today":true}\n');
+    write(runner, "data/unitmaps/1225-old-town.json", '{"capturedAt":"2026-11-19"}\n');
+    const run = commitResults(runner);
+    expect(run.code, run.output).toBe(0);
+    expect(run.output).toContain("::warning::The merging of unit maps could not be set up.");
+    expect(onRemote(origin, "data/snapshots/2026-11-19T22-11-27Z.json")).toBe(true);
+    expect(git(origin, "show", "main:data/unitmaps/1225-old-town.json")).toContain("2026-11-19");
+  });
+
+  it("commits a file the run removed as removed", () => {
+    const { origin, runner } = world("removed");
+    rmSync(join(runner, "data", "skyline.geojson"));
+    write(runner, "data/snapshots/2026-11-19T22-11-27Z.json", '{"today":true}\n');
+    const run = commitResults(runner);
+    expect(run.code, run.output).toBe(0);
+    expect(onRemote(origin, "data/snapshots/2026-11-19T22-11-27Z.json")).toBe(true);
+    expect(onRemote(origin, "data/skyline.geojson")).toBe(false);
+    expect(git(runner, "status", "--short")).toBe("");
+  });
+
   it("keeps the day's snapshot when a pull request is merged during the scrape", () => {
     const { origin, runner, other } = world("race");
     // The scrape has run: the runner has today's snapshot, uncommitted…

@@ -106,6 +106,16 @@ describe("two versions of a unit map, put together", () => {
     expect(result).toContain('\n  "units": {\n    "1014": {\n      "lon": ');
   });
 
+  it("treats any name as a unit's name", () => {
+    // JSON.parse makes these ordinary entries; writing them back must too.
+    const odd = (names: string[]): string =>
+      `{"schemaVersion":1,"buildingId":"1225-old-town","units":{${names.map((n) => `"${n}":{"facing":"N"}`).join(",")}}}\n`;
+    const { code, result } = merge(odd(["1014"]), odd(["1014", "__proto__"]), odd(["1014", "constructor", "toString"]));
+    expect(code).toBe(0);
+    expect(result).toContain('"__proto__": {');
+    expect(Object.keys((JSON.parse(result) as { units: object }).units).sort()).toEqual(["1014", "__proto__", "constructor", "toString"]);
+  });
+
   it("gives the same file whichever of two identical changes is “this run’s”", () => {
     const changed = file("2026-11-19T22:05:00.000Z", { "1014": at("N"), "2203": at("E", 20), "0704": at("S", 5), "0905": at("W", 7), "0812": at("N", 6) });
     expect(merge(BASE, changed, changed).result).toBe(changed);
