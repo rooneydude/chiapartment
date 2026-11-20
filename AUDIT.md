@@ -415,28 +415,58 @@ in the browser:
   runs in CI; breaking the listing of left-out units, or removing the
   boundary round the 3D view, fails it.
 
-  An independent review of that work, before it was merged, found nothing
-  broken and four places where the new tests promised more than they
-  checked. All four were fixed:
+  Two independent reviews of that work, before it was merged, found
+  nothing broken in what the job does today, and several places where the
+  new tests — and then one of my fixes — promised more than they did.
+
+  First review:
 
   1. *Nothing ran the program the job runs.* The tests called functions;
      the job runs commands. Re-adding the very line that failed on 17 Nov
      to the program's entry point left every test green. The rehearsal now
-     runs each step's own command, read out of `refresh.yml`, the way
-     GitHub does. Broken 25 ways on purpose, it notices each.
+     reads the command and variables of the browser check, the flags, the
+     scrape, the alert step and the alarm out of `refresh.yml` and runs
+     them with `bash -e` in a throwaway copy of the project; re-adding that
+     line, renaming a variable on one side only, or dropping the scrape's
+     arguments now fails it.
   2. *Two overlapping refresh runs lost the later run's snapshot* — older
      than this work, and real: every run rewrites the unit map, so the
      second push's retry met a conflict and the step failed. The script's
-     own comment said that could not happen. Files the job regenerates
-     whole are now replaced whole by the later run; anything that cannot be
-     put together stops the step with a message and pushes nothing.
+     own comment said that could not happen.
   3. *"Starts without the 3D and chart libraries" passed with both compiled
      into the start-up file.* It now requires them to exist as files of
      their own and holds the start-up scripts to a size budget.
   4. *The 3D test passed with nothing drawn on the tower and the sun fixed
      at noon.* It now compares pictures: pointing at each unit's row must
-     change the picture where that unit's mark is, and the scene must be
-     much darker at 11 PM than at noon.
+     change the picture, differently for every unit, and the scene must be
+     much darker at 11 PM than at 1 PM and at noon.
+
+  Second review, of those fixes:
+
+  5. *My fix for 2 was wrong.* I had the later run's unit map replace the
+     earlier one's whole, on the belief that the file is regenerated each
+     run. It is not: it accumulates the positions of units seen listed, so
+     that rule silently dropped whatever the earlier run had just learned —
+     and my test asserted the loss. The two files are now merged by unit
+     (`.github/scripts/merge-unitmap.mjs`): what either run learned is
+     kept, a unit both placed is the later run's. Only the skyline, which
+     is regenerated whole, is replaced whole. Anything that cannot be put
+     together stops the step with a message and pushes nothing.
+  6. *The rehearsal read the commands but not the settings around them.* A
+     step made conditional, given another shell or working directory, or a
+     job-wide setting would have stopped the scrape on GitHub with every
+     test green. The reader now refuses settings it does not reproduce,
+     and the test pins every step and job and each condition.
+  7. *The 3D test would have failed on a missing optional file* (the
+     browser logs the 404 as an error, and the test had begun to treat
+     console errors as failures). That line is no longer counted.
+  8. *Sentences here and in the README said more than the code did* — for
+     one, that the rehearsal runs every step's command (it runs five; the
+     rest are named with the reason they are not run). Reworded.
+
+  Not run by any test, and said so in the rehearsal: installing
+  dependencies and the browser, and the skyline and unit-map steps, which
+  ask outside services.
 
 ---
 
