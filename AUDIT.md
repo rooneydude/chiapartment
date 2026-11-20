@@ -450,8 +450,7 @@ in the browser:
      and my test asserted the loss. The two files are now merged by unit
      (`.github/scripts/merge-unitmap.mjs`): what either run learned is
      kept, a unit both placed is the later run's. Only the skyline, which
-     is regenerated whole, is replaced whole. Anything that cannot be put
-     together stops the step with a message and pushes nothing.
+     is regenerated whole, is replaced whole.
   6. *The rehearsal read the commands but not the settings around them.* A
      step made conditional, given another shell or working directory, or a
      job-wide setting would have stopped the scrape on GitHub with every
@@ -463,6 +462,30 @@ in the browser:
   8. *Sentences here and in the README said more than the code did* — for
      one, that the rehearsal runs every step's command (it runs five; the
      rest are named with the reason they are not run). Reworded.
+
+  Third review, of the commit step alone:
+
+  9. *The stricter merge could cost a run its prices.* A hand edit that
+     leaves a unit map unreadable, landing while a run is under way, made
+     the new merge refuse — and the step then pushed nothing, where the
+     old one would have pushed the snapshot. The workflow's own rule is
+     that positional data never blocks prices. The step now keeps to it:
+     whenever this run's other files cannot be put together with what
+     landed (an unreadable or removed unit map, a recorded response changed
+     on both sides), the snapshot alone goes on top and a warning on the
+     run's page names what was left out. The step fails only when the
+     snapshot itself cannot go on top.
+  10. *What the step sets up for a race ran before every push*, and under
+      `set -e` could have stopped a run nothing raced with. Its failure is
+      now a warning, and the step goes on to push.
+  11. *The tests ran the script from outside the checkout it works in*, so
+      three ways of breaking it went unnoticed. They now run it the way the
+      workflow does, from inside a checkout that holds it — including a
+      case where what lands replaces the script while it runs.
+  12. Smaller: the settings were written where a linked worktree does not
+      read them; a per-cent sign in the checkout's path broke the merge
+      program's command line; unit maps in two versions of the format were
+      joined; no test pinned the order of units in a merged map.
 
   Not run by any test, and said so in the rehearsal: installing
   dependencies and the browser, and the skyline and unit-map steps, which
