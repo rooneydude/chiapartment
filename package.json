@@ -17,7 +17,8 @@
     "build": "npm run build:data && npm run -w web build",
     "preview": "npm run -w web preview",
     "test": "vitest run",
-    "typecheck": "tsc -p shared && tsc -p scraper && tsc -p web"
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "typecheck": "tsc -p shared && tsc -p scraper && tsc -p web && tsc -p web/e2e"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

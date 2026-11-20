@@ -116,8 +116,20 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
 | `npm run dev` | Compile data + start the dashboard dev server |
 | `npm run build` | Production build (what Pages deploys) |
 | `npm test` / `npm run typecheck` | Vitest / tsc across workspaces |
+| `npm run test:browser` | The dashboard in a real browser (after `npm run build`; needs Chromium: `npx playwright install chromium`) |
 
 Node 22+. `npm install` once at the repo root (npm workspaces).
+
+**What the tests cover.** `npm test` runs the scrapers against recorded
+pages, the change detection and the compiler — and the refresh job itself:
+its flag handling (`scraper/src/ci-flags.ts`), its commit-and-push step
+(`.github/scripts/commit-snapshot.sh`, run against real throwaway
+repositories, including a push that loses a race), and a rehearsal of the
+whole job offline, from flags to alert to compiled data. `npm run
+test:browser` drives the built dashboard in Chromium against a few days of
+hand-made snapshots compiled by the real compiler. Both run on every pull
+request. The refresh workflow keeps no logic of its own: each step is one
+command that these tests exercise.
 
 ## Data status
 

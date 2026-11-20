@@ -405,6 +405,16 @@ in the browser:
   now records what the run could not read (`gaps`) and the building's page
   says so, instead of yesterday's offer silently disappearing.
 
+- **20 Nov 2026 — the two untested areas are under test.** The three
+  scheduled runs after the merge (17, 18, 19 Nov) each read six of six
+  buildings. The failure of 17 Nov came from shell written inside the
+  refresh workflow, which nothing tested; that logic is now code with tests
+  (`ci-flags.ts`, `commit-snapshot.sh`) and the whole job is rehearsed
+  offline on every pull request. The dashboard, until then checked only by
+  hand-run browser scripts, has a committed browser suite (`web/e2e`) that
+  runs in CI; breaking the listing of left-out units, or removing the
+  boundary round the 3D view, fails it.
+
 ---
 
 # Previous audit — 8 Sep 2026
