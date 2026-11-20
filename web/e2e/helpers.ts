@@ -194,7 +194,12 @@ export interface Opened {
   context: BrowserContext;
   /** Uncaught errors on the page. */
   errors: string[];
-  /** What the page wrote to the console as an error — where a 3D library reports a shader that did not compile. */
+  /**
+   * What the page wrote to the console as an error — where a 3D library
+   * reports a shader that did not compile. Not counted: the browser's own
+   * line about a missing skyline or unit-map file. Both files are optional
+   * and the page is built to do without them (web/src/lib/data.ts).
+   */
   consoleErrors: string[];
   /** Paths of everything the page requested. */
   requested: string[];
@@ -224,7 +229,9 @@ export async function openApp(
   page.on("pageerror", (e) => errors.push(e.message));
   const consoleErrors: string[] = [];
   page.on("console", (m) => {
-    if (m.type() === "error") consoleErrors.push(m.text());
+    if (m.type() !== "error") return;
+    if (/\/data\/(skyline\.geojson|unitmaps\/[^/]+\.json)$/.test(m.location().url)) return;
+    consoleErrors.push(m.text());
   });
   const requested: string[] = [];
   page.on("request", (r) => requested.push(new URL(r.url()).pathname));
