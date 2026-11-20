@@ -22,9 +22,11 @@
 //   - everything else in the file (when and from what it was captured, the
 //     fit): this run's.
 //
-// Anything that is not a readable unit map ends with a non-zero exit and
-// leaves the files alone. git then reports a conflict, and the commit step
-// stops and pushes nothing rather than guess.
+// Anything it is not sure of — a file that is not a readable unit map, two
+// files for different buildings or in different versions of the format —
+// ends with a non-zero exit and leaves the files alone. git then reports a
+// conflict, and the commit step pushes the day's prices without this run's
+// unit map rather than guess: the file stays as it landed.
 //
 // A program and nothing else: it has no exports, so that there is no way to
 // start it that does not do the merge. scraper/test/ci-unitmap-merge.test.ts
@@ -50,6 +52,10 @@ function parseUnitMap(text, what) {
 function mergeUnitMaps(base, landed, mine) {
   if (has(landed, "buildingId") && has(mine, "buildingId") && landed.buildingId !== mine.buildingId) {
     throw new Error(`the two files are for different buildings (${String(landed.buildingId)}, ${String(mine.buildingId)})`);
+  }
+  // Entries of two formats in one file, under one version number, would be a file no program wrote.
+  if (!same(landed.schemaVersion, mine.schemaVersion)) {
+    throw new Error(`the two files are in different versions of the format (${String(landed.schemaVersion)}, ${String(mine.schemaVersion)})`);
   }
   const before = base === null ? {} : base.units;
   // No prototype: a unit called "__proto__" is a unit like any other.

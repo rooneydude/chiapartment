@@ -110,7 +110,9 @@ jobs:
       # The data is committed BEFORE anyone is alerted, so an alert can never
       # describe a snapshot that failed to land (and be repeated tomorrow).
       # The script retries the push when something else landed on the branch
-      # during the scrape; `npm test` runs it against real repositories.
+      # during the scrape; where this run's other files cannot be put together
+      # with what landed, the snapshot goes up alone and a warning says so.
+      # `npm test` runs it against real repositories.
       - name: Commit results
         run: bash .github/scripts/commit-snapshot.sh
 

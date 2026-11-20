@@ -48,7 +48,7 @@ describe("two versions of a unit map, put together", () => {
     const landed = file("2026-11-19T22:05:00.000Z", { "1014": at("N"), "2203": at("W", 20), "0704": at("SE", 5), "0905": at("W", 7), "0812": at("N", 6) });
     const mine = file(
       "2026-11-19T22:11:27.000Z",
-      { "1014": at("N"), "2203": at("SW", 20), "0704": at("S", 5), "0905": at("NW", 7), "1503": at("E", 13) },
+      { "0611": at("S", 4), "1014": at("N"), "2203": at("SW", 20), "0704": at("S", 5), "0905": at("NW", 7), "1503": at("E", 13) },
       { fit: { metersPerPixel: 0.085, residualM: 5.1 } },
     );
     const { code, result } = merge(BASE, landed, mine);
@@ -61,26 +61,42 @@ describe("two versions of a unit map, put together", () => {
       "0905": at("NW", 7), // only this run changed it
       "0812": at("N", 6), // only the other run saw it listed — not lost
       "1503": at("E", 13), // only this run saw it listed
+      "0611": at("S", 4), // so too
     });
+    // In the order the generator leaves a file in: plain numbers first (that
+    // is JavaScript's doing), then the names the branch already had, in its
+    // order, then this run's new ones — wherever this run's own file had them.
+    expect(Object.keys(merged.units)).toEqual(["1014", "1503", "2203", "0704", "0905", "0812", "0611"]);
     expect(merged.source.capturedAt).toBe("2026-11-19T22:11:27.000Z");
     expect(merged.fit).toEqual({ metersPerPixel: 0.085, residualM: 5.1 });
   });
 
   it("writes the file the way the generator does, so the next run changes nothing but what it learns", () => {
-    // The committed map, stamped by two runs that learned nothing new: the
-    // result has to be this run's file, byte for byte.
-    const real = join(REPO, "data", "unitmaps", "1225-old-town.json");
-    const committed = existsSync(real) ? readFileSync(real, "utf8") : BASE;
-    const stamped = (time: string): string => {
-      const map = JSON.parse(committed) as { source: { capturedAt: string } };
+    // What scraper/src/unitmap.ts does with a file it is handed: keep its
+    // units, add or replace the ones it saw, stamp it, write two-space JSON.
+    const generate = (prior: string, time: string, seen: Record<string, Entry>): string => {
+      const map = JSON.parse(prior) as { source: { capturedAt: string }; units: Record<string, Entry> };
       map.source.capturedAt = time;
+      Object.assign(map.units, seen);
       return `${JSON.stringify(map, null, 2)}\n`;
     };
-    expect(stamped((JSON.parse(committed) as { source: { capturedAt: string } }).source.capturedAt)).toBe(committed);
-    const mine = stamped("2026-11-20T22:11:27.000Z");
-    const { code, result } = merge(committed, stamped("2026-11-20T22:05:00.000Z"), mine);
+    // The committed map where there is one (real names, real numbers), as the generator writes it.
+    const real = join(REPO, "data", "unitmaps", "1225-old-town.json");
+    const start = generate(existsSync(real) ? readFileSync(real, "utf8") : BASE, "2026-11-19T22:12:17.518Z", {});
+
+    // Two runs that learned nothing new: the result is this run's file, byte for byte.
+    const mine = generate(start, "2026-11-20T22:11:27.000Z", {});
+    expect(merge(start, generate(start, "2026-11-20T22:05:00.000Z", {}), mine).result).toBe(mine);
+
+    // Two runs that each learned units no building has — names with a
+    // leading zero, with letters, and plain numbers, which JavaScript orders
+    // differently. The result is, byte for byte, what the generator would
+    // have written had this run started from the file that landed.
+    const landed = generate(start, "2026-11-20T22:05:00.000Z", { "00-B": at("N", 6), "99901": at("S", 40), "ZZ-2": at("E", 41) });
+    const learned = { "00-A": at("W", 7), "99902": at("E", 40), "ZZ-1": at("W", 41) };
+    const { code, result } = merge(start, landed, generate(start, "2026-11-20T22:11:27.000Z", learned));
     expect(code).toBe(0);
-    expect(result).toBe(mine);
+    expect(result).toBe(generate(landed, "2026-11-20T22:11:27.000Z", learned));
   });
 
   it("honours a removal: no run removes a unit, so one that is gone was taken out on purpose", () => {
@@ -130,6 +146,8 @@ describe("two versions of a unit map, put together", () => {
       [BASE, '"units"\n', good, /^merge-unitmap: the file on the branch is not a unit map/m],
       ["not json at all", good, good, /^merge-unitmap: the file both sides started from is not JSON$/m],
       [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { buildingId: "the-leo" }), good, /^merge-unitmap: the two files are for different buildings/m],
+      // a pull request changed the format while this run, on the old code, was under way
+      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { schemaVersion: 2, levels: [1, 2] }), good, /^merge-unitmap: the two files are in different versions of the format \(2, 1\)$/m],
     ];
     for (const [base, landed, mine, message] of cases) {
       const ran = merge(base, landed, mine);
