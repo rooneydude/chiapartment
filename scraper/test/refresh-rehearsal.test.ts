@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileS
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { SnapshotSchema, type BuildingHistory, type CompiledConfig, type Snapshot } from "../../shared/src/types";
-import { jobSteps, Project, REPO, stepNamed, type Ran, type Step } from "./helpers/workflow";
+import { jobNames, jobSteps, Project, readJob, REPO, stepNamed, type Ran, type Step } from "./helpers/workflow";
 
 /**
  * The "Refresh prices" job, rehearsed offline — by running the workflow's
@@ -16,6 +16,14 @@ import { jobSteps, Project, REPO, stepNamed, type Ran, type Step } from "./helpe
  * job runs commands. Here the commands themselves run, so a workflow line,
  * an npm script, a variable name or the program's entry point that would
  * stop (or quietly redirect) the unattended run fails on the pull request.
+ *
+ * What is run: the browser check, "Resolve flags", "Scrape" (kept offline),
+ * the whole alert step, the alarm for a day when nothing could be read, and
+ * the data half of the site's build. What is not: installing dependencies
+ * and the browser, and the two steps that ask outside services (skyline,
+ * unit map) — for those only the command line is pinned. The first test
+ * lists every step and job, so one that is added, removed or made
+ * conditional has to be looked at here before the tests pass again.
  */
 
 const SCRAPE_JOB = jobSteps("refresh.yml", "scrape");
@@ -73,39 +81,83 @@ function standInForGh(p: Project): { path: string; called: string } {
 }
 
 describe("the refresh workflow keeps no logic of its own", () => {
-  it("every command of the job is run by a test, or is named here with the reason it is not", () => {
+  const scripts = (JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { scripts: Record<string, string> }).scripts;
+  const SKYLINE = "Generate skyline (when missing or requested)";
+  const UNITMAP = "Update unit-position maps";
+
+  it("every step of the job is run by a test, or is named here with the reason it is not", () => {
     const how: Record<string, string> = {
+      "actions/checkout@v4": "GitHub's own: the checkout",
+      "actions/setup-node@v4": "GitHub's own: Node",
       "npm ci": "not run: installs the dependencies these tests are already running on",
       [BROWSER]: "run below",
-      "Install Playwright Chromium": "not run: downloads a browser, and only when a building is configured to need one",
+      "Cache Playwright browser": "GitHub's own: a cache, and only when a building needs a browser",
+      "Install Playwright Chromium": "not run: downloads a browser, and only when a building needs one",
       [FLAGS]: "run below, started every way the job can start",
-      "Generate skyline (when missing or requested)": "not run: asks OpenStreetMap; allowed to fail without failing the job",
+      [SKYLINE]: "not run: asks OpenStreetMap; allowed to fail without failing the job",
       [SCRAPE]: "run below, against the recorded responses",
-      "Update unit-position maps": "not run: reads the leasing site's floor plate; allowed to fail without failing the job",
+      [UNITMAP]: "not run: reads the leasing site's floor plate; allowed to fail without failing the job",
       [COMMIT]: "ci-commit.test.ts runs the script it calls against real repositories",
       [ALERTS]: "run below, with a stand-in for gh",
     };
-    // A new step has to be added here — and so to be thought about — before this passes again.
-    expect(SCRAPE_JOB.filter((s) => s.run !== null).map((s) => s.name)).toEqual(Object.keys(how));
+    // A step added, removed or reordered has to be put right here — and so
+    // be thought about — before this passes again.
+    expect(SCRAPE_JOB.map((s) => s.name)).toEqual(Object.keys(how));
 
     // The steps that are one command each, word for word.
     expect(stepNamed(SCRAPE_JOB, FLAGS).run).toBe("npm run -s ci:flags");
-    expect(stepNamed(SCRAPE_JOB, FLAGS).keys["id"]).toBe("flags");
     expect(stepNamed(SCRAPE_JOB, SCRAPE).run).toBe("npm run refresh -- $REFRESH_ARGS");
-    expect(stepNamed(SCRAPE_JOB, SCRAPE).keys["id"]).toBe("scrape");
     expect(stepNamed(SCRAPE_JOB, COMMIT).run).toBe("bash .github/scripts/commit-snapshot.sh");
     expect(existsSync(join(REPO, ".github", "scripts", "commit-snapshot.sh"))).toBe(true);
-    // The two that ask the outside world may fail; the job goes on to scrape and commit.
-    for (const name of ["Generate skyline (when missing or requested)", "Update unit-position maps", ALERTS]) {
-      expect(stepNamed(SCRAPE_JOB, name).keys["continue-on-error"], name).toBe("true");
+    expect(existsSync(join(REPO, ".github", "scripts", "merge-unitmap.mjs"))).toBe(true);
+
+    // The steps a test runs always run on GitHub too, and exactly as written:
+    // none is conditional, and none has a setting beyond these. (The reader
+    // refuses `shell`, `working-directory` and the like outright.)
+    expect(stepNamed(SCRAPE_JOB, BROWSER).keys).toEqual({ name: BROWSER, id: "browser" });
+    expect(stepNamed(SCRAPE_JOB, FLAGS).keys).toEqual({ name: FLAGS, id: "flags" });
+    expect(stepNamed(SCRAPE_JOB, SCRAPE).keys).toEqual({ name: SCRAPE, id: "scrape" });
+    expect(stepNamed(SCRAPE_JOB, COMMIT).keys).toEqual({ name: COMMIT });
+    // Alerting may fail; the snapshot is committed before it runs.
+    expect(stepNamed(SCRAPE_JOB, ALERTS).keys).toEqual({ name: ALERTS, "continue-on-error": "true" });
+
+    // The steps no test runs: the command, its npm script and the program's
+    // subcommand are pinned, each may fail without failing the job, and the
+    // conditions name outputs that the steps run here do write.
+    expect(stepNamed(SCRAPE_JOB, SKYLINE).run).toBe("npm run skyline");
+    expect(stepNamed(SCRAPE_JOB, UNITMAP).run).toBe("npm run unitmap");
+    const cli = readFileSync(join(REPO, "scraper", "src", "cli.ts"), "utf8");
+    for (const name of ["skyline", "unitmap"]) {
+      expect(scripts[name]).toBe(`tsx scraper/src/cli.ts ${name}`);
+      expect(cli).toContain(`case "${name}": {`);
     }
-    // …and nothing that must succeed is allowed to fail quietly.
-    for (const name of [FLAGS, SCRAPE, COMMIT]) expect(stepNamed(SCRAPE_JOB, name).keys["continue-on-error"], name).toBeUndefined();
+    expect(stepNamed(SCRAPE_JOB, SKYLINE).keys).toEqual({
+      name: SKYLINE,
+      if: "steps.flags.outputs.skyline == 'true' || hashFiles('data/skyline.geojson') == ''",
+      "continue-on-error": "true",
+    });
+    expect(stepNamed(SCRAPE_JOB, UNITMAP).keys).toEqual({ name: UNITMAP, "continue-on-error": "true" });
+    for (const name of ["Cache Playwright browser", "Install Playwright Chromium"]) {
+      expect(stepNamed(SCRAPE_JOB, name).keys["if"], name).toBe("steps.browser.outputs.needed == 'true'");
+    }
+  });
+
+  it("has three jobs, none conditional but the alarm", () => {
+    expect(jobNames("refresh.yml")).toEqual(["scrape", "deploy", "health"]);
+    // The scrape always runs, on a plain runner; its outputs feed the alarm.
+    expect(readJob("refresh.yml", "scrape").keys).toEqual({ "runs-on": "ubuntu-latest", outputs: "", steps: "" });
+    // The site is rebuilt after every scrape, by the deploy workflow.
+    expect(readJob("refresh.yml", "deploy").keys).toEqual({ needs: "scrape", uses: "./.github/workflows/deploy.yml", permissions: "" });
+    expect(readJob("refresh.yml", "health").keys).toEqual({
+      needs: "scrape",
+      if: "needs.scrape.outputs.ok == '0'",
+      "runs-on": "ubuntu-latest",
+      steps: "",
+    });
   });
 
   it("the site is built by one command, whose first half this file runs", () => {
     expect(jobSteps("deploy.yml", "build").filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run build"]);
-    const scripts = (JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { scripts: Record<string, string> }).scripts;
     expect(scripts["build"]).toBe("npm run build:data && npm run -w web build");
   });
 });
@@ -313,6 +365,19 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     expect(alerts.code, alerts.stderr).toBe(0);
     expect(existsSync(join(p.temp, "alert-body.md"))).toBe(false);
     expect(existsSync(gh.called)).toBe(false);
+  });
+
+  it("turns the run red, with the reason, on a day when no building could be read", async () => {
+    // The scrape job still commits the snapshot (with its errors) and the site
+    // is rebuilt; this separate job exists so that such a day does not look quiet.
+    const p = project("alarm");
+    const [alarm] = jobSteps("refresh.yml", "health");
+    const ran = await p.run(alarm!, "schedule", {
+      "needs.scrape.outputs.total": "6",
+      "needs.scrape.outputs.failed": "1225-old-town,the-leo",
+    });
+    expect(ran.code).toBe(1);
+    expect(ran.stdout).toContain("::error::None of the 6 buildings could be scraped (1225-old-town,the-leo). See the scrape job's summary.");
   });
 
   it("says a browser is needed once a building is configured to be read with one", async () => {

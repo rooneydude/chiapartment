@@ -4,14 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * What the tests need of a GitHub workflow: which steps a job has, what each
- * one runs and with which variables — and a way to run a step's command the
- * way the runner does (`bash -e`, a fresh output file, nothing in the
- * environment but what that step would really be given).
+ * What the tests need of a GitHub workflow: which jobs and steps it has, what
+ * each step runs and with which variables — and a way to run a step's
+ * command the way the runner does (`bash -e`, a fresh output file, nothing
+ * in the environment but what that step would really be given).
  *
  * Not a YAML parser. It reads the one layout this repository writes and
- * refuses anything else, so a workflow rewritten into a shape these tests
- * cannot follow fails them instead of quietly escaping them.
+ * refuses anything else — including every setting that would change how a
+ * command runs in a way `Project.run` does not reproduce (another shell or
+ * working directory, defaults, a container, variables set for the whole job
+ * or workflow). A workflow changed in such a way fails the tests that read
+ * it instead of quietly escaping them. What it does hand over without
+ * acting on it — a step's or job's `if:`, `continue-on-error:` — is in
+ * `keys`, for the tests to pin.
  */
 
 export const REPO = join(__dirname, "..", "..", "..");
@@ -26,6 +31,19 @@ export interface Step {
   /** Its other keys: `id`, `if`, `uses`, `continue-on-error`. */
   keys: Record<string, string>;
 }
+
+export interface Job {
+  /** The job's own settings, blocks as "": `runs-on`, `needs`, `if`, `uses`, `outputs`, `permissions`. */
+  keys: Record<string, string>;
+  steps: Step[];
+}
+
+/** Everything a step may say. `shell`, `working-directory`, `timeout-minutes` and the like are not reproduced here, so they are refused. */
+const STEP_KEYS = new Set(["name", "id", "uses", "with", "run", "env", "if", "continue-on-error"]);
+/** Everything a job may say. Not `env`, `defaults`, `container`, `strategy`, `timeout-minutes`: see above. */
+const JOB_KEYS = new Set(["runs-on", "needs", "if", "uses", "outputs", "permissions", "environment", "steps"]);
+/** Everything a workflow may say at the top. Not `env` or `defaults`. */
+const WORKFLOW_KEYS = new Set(["name", "on", "permissions", "concurrency", "jobs"]);
 
 const indent = (line: string): number => line.length - line.trimStart().length;
 const isNoise = (line: string): boolean => line.trim() === "" || line.trim().startsWith("#");
@@ -49,6 +67,9 @@ function readStep(lines: string[], file: string): Step {
     }
     if (indent(line) !== 8) throw new Error(`${file}: cannot read this line of a step: ${JSON.stringify(line)}`);
     const [key, value] = keyValue(line, file);
+    if (!STEP_KEYS.has(key)) {
+      throw new Error(`${file}: a step sets "${key}", which the tests that run the workflow's commands do not reproduce: ${JSON.stringify(line)}`);
+    }
     i++;
     if (key === "run" && value === "|") {
       const block: string[] = [];
@@ -76,9 +97,32 @@ function readStep(lines: string[], file: string): Step {
   return step;
 }
 
-/** The steps of one job of a workflow in `.github/workflows`, in order. */
-export function jobSteps(file: string, job: string): Step[] {
+function workflowLines(file: string): string[] {
   const lines = readFileSync(join(REPO, ".github", "workflows", file), "utf8").split("\n");
+  for (const line of lines) {
+    if (isNoise(line) || indent(line) !== 0) continue;
+    const [key] = keyValue(line, file);
+    if (!WORKFLOW_KEYS.has(key)) {
+      throw new Error(`${file}: the workflow sets "${key}", which the tests that run its commands do not reproduce.`);
+    }
+  }
+  return lines;
+}
+
+/** The names of a workflow's jobs, in order. */
+export function jobNames(file: string): string[] {
+  const lines = workflowLines(file);
+  const jobsAt = lines.indexOf("jobs:");
+  if (jobsAt === -1) throw new Error(`${file} has no jobs`);
+  return lines
+    .slice(jobsAt + 1)
+    .filter((line) => !isNoise(line) && indent(line) === 2)
+    .map((line) => keyValue(line, file)[0]);
+}
+
+/** One job of a workflow in `.github/workflows`: its own settings and its steps, in order. */
+export function readJob(file: string, job: string): Job {
+  const lines = workflowLines(file);
   const start = lines.indexOf(`  ${job}:`);
   if (start === -1) throw new Error(`${file} has no job "${job}"`);
   let end = lines.length;
@@ -88,11 +132,20 @@ export function jobSteps(file: string, job: string): Step[] {
       break;
     }
   }
-  const stepsAt = lines.findIndex((line, i) => i > start && i < end && line === "    steps:");
-  if (stepsAt === -1) throw new Error(`${file}: the job "${job}" has no steps`);
+  const keys: Record<string, string> = {};
+  for (let i = start + 1; i < end; i++) {
+    const line = lines[i]!;
+    if (isNoise(line) || indent(line) !== 4) continue;
+    const [key, value] = keyValue(line, file);
+    if (!JOB_KEYS.has(key)) {
+      throw new Error(`${file}: the job "${job}" sets "${key}", which the tests that run the workflow's commands do not reproduce.`);
+    }
+    keys[key] = unquote(value.replace(/\s+#.*$/, ""));
+  }
   const steps: Step[] = [];
+  const stepsAt = lines.findIndex((line, i) => i > start && i < end && line === "    steps:");
   let current: string[] | null = null;
-  for (let i = stepsAt + 1; i < end; i++) {
+  for (let i = stepsAt + 1; stepsAt !== -1 && i < end; i++) {
     const line = lines[i]!;
     if (line.startsWith("      - ")) {
       if (current) steps.push(readStep(current, file));
@@ -101,6 +154,13 @@ export function jobSteps(file: string, job: string): Step[] {
     else if (!isNoise(line)) throw new Error(`${file}: unexpected line before the first step: ${JSON.stringify(line)}`);
   }
   if (current) steps.push(readStep(current, file));
+  return { keys, steps };
+}
+
+/** The steps of one job, in order. */
+export function jobSteps(file: string, job: string): Step[] {
+  const { steps } = readJob(file, job);
+  if (steps.length === 0) throw new Error(`${file}: the job "${job}" has no steps`);
   return steps;
 }
 
