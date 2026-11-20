@@ -109,29 +109,10 @@ jobs:
 
       # The data is committed BEFORE anyone is alerted, so an alert can never
       # describe a snapshot that failed to land (and be repeated tomorrow).
+      # The script retries the push when something else landed on the branch
+      # during the scrape; `npm test` runs it against real repositories.
       - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots data/skyline.geojson data/unitmaps scraper/fixtures 2>/dev/null || git add data/snapshots
-          if git diff --cached --quiet; then
-            echo "Nothing changed."
-            exit 0
-          fi
-          git commit -m "data: snapshot $(date -u +%FT%TZ)"
-          # Something else may have landed on the branch while we scraped (a
-          # merge, another run). Snapshot files have unique names, so a rebase
-          # never conflicts — retry instead of losing the day's data.
-          pushed=false
-          for attempt in 1 2 3; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then pushed=true; break; fi
-            echo "Push rejected (attempt $attempt); rebasing onto origin/${GITHUB_REF_NAME} and trying again."
-            git pull --rebase origin "${GITHUB_REF_NAME}"
-          done
-          if [ "$pushed" != true ]; then
-            echo "::error::Could not push today's snapshot after 3 attempts."
-            exit 1
-          fi
+        run: bash .github/scripts/commit-snapshot.sh
 
       - name: Price alerts (GitHub issue → phone push via the GitHub app)
         continue-on-error: true # alerting must never fail the scrape
