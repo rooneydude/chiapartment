@@ -29,6 +29,9 @@ describe("what the refresh job is asked to do", () => {
       skyline: true,
       buildings: ["the-leo", "stead-220"],
     });
+    // each word is its own flag
+    expect(resolveRefreshFlags({ event: "push", triggerText: "capture\n" }, KNOWN)).toEqual({ capture: true, skyline: false, buildings: [] });
+    expect(resolveRefreshFlags({ event: "push", triggerText: "skyline\n" }, KNOWN)).toEqual({ capture: false, skyline: true, buildings: [] });
     // a scheduled or manual run must not inherit what somebody left in the file
     for (const event of ["schedule", "workflow_dispatch", ""]) {
       expect(resolveRefreshFlags({ event, triggerText: text }, KNOWN)).toEqual({
@@ -55,6 +58,9 @@ describe("what the refresh job is asked to do", () => {
         KNOWN,
       ),
     ).toEqual({ capture: true, skyline: false, buildings: ["the-leo", "stead-220"] });
+    expect(
+      resolveRefreshFlags({ event: "workflow_dispatch", inputs: { buildings: "", capture: "false", skyline: "true" }, triggerText: null }, KNOWN),
+    ).toEqual({ capture: false, skyline: true, buildings: [] });
     expect(
       resolveRefreshFlags({ event: "push", inputs: { buildings: "the-leo" }, triggerText: "buildings=stead-220" }, KNOWN).buildings,
     ).toEqual(["the-leo"]);
