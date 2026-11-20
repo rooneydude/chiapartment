@@ -415,6 +415,29 @@ in the browser:
   runs in CI; breaking the listing of left-out units, or removing the
   boundary round the 3D view, fails it.
 
+  An independent review of that work, before it was merged, found nothing
+  broken and four places where the new tests promised more than they
+  checked. All four were fixed:
+
+  1. *Nothing ran the program the job runs.* The tests called functions;
+     the job runs commands. Re-adding the very line that failed on 17 Nov
+     to the program's entry point left every test green. The rehearsal now
+     runs each step's own command, read out of `refresh.yml`, the way
+     GitHub does. Broken 25 ways on purpose, it notices each.
+  2. *Two overlapping refresh runs lost the later run's snapshot* — older
+     than this work, and real: every run rewrites the unit map, so the
+     second push's retry met a conflict and the step failed. The script's
+     own comment said that could not happen. Files the job regenerates
+     whole are now replaced whole by the later run; anything that cannot be
+     put together stops the step with a message and pushes nothing.
+  3. *"Starts without the 3D and chart libraries" passed with both compiled
+     into the start-up file.* It now requires them to exist as files of
+     their own and holds the start-up scripts to a size budget.
+  4. *The 3D test passed with nothing drawn on the tower and the sun fixed
+     at noon.* It now compares pictures: pointing at each unit's row must
+     change the picture where that unit's mark is, and the scene must be
+     much darker at 11 PM than at noon.
+
 ---
 
 # Previous audit — 8 Sep 2026

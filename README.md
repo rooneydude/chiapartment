@@ -121,15 +121,18 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
 Node 22+. `npm install` once at the repo root (npm workspaces).
 
 **What the tests cover.** `npm test` runs the scrapers against recorded
-pages, the change detection and the compiler — and the refresh job itself:
-its flag handling (`scraper/src/ci-flags.ts`), its commit-and-push step
-(`.github/scripts/commit-snapshot.sh`, run against real throwaway
-repositories, including a push that loses a race), and a rehearsal of the
-whole job offline, from flags to alert to compiled data. `npm run
-test:browser` drives the built dashboard in Chromium against a few days of
-hand-made snapshots compiled by the real compiler. Both run on every pull
-request. The refresh workflow keeps no logic of its own: each step is one
-command that these tests exercise.
+pages, the change detection and the compiler — and the refresh job itself.
+Its flag handling is code (`scraper/src/ci-flags.ts`). Its commit-and-push
+step (`.github/scripts/commit-snapshot.sh`) is run against real throwaway
+repositories: a pull request merged during the scrape, another refresh run
+that pushed first, a remote that refuses. And the job is rehearsed offline
+by running the workflow's own commands — each step's command and variables
+are read out of `refresh.yml` and run as GitHub runs them, from flags to
+alert to compiled data (`scraper/test/refresh-rehearsal.test.ts`). A step
+added to the job fails that test until it is listed there with how it is
+tested. `npm run test:browser` drives the built dashboard in Chromium
+against a few days of hand-made snapshots compiled by the real compiler; the
+3D view is judged by its picture. Both run on every pull request.
 
 ## Data status
 
