@@ -12,6 +12,7 @@
     "unitmap": "tsx scraper/src/cli.ts unitmap",
     "alerts": "tsx scraper/src/cli.ts alerts",
     "build:data": "tsx scraper/src/cli.ts build-data",
+    "ci:flags": "tsx scraper/src/cli.ts ci-flags",
     "dev": "npm run build:data && npm run -w web dev",
     "build": "npm run build:data && npm run -w web build",
     "preview": "npm run -w web preview",
