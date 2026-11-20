@@ -1,7 +1,9 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SnapshotSchema } from "../../shared/src/types";
 import { buildData } from "./build-data";
-import { describeRun, refresh } from "./run";
+import { describeFlags, flagOutputs, resolveRefreshFlags, type RefreshRequest } from "./ci-flags";
+import { describeRun, loadConfig, refresh } from "./run";
 
 /**
  * Tell the CI run what happened, where a person will see it: a per-building
@@ -58,6 +60,28 @@ try {
     case "build-data":
       buildData(root);
       break;
+    // The "Refresh prices" job's first step: what was this run asked to do?
+    // Prints it, and writes the step outputs the workflow reads.
+    case "ci-flags": {
+      const triggerFile = join(root, ".github", "refresh-trigger");
+      const request: RefreshRequest = {
+        event: process.env["GITHUB_EVENT_NAME"] ?? "",
+        inputs: {
+          buildings: process.env["INPUT_BUILDINGS"],
+          capture: process.env["INPUT_CAPTURE"],
+          skyline: process.env["INPUT_SKYLINE"],
+        },
+        triggerText: existsSync(triggerFile) ? readFileSync(triggerFile, "utf8") : null,
+      };
+      const resolved = resolveRefreshFlags(
+        request,
+        loadConfig(root).buildings.map((b) => b.id),
+      );
+      console.log(describeFlags(request, resolved));
+      if (process.env["GITHUB_OUTPUT"]) appendFileSync(process.env["GITHUB_OUTPUT"], flagOutputs(resolved));
+      else process.stdout.write(flagOutputs(resolved));
+      break;
+    }
     case "skyline": {
       const { generateSkyline } = await import("./skyline");
       await generateSkyline(root);
@@ -85,11 +109,13 @@ try {
     }
     default:
       console.error(
-        `Usage: tsx scraper/src/cli.ts <refresh|build-data|skyline|unitmap|alerts> [--fixtures] [--capture] [--commit] [--buildings=a,b] [--out=dir]`,
+        `Usage: tsx scraper/src/cli.ts <refresh|build-data|skyline|unitmap|alerts|ci-flags> [--fixtures] [--capture] [--commit] [--buildings=a,b] [--out=dir]`,
       );
       process.exit(2);
   }
 } catch (err) {
-  console.error(err instanceof Error ? err.message : err);
+  const message = err instanceof Error ? err.message : String(err);
+  // On GitHub the reason shows on the run's summary page, not only deep in a step's log.
+  console.error(process.env["GITHUB_ACTIONS"] ? `::error::${message.replace(/\r?\n/g, " ")}` : message);
   process.exit(1);
 }

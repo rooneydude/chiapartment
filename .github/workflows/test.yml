@@ -23,3 +23,17 @@ jobs:
       # The dashboard bundle must build from the committed history too —
       # catches a broken page before the deploy job does.
       - run: npm run build
+
+      # The dashboard itself, driven in a real browser against data compiled
+      # for the purpose (web/e2e): every listed unit shown with its rent,
+      # lease length and move-in date, nothing asserted from a gap, the page
+      # surviving a failed file or a device without WebGL, keyboard and phone.
+      - name: Cache the test browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install the test browser
+        run: npx playwright install chromium
+      - name: Dashboard tests (browser)
+        run: npm run test:browser
