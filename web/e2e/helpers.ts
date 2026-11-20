@@ -27,6 +27,12 @@ import {
 
 export const REPO = join(__dirname, "..", "..");
 const DIST = join(REPO, "web", "dist");
+
+/** The script files of the built site, with their sizes. */
+export const builtScripts = (): { name: string; bytes: number }[] =>
+  readdirSync(join(DIST, "assets"))
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => ({ name, bytes: statSync(join(DIST, "assets", name)).size }));
 const BASE = "/chiapartment/";
 
 /** Three evenings, as the scheduled job records them. */
@@ -188,6 +194,8 @@ export interface Opened {
   context: BrowserContext;
   /** Uncaught errors on the page. */
   errors: string[];
+  /** What the page wrote to the console as an error — where a 3D library reports a shader that did not compile. */
+  consoleErrors: string[];
   /** Paths of everything the page requested. */
   requested: string[];
   /** Answer one data file differently from now on (null = back to the compiled world). */
@@ -214,6 +222,10 @@ export async function openApp(
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  const consoleErrors: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") consoleErrors.push(m.text());
+  });
   const requested: string[] = [];
   page.on("request", (r) => requested.push(new URL(r.url()).pathname));
   const overrides = new Map<string, { status: number; body: string }>(Object.entries(opts.overrides ?? {}));
@@ -231,6 +243,7 @@ export async function openApp(
     page,
     context,
     errors,
+    consoleErrors,
     requested,
     override: (file, answer) => {
       if (answer === null) overrides.delete(file);
@@ -242,6 +255,74 @@ export async function openApp(
 /** Everything the matching elements say, as one line. */
 export async function say(page: Page, selector: string): Promise<string> {
   return (await page.locator(selector).allInnerTexts()).join(" | ").replace(/\s+/g, " ").trim();
+}
+
+// ---------------------------------------------------------------- the 3D picture
+
+/** Everything in the 3D panel that lies over the picture: legend, compass, controls, labels. */
+const OVER_THE_PICTURE = ".scene-wrap > :not(:first-child) { visibility: hidden !important; }";
+
+/** The 3D picture as the browser shows it, without what lies over it. A PNG, base64. */
+export const scenePicture = async (page: Page): Promise<string> =>
+  (await page.locator(".scene-wrap").screenshot({ style: OVER_THE_PICTURE })).toString("base64");
+
+/** The same, once it has stopped changing (a camera move or a relight takes a few frames). */
+export async function scenePictureAtRest(page: Page): Promise<string> {
+  let last = await scenePicture(page);
+  for (let i = 0; i < 80; i++) {
+    await page.waitForTimeout(150);
+    const next = await scenePicture(page);
+    if (next === last) return next;
+    last = next;
+  }
+  throw new Error("The 3D picture never came to rest.");
+}
+
+/**
+ * Two pictures of the same size, compared in the browser (which can read a
+ * PNG; this project has no library that does): how many pixels differ by
+ * more than a rendering wobble, and how bright each picture is on average
+ * (0 black – 255 white).
+ */
+export function comparePictures(page: Page, a: string, b: string): Promise<{ changed: number; brightnessA: number; brightnessB: number }> {
+  return page.evaluate(
+    async ([first, second]) => {
+      const pixels = async (png: string): Promise<Uint8ClampedArray> => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${png}`;
+        await img.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const g = canvas.getContext("2d", { willReadFrequently: true })!;
+        g.drawImage(img, 0, 0);
+        return g.getImageData(0, 0, canvas.width, canvas.height).data;
+      };
+      const [p, q] = [await pixels(first!), await pixels(second!)];
+      if (p.length !== q.length) throw new Error("The two pictures are not the same size.");
+      const luminance = (d: Uint8ClampedArray, i: number): number => 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!;
+      let changed = 0;
+      let sumA = 0;
+      let sumB = 0;
+      for (let i = 0; i < p.length; i += 4) {
+        sumA += luminance(p, i);
+        sumB += luminance(q, i);
+        if (Math.max(Math.abs(p[i]! - q[i]!), Math.abs(p[i + 1]! - q[i + 1]!), Math.abs(p[i + 2]! - q[i + 2]!)) > 16) changed++;
+      }
+      const count = p.length / 4;
+      return { changed, brightnessA: sumA / count, brightnessB: sumB / count };
+    },
+    [a, b],
+  );
+}
+
+/** Move a slider to a value the way a person's drag ends up: the control's own setter, then the event React listens for. */
+export async function setSlider(page: Page, selector: string, value: number): Promise<void> {
+  await page.locator(selector).evaluate((el, v) => {
+    const input = el as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, String(v));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, value);
 }
 
 /** How far the page is wider than the screen (0 = it fits). */

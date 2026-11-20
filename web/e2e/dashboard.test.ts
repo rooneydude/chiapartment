@@ -2,6 +2,8 @@ import type { Browser } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAvailableNow } from "../../shared/src/listing";
 import {
+  builtScripts,
+  comparePictures,
   compiledConfig,
   compiledHistory,
   compileWorld,
@@ -14,7 +16,10 @@ import {
   overflowX,
   removeWorlds,
   say,
+  scenePicture,
+  scenePictureAtRest,
   serveDist,
+  setSlider,
   TODAY,
   unit,
   type Run,
@@ -208,7 +213,18 @@ describe("the dashboard", () => {
     expect(await page.locator(".cards a.card").count()).toBe(6);
     const scripts = requested.filter((p) => p.endsWith(".js")).map((p) => p.split("/").pop()!);
     expect(scripts.length).toBeGreaterThan(0);
+    // The heavy parts are files of their own in the built site…
+    const built = builtScripts();
+    for (const part of ["Scene3D", "PriceHistoryChart", "BuildingPage"]) {
+      expect(built.filter((f) => f.name.startsWith(`${part}-`)), `${part} as a file of its own`).toHaveLength(1);
+    }
+    // …none of which the dashboard asked for…
     expect(scripts.filter((s) => /^(Scene3D|PriceHistoryChart|BuildingPage)-/.test(s))).toEqual([]);
+    // …and what it did ask for is small. Without this a library folded into
+    // the start-up file, or into a file shared with it, would pass the lines
+    // above: the 3D library alone is about 900 kB, the chart library 400 kB.
+    const startUp = scripts.reduce((sum, s) => sum + (built.find((f) => f.name === s)?.bytes ?? Number.POSITIVE_INFINITY), 0);
+    expect(startUp).toBeLessThan(300_000);
     await context.close();
   });
 
@@ -411,24 +427,63 @@ describe("a building's page", () => {
 });
 
 describe("the 3D view", () => {
-  it("draws the tower with a mark for every listed unit, and relights for another hour", async () => {
+  // Judged by the picture, not by what the page says about it: a legend that
+  // counts four units proves nothing about what was drawn on the tower.
+  it("draws a mark on the tower for every listed unit, and relights the scene for another hour", async () => {
     const webgl = await launch(true);
     try {
-      const { page, context, errors } = await openApp(webgl, site.origin, ordinaryData, { route: "/b/1225-old-town" });
+      // tall enough that the table is on screen with the scene: pointing at a row must not scroll the page
+      const { page, context, errors, consoleErrors } = await openApp(webgl, site.origin, ordinaryData, {
+        route: "/b/1225-old-town",
+        height: 2400,
+      });
       await expect.poll(() => page.locator(".scene-wrap canvas").count(), { timeout: 60_000 }).toBe(1);
-      const units = compiledHistory(ordinaryData, "1225-old-town").latest!.units.length;
-      await expect.poll(() => say(page, ".scene-legend-head .scene-legend-n"), { timeout: 60_000 }).toBe(String(units));
+      const units = compiledHistory(ordinaryData, "1225-old-town").latest!.units;
+      await expect.poll(() => say(page, ".scene-legend-head .scene-legend-n"), { timeout: 60_000 }).toBe(String(units.length));
       expect(await page.locator(".panel-fallback").count()).toBe(0);
 
-      const before = await say(page, ".scene-time-value");
-      await page.locator(".scene-time input").evaluate((el) => {
-        const input = el as HTMLInputElement;
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "20.5");
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      await expect.poll(() => say(page, ".scene-time-value")).toBe("8:30 PM");
-      expect(before).not.toBe("8:30 PM");
+      // Every listed unit has a mark: pointing at its row in the table lights
+      // that mark up, wherever on the tower it is — the picture changes.
+      await page.locator(".chip", { hasText: "All beds" }).click();
+      const rows = page.locator("table.units tbody tr:not(.detail-row)");
+      expect(await rows.count()).toBe(units.length);
+      await page.mouse.move(4, 4);
+      const calm = await scenePictureAtRest(page);
+      const changedFromCalm = async (): Promise<number> => (await comparePictures(page, calm, await scenePicture(page))).changed;
+      const lit = new Map<string, string>();
+      for (const u of units) {
+        const unitNumber = u.unitNumber!;
+        await rows.filter({ hasText: unitNumber }).hover();
+        // about a hundred pixels at the least (a small mark seen through the tower); none if the unit has no mark
+        await expect.poll(changedFromCalm, { timeout: 20_000, message: `the mark of unit ${unitNumber}` }).toBeGreaterThan(20);
+        lit.set(unitNumber, await scenePictureAtRest(page));
+        await page.mouse.move(4, 4);
+        await expect.poll(changedFromCalm, { timeout: 20_000, message: `back to the calm picture after unit ${unitNumber}` }).toBe(0);
+      }
+      // …and each unit's mark is its own: no two rows light up the same place.
+      const numbers = [...lit.keys()];
+      for (let i = 0; i < numbers.length; i++) {
+        for (let j = i + 1; j < numbers.length; j++) {
+          const { changed } = await comparePictures(page, lit.get(numbers[i]!)!, lit.get(numbers[j]!)!);
+          expect(changed, `the marks of units ${numbers[i]} and ${numbers[j]}`).toBeGreaterThan(20);
+        }
+      }
+
+      // The slider relights the scene: much darker late in the evening, bright again at noon.
+      // (Measured: about 128 of 255 at the default 1 PM, 46 at 11 PM, 122 at noon.)
+      expect(await say(page, ".scene-time-value")).toBe("1 PM");
+      const afternoon = (await comparePictures(page, calm, calm)).brightnessA;
+      await setSlider(page, ".scene-time input", 23);
+      await expect.poll(() => say(page, ".scene-time-value")).toBe("11 PM");
+      const night = await scenePictureAtRest(page);
+      await setSlider(page, ".scene-time input", 12);
+      await expect.poll(() => say(page, ".scene-time-value")).toBe("12 PM");
+      const noon = await scenePictureAtRest(page);
+      const relit = await comparePictures(page, night, noon);
+      expect(afternoon).toBeGreaterThan(relit.brightnessA * 1.5);
+      expect(relit.brightnessB).toBeGreaterThan(relit.brightnessA * 1.5);
       expect(errors).toEqual([]);
+      expect(consoleErrors).toEqual([]);
       await context.close();
     } finally {
       await webgl.close();
