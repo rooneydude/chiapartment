@@ -3,7 +3,7 @@
 //
 // Used by commit-snapshot.sh as git's merge driver for those files:
 //
-//   node merge-unitmap.mjs <base> <landed> <mine>
+//   node merge-unitmap.mjs <base> <landed> <mine> [<name of the file>]
 //
 //   base    the file as both sides started from it (empty: neither had one)
 //   landed  what is on the branch now — the result is written back to this file
@@ -22,11 +22,16 @@
 //   - everything else in the file (when and from what it was captured, the
 //     fit): this run's.
 //
-// Anything it is not sure of — a file that is not a readable unit map, two
-// files for different buildings or in different versions of the format —
-// ends with a non-zero exit and leaves the files alone. git then reports a
-// conflict, and the commit step pushes the day's prices without this run's
-// unit map rather than guess: the file stays as it landed.
+// Where the two cannot be merged — one of them is not a readable unit map,
+// they are for different buildings, or in different versions of the format —
+// nothing is guessed at and nothing is held up: the file that landed is
+// left exactly as it is, this run's version of it is dropped, and a warning
+// for the run's page says so. Positions are a bonus; the day's prices are in
+// another file and go through. (The exit status is 0 in that case too: to
+// git a non-zero status is a conflict, and a conflict stops the commit.)
+//
+// Only a wrong call, or a file that cannot be read from disk at all, ends
+// with a non-zero status.
 //
 // A program and nothing else: it has no exports, so that there is no way to
 // start it that does not do the merge. scraper/test/ci-unitmap-merge.test.ts
@@ -37,25 +42,28 @@ const isRecord = (x) => typeof x === "object" && x !== null && !Array.isArray(x)
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const has = (map, key) => Object.prototype.hasOwnProperty.call(map, key);
 
+/** Why two unit maps cannot be merged. Not a failure of the program. */
+class CannotMerge extends Error {}
+
 function parseUnitMap(text, what) {
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error(`${what} is not JSON`);
+    throw new CannotMerge(`${what} is not JSON`);
   }
-  if (!isRecord(parsed) || !isRecord(parsed.units)) throw new Error(`${what} is not a unit map (it has no "units")`);
+  if (!isRecord(parsed) || !isRecord(parsed.units)) throw new CannotMerge(`${what} is not a unit map (it has no "units")`);
   return parsed;
 }
 
 /** @param base null when neither side started from a file */
 function mergeUnitMaps(base, landed, mine) {
   if (has(landed, "buildingId") && has(mine, "buildingId") && landed.buildingId !== mine.buildingId) {
-    throw new Error(`the two files are for different buildings (${String(landed.buildingId)}, ${String(mine.buildingId)})`);
+    throw new CannotMerge(`the two files are for different buildings (${String(landed.buildingId)}, ${String(mine.buildingId)})`);
   }
   // Entries of two formats in one file, under one version number, would be a file no program wrote.
   if (!same(landed.schemaVersion, mine.schemaVersion)) {
-    throw new Error(`the two files are in different versions of the format (${String(landed.schemaVersion)}, ${String(mine.schemaVersion)})`);
+    throw new CannotMerge(`the two files are in different versions of the format (${String(landed.schemaVersion)}, ${String(mine.schemaVersion)})`);
   }
   const before = base === null ? {} : base.units;
   // No prototype: a unit called "__proto__" is a unit like any other.
@@ -72,14 +80,25 @@ function mergeUnitMaps(base, landed, mine) {
 }
 
 try {
-  const [basePath, landedPath, minePath] = process.argv.slice(2);
-  if (!basePath || !landedPath || !minePath) throw new Error("usage: merge-unitmap.mjs <base> <landed> <mine>");
+  const [basePath, landedPath, minePath, name] = process.argv.slice(2);
+  if (!basePath || !landedPath || !minePath) throw new Error("usage: merge-unitmap.mjs <base> <landed> <mine> [<name of the file>]");
+  // Everything is read before anything is written.
   const baseText = readFileSync(basePath, "utf8");
-  const base = baseText.trim() === "" ? null : parseUnitMap(baseText, "the file both sides started from");
-  const landed = parseUnitMap(readFileSync(landedPath, "utf8"), "the file on the branch");
-  const mine = parseUnitMap(readFileSync(minePath, "utf8"), "this run's file");
-  // What the generator writes: two-space JSON and a final newline.
-  writeFileSync(landedPath, `${JSON.stringify(mergeUnitMaps(base, landed, mine), null, 2)}\n`);
+  const landedText = readFileSync(landedPath, "utf8");
+  const mineText = readFileSync(minePath, "utf8");
+  try {
+    const base = baseText.trim() === "" ? null : parseUnitMap(baseText, "the file both sides started from");
+    const landed = parseUnitMap(landedText, "the file on the branch");
+    const mine = parseUnitMap(mineText, "this run's file");
+    // What the generator writes: two-space JSON and a final newline.
+    writeFileSync(landedPath, `${JSON.stringify(mergeUnitMaps(base, landed, mine), null, 2)}\n`);
+  } catch (error) {
+    if (!(error instanceof CannotMerge)) throw error;
+    // One line: it is read by GitHub as an annotation for the run's page.
+    console.log(
+      `::warning::The unit map ${name || "(unnamed)"} was left as it landed and this run's version of it was not pushed: ${error.message}. Today's prices are not affected.`,
+    );
+  }
 } catch (error) {
   console.error(`merge-unitmap: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

@@ -7,9 +7,9 @@ import { afterAll, describe, expect, it } from "vitest";
 /**
  * The program that puts two versions of a unit map together when two refresh
  * runs overlap (.github/scripts/merge-unitmap.mjs), run the way git runs it:
- * `node merge-unitmap.mjs <base> <landed> <mine>`, result left in <landed>.
- * scraper/test/ci-commit.test.ts runs it through a real rebase; here each
- * rule is checked on its own.
+ * `node merge-unitmap.mjs <base> <landed> <mine> <name>`, result left in
+ * <landed>. scraper/test/ci-commit.test.ts runs it through a real rebase;
+ * here each rule is checked on its own.
  */
 const REPO = join(__dirname, "..", "..");
 const PROGRAM = join(REPO, ".github", "scripts", "merge-unitmap.mjs");
@@ -34,12 +34,20 @@ const file = (capturedAt: string, units: Record<string, Entry>, extra: Record<st
 
 let n = 0;
 /** Run the program on three file contents; base "" = neither side started from a file. */
-function merge(base: string, landed: string, mine: string): { code: number | null; message: string; result: string; landedPath: string } {
+function merge(base: string, landed: string, mine: string): { code: number | null; said: string; complained: string; result: string; others: string[] } {
   const paths = ["base", "landed", "mine"].map((name) => join(DIR, `${++n}-${name}.json`));
   [base, landed, mine].forEach((text, i) => writeFileSync(paths[i]!, text));
-  const ran = spawnSync("node", [PROGRAM, ...paths], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
-  return { code: ran.status, message: ran.stderr, result: readFileSync(paths[1]!, "utf8"), landedPath: paths[1]! };
+  const ran = spawnSync("node", [PROGRAM, ...paths, NAME], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+  return {
+    code: ran.status,
+    said: ran.stdout,
+    complained: ran.stderr,
+    result: readFileSync(paths[1]!, "utf8"),
+    // the two files the program must never write to
+    others: [readFileSync(paths[0]!, "utf8"), readFileSync(paths[2]!, "utf8")],
+  };
 }
+const NAME = "data/unitmaps/1225-old-town.json";
 
 describe("two versions of a unit map, put together", () => {
   const BASE = file("2026-11-18T22:00:13.000Z", { "1014": at("N"), "2203": at("E", 20), "0704": at("S", 5), "0905": at("W", 7) });
@@ -137,29 +145,48 @@ describe("two versions of a unit map, put together", () => {
     expect(merge(BASE, changed, changed).result).toBe(changed);
   });
 
-  it("refuses, and leaves the files alone, when one of them is not a unit map", () => {
+  it("leaves what landed exactly as it is, and says why, when the two cannot be merged — without failing", () => {
+    // To git a failing merge program is a conflict, and a conflict stops the
+    // commit that carries the day's prices. So: succeed, change nothing, say so.
     const good = file("2026-11-19T22:11:27.000Z", { "1014": at("N") });
-    const cases: [string, string, string, RegExp][] = [
-      [BASE, '{"units": {"1014": \n', good, /^merge-unitmap: the file on the branch is not JSON$/m],
-      [BASE, good, "<<<<<<< HEAD\n", /^merge-unitmap: this run's file is not JSON$/m],
-      [BASE, good, '{"schemaVersion":1,"units":[]}\n', /^merge-unitmap: this run's file is not a unit map/m],
-      [BASE, '"units"\n', good, /^merge-unitmap: the file on the branch is not a unit map/m],
-      ["not json at all", good, good, /^merge-unitmap: the file both sides started from is not JSON$/m],
-      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { buildingId: "the-leo" }), good, /^merge-unitmap: the two files are for different buildings/m],
+    const cases: [base: string, landed: string, mine: string, why: string][] = [
+      [BASE, '{"units": {"1014": \n', good, "the file on the branch is not JSON"],
+      [BASE, good, "<<<<<<< HEAD\n", "this run's file is not JSON"],
+      [BASE, good, '{"schemaVersion":1,"units":[]}\n', `this run's file is not a unit map (it has no "units")`],
+      [BASE, '"units"\n', good, `the file on the branch is not a unit map (it has no "units")`],
+      ["not json at all", good, good, "the file both sides started from is not JSON"],
+      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { buildingId: "the-leo" }), good, "the two files are for different buildings (the-leo, 1225-old-town)"],
       // a pull request changed the format while this run, on the old code, was under way
-      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { schemaVersion: 2, levels: [1, 2] }), good, /^merge-unitmap: the two files are in different versions of the format \(2, 1\)$/m],
+      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { schemaVersion: 2, levels: [1, 2] }), good, "the two files are in different versions of the format (2, 1)"],
     ];
-    for (const [base, landed, mine, message] of cases) {
+    for (const [base, landed, mine, why] of cases) {
       const ran = merge(base, landed, mine);
-      expect(ran.code, String(message)).toBe(1);
-      expect(ran.message).toMatch(message);
-      expect(ran.result).toBe(landed); // untouched: git reports a conflict, the commit step stops
+      expect(ran.code, why).toBe(0);
+      expect(ran.result, why).toBe(landed);
+      expect(ran.others, why).toEqual([base, mine]);
+      // one line, in the form GitHub shows on the run's page
+      expect(ran.said).toBe(`::warning::The unit map ${NAME} was left as it landed and this run's version of it was not pushed: ${why}. Today's prices are not affected.\n`);
+      expect(ran.complained).toBe("");
     }
   });
 
-  it("refuses to run without its three files", () => {
-    const ran = spawnSync("node", [PROGRAM, join(DIR, "only-one.json")], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
-    expect(ran.status).toBe(1);
-    expect(ran.stderr).toContain("usage: merge-unitmap.mjs <base> <landed> <mine>");
+  it("says nothing when it merges", () => {
+    const ran = merge(BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }), file("2026-11-19T22:11:27.000Z", { "1014": at("N"), "1503": at("E", 13) }));
+    expect(ran.code).toBe(0);
+    expect(ran.said).toBe("");
+    expect(ran.complained).toBe("");
+  });
+
+  it("fails only when it is called wrongly, or a file is not there to read", () => {
+    const env = { PATH: process.env["PATH"] ?? "" };
+    const few = spawnSync("node", [PROGRAM, join(DIR, "only-one.json")], { encoding: "utf8", env });
+    expect(few.status).toBe(1);
+    expect(few.stderr).toContain("usage: merge-unitmap.mjs <base> <landed> <mine>");
+    const landed = join(DIR, "there.json");
+    writeFileSync(landed, BASE);
+    const missing = spawnSync("node", [PROGRAM, join(DIR, "nowhere-a.json"), landed, join(DIR, "nowhere-b.json")], { encoding: "utf8", env });
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toMatch(/^merge-unitmap: ENOENT/);
+    expect(readFileSync(landed, "utf8")).toBe(BASE);
   });
 });
