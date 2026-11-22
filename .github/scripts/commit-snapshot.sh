@@ -42,7 +42,7 @@ set -euo pipefail
 main() {
   local branch here
   branch="${GITHUB_REF_NAME:?GITHUB_REF_NAME must name the branch to push to}"
-  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  here="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
   git config user.name "github-actions[bot]"
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -50,14 +50,15 @@ main() {
   # The snapshot is the point of the job. The rest is committed where there is
   # something to commit (a first run has no skyline yet, and the step that
   # makes one may fail); a path git knows but the run removed is staged too.
-  # None of the rest may cost the run its snapshot: what cannot be staged is
-  # left out, and said.
+  # A path git will not stage does not stop the step: it goes on with what
+  # was staged. (Should something else land as well, a file left changed but
+  # unstaged makes the retry below stop — as any such file always has.)
   local path
   git add data/snapshots
   for path in data/skyline.geojson data/unitmaps scraper/fixtures; do
     if [ -e "${path}" ] || git ls-files --error-unmatch -- "${path}" > /dev/null 2>&1; then
       if ! git add -- "${path}"; then
-        echo "::warning::${path} could not be staged (git's message above); today's snapshot is committed without it."
+        echo "::warning::git add failed for ${path} (git's message above); the step goes on with what was staged."
       fi
     fi
   done
@@ -93,7 +94,8 @@ main() {
       break
     fi
     echo "Push rejected (attempt ${attempt}); rebasing onto origin/${branch} and trying again."
-    if ! git "${merging[@]}" pull --rebase origin "${branch}"; then
+    # (the ${x[@]+…} form: an empty list is nothing at all, in every version of bash)
+    if ! git ${merging[@]+"${merging[@]}"} pull --rebase origin "${branch}"; then
       git rebase --abort 2> /dev/null || true # back on this run's commit, for whoever looks
       echo "::error::Today's snapshot was not pushed: the push was rejected, and replaying this run's commit on top of origin/${branch} failed (git's message above). Start a new run: a re-run of this one would start from the same commit."
       exit 1
@@ -114,7 +116,8 @@ prepare_merging() {
   git_dir="$(git rev-parse --absolute-git-dir)" || return 1
   attributes="$(git rev-parse --git-path info/attributes)" || return 1
   program="${git_dir}/merge-unitmap.mjs"
-  case "${program}" in *"'"*) return 1 ;; esac # a path the driver line cannot quote
+  # a path the driver line cannot quote, or one Node will not load a program from
+  case "${program}" in *"'"* | *\\*) return 1 ;; esac
   cp -f "${here}/merge-unitmap.mjs" "${program}" || return 1
   mkdir -p "$(dirname "${attributes}")" || return 1
   if ! grep -qs 'merge=unit-map' "${attributes}"; then

@@ -185,10 +185,13 @@ describe("two versions of a unit map, put together", () => {
     // …nor a file's name: git allows a line break in one.
     const paths = ["name-base", "name-landed", "name-mine"].map((name) => join(DIR, `${name}.json`));
     ["", "not a unit map\n", file("2026-11-19T22:11:27.000Z", { "1014": at("N") })].forEach((text, i) => writeFileSync(paths[i]!, text));
-    const named = spawnSync("node", [PROGRAM, ...paths, "data/unitmaps/odd\n::error::made up.json"], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+    const named = spawnSync("node", [PROGRAM, ...paths, "data/unitmaps/odd\r::error::a\r\n::error::b\n::error::c.json"], {
+      encoding: "utf8",
+      env: { PATH: process.env["PATH"] ?? "" },
+    });
     expect(named.status).toBe(0);
     expect(named.stdout.trimEnd().split(/[\r\n]/)).toHaveLength(1);
-    expect(named.stdout).toContain("data/unitmaps/odd ::error::made up.json");
+    expect(named.stdout).toContain("data/unitmaps/odd ::error::a ::error::b ::error::c.json");
   });
 
   it("says nothing when it merges", () => {

@@ -195,10 +195,21 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
       write(runner, "data/skyline.geojson", '{"generated":"22:11"}\n');
       const run = commitResults(runner);
       expect(run.code, run.output).toBe(0);
-      expect(run.output).toContain("::warning::data/skyline.geojson could not be staged (git's message above); today's snapshot is committed without it.");
+      expect(run.output).toContain("::warning::git add failed for data/skyline.geojson (git's message above); the step goes on with what was staged.");
       expect(remoteFile(origin, TODAY)).toBe(PRICES);
       expect(remoteFile(origin, MAP)).toContain("2026-11-19");
       expect(onRemote(origin, "data/skyline.geojson")).toBe(false);
+    });
+
+    it("pushes the snapshot from a checkout whose path the merge program cannot be started from", () => {
+      // A backslash in the path: Node will not load a program from there.
+      // Known before the push, said, and no reason to stop.
+      const { origin, runner } = world("back\\slash");
+      write(runner, TODAY, PRICES);
+      const run = commitResults(runner);
+      expect(run.code, run.output).toBe(0);
+      expect(run.output).toContain("::warning::The merging of unit maps could not be set up.");
+      expect(remoteFile(origin, TODAY)).toBe(PRICES);
     });
 
     it("commits a file the run removed as removed", () => {

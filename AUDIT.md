@@ -508,8 +508,8 @@ in the browser:
   four smaller notes, each taken up.
 
   15. A file that exists but cannot be staged (one git has since been told
-      to ignore, say) stopped the step before it committed anything. It is
-      now left out, with a warning, and the snapshot goes through.
+      to ignore, say) stopped the step before it committed anything. The
+      step now warns and goes on with what was staged.
   16. The two merge rules stayed written in the checkout's settings, where
       they would have changed a person's later merges had the step ever
       been run in a checkout that is kept. They are now handed to the
@@ -520,6 +520,11 @@ in the browser:
       now says only what was done. The warning is also kept to one line
       whatever the files hold, so that a file cannot write a line of its
       own into the run's log.
+
+  A last, short check of those four changes found nothing serious
+  either; its notes were about wording, one test that did not try a
+  carriage return, and a checkout path Node cannot load a program from
+  (now known before the push and said, instead of surfacing mid-retry).
 
   What the commit step does differently from before this work, in full:
   two overlapping refresh runs no longer cost the later one its snapshot
