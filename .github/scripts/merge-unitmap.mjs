@@ -27,8 +27,10 @@
 // nothing is guessed at and nothing is held up: the file that landed is
 // left exactly as it is, this run's version of it is dropped, and a warning
 // for the run's page says so. Positions are a bonus; the day's prices are in
-// another file and go through. (The exit status is 0 in that case too: to
-// git a non-zero status is a conflict, and a conflict stops the commit.)
+// another file, and this program does not stand in their way. (The exit
+// status is 0 in that case too: to git a non-zero status is a conflict, and
+// a conflict stops the commit.) The warning says what this program did and
+// no more — whether the prices were pushed is for the commit step to say.
 //
 // Only a wrong call, or a file that cannot be read from disk at all, ends
 // with a non-zero status.
@@ -59,11 +61,13 @@ function parseUnitMap(text, what) {
 /** @param base null when neither side started from a file */
 function mergeUnitMaps(base, landed, mine) {
   if (has(landed, "buildingId") && has(mine, "buildingId") && landed.buildingId !== mine.buildingId) {
-    throw new CannotMerge(`the two files are for different buildings (${String(landed.buildingId)}, ${String(mine.buildingId)})`);
+    throw new CannotMerge(`the two files are for different buildings (${JSON.stringify(landed.buildingId)}, ${JSON.stringify(mine.buildingId)})`);
   }
   // Entries of two formats in one file, under one version number, would be a file no program wrote.
   if (!same(landed.schemaVersion, mine.schemaVersion)) {
-    throw new CannotMerge(`the two files are in different versions of the format (${String(landed.schemaVersion)}, ${String(mine.schemaVersion)})`);
+    throw new CannotMerge(
+      `the two files are in different versions of the format (${JSON.stringify(landed.schemaVersion)}, ${JSON.stringify(mine.schemaVersion)})`,
+    );
   }
   const before = base === null ? {} : base.units;
   // No prototype: a unit called "__proto__" is a unit like any other.
@@ -94,10 +98,11 @@ try {
     writeFileSync(landedPath, `${JSON.stringify(mergeUnitMaps(base, landed, mine), null, 2)}\n`);
   } catch (error) {
     if (!(error instanceof CannotMerge)) throw error;
-    // One line: it is read by GitHub as an annotation for the run's page.
-    console.log(
-      `::warning::The unit map ${name || "(unnamed)"} was left as it landed and this run's version of it was not pushed: ${error.message}. Today's prices are not affected.`,
-    );
+    // One line, whatever the files and the name hold: GitHub reads it as an
+    // annotation for the run's page, and would read a second line starting
+    // with "::" as a command of its own.
+    const said = `The unit map ${name || "(unnamed)"} was left as it landed; this run's version of it is dropped: ${error.message}.`;
+    console.log(`::warning::${said.replace(/[\r\n]+/g, " ")}`);
   }
 } catch (error) {
   console.error(`merge-unitmap: ${error instanceof Error ? error.message : String(error)}`);

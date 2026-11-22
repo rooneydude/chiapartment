@@ -185,6 +185,22 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
       expect(remoteFile(origin, MAP)).toContain("2026-11-19");
     });
 
+    it("commits the snapshot without a file that cannot be staged, and says so", () => {
+      // Say a later change makes git ignore the skyline. The step used to
+      // fall back to the snapshots alone; it must not now stop instead.
+      const { origin, runner } = world("unstageable", { skyline: false });
+      writeFileSync(join(runner, ".git", "info", "exclude"), "data/skyline.geojson\n");
+      write(runner, TODAY, PRICES);
+      write(runner, MAP, '{"capturedAt":"2026-11-19"}\n');
+      write(runner, "data/skyline.geojson", '{"generated":"22:11"}\n');
+      const run = commitResults(runner);
+      expect(run.code, run.output).toBe(0);
+      expect(run.output).toContain("::warning::data/skyline.geojson could not be staged (git's message above); today's snapshot is committed without it.");
+      expect(remoteFile(origin, TODAY)).toBe(PRICES);
+      expect(remoteFile(origin, MAP)).toContain("2026-11-19");
+      expect(onRemote(origin, "data/skyline.geojson")).toBe(false);
+    });
+
     it("commits a file the run removed as removed", () => {
       const { origin, runner } = world("removed");
       rmSync(join(runner, "data", "skyline.geojson"));
@@ -240,6 +256,22 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
       expectTidy(runner);
     });
 
+    it("goes on top of a merged pull request even where the merging of unit maps could not be set up", () => {
+      const { origin, runner, other } = world("no-setup-race");
+      rmSync(join(runner, ".git", "info"), { recursive: true, force: true });
+      writeFileSync(join(runner, ".git", "info"), "in the way: a file where git keeps a folder\n");
+      lands(other, "a merge that landed during the scrape", { "README.md": "tracker, improved\n" });
+      write(runner, TODAY, PRICES);
+      write(runner, MAP, '{"capturedAt":"2026-11-19"}\n');
+      const run = commitResults(runner);
+      expect(run.code, run.output).toBe(0);
+      expect(run.output).toContain("::warning::The merging of unit maps could not be set up.");
+      expect(run.output.match(/Push rejected/g)).toHaveLength(1);
+      expect(remoteFile(origin, TODAY)).toBe(PRICES);
+      expect(remoteFile(origin, MAP)).toContain("2026-11-19");
+      expect(remoteFile(origin, "README.md")).toBe("tracker, improved\n");
+    });
+
     it("keeps what both runs learned when another refresh run lands first", () => {
       // Every run rewrites the unit map (it carries the time it was captured),
       // so two runs that overlap always change the same line of the same file.
@@ -281,6 +313,8 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
       expect(subjects(origin).slice(1)).toEqual(["data: snapshot 2026-11-19T22:05:00Z", "seed"]);
       expect(git(origin, "rev-list", "--merges", "--count", "main")).toBe("0");
       expectTidy(runner);
+      // …and no merge rule left defined in it: the two rules existed for the step's own pull only
+      expect(git(runner, "config", "--local", "--list")).not.toMatch(/^merge\./m);
     });
 
     it("still merges when what landed removed the merge program and replaced this very script", () => {
@@ -366,9 +400,7 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
      */
     function expectPricesWithoutThisRunsMap(run: Ran, origin: string, runner: string, landed: string, landedMap: string, why: string): void {
       expect(run.code, run.output).toBe(0);
-      expect(run.output).toContain(
-        `::warning::The unit map ${MAP} was left as it landed and this run's version of it was not pushed: ${why}. Today's prices are not affected.`,
-      );
+      expect(run.output).toContain(`::warning::The unit map ${MAP} was left as it landed; this run's version of it is dropped: ${why}.\n`);
       expect(run.output.match(/Push rejected/g)).toHaveLength(1);
       expect(git(origin, "rev-parse", "main~1")).toBe(landed);
       expect(topCommit(origin)).toEqual([`A\t${TODAY}`]); // adds the snapshot; touches nothing that landed
@@ -411,12 +443,12 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
     function expectStopped(run: Ran, origin: string, runner: string, landed: string, thisRunsFiles: string[]): void {
       expect(run.code).toBe(1);
       expect(run.output).toContain(
-        "::error::Today's snapshot could not be put on top of what landed on main during the scrape (see git's message above). Nothing was pushed. Start a new run: a re-run of this one would start from the same commit.",
+        "::error::Today's snapshot was not pushed: the push was rejected, and replaying this run's commit on top of origin/main failed (git's message above). Start a new run: a re-run of this one would start from the same commit.",
       );
       expect(run.output).not.toContain("::warning::");
       // at once: one push was rejected, and no other was tried on a commit that does not go on top
       expect(run.output.match(/Push rejected/g)).toHaveLength(1);
-      expect(run.output).not.toContain("after 3 attempts");
+      expect(run.output).not.toContain("rejected three pushes");
       expect(git(origin, "rev-parse", "main")).toBe(landed);
       expect(git(runner, "log", "-1", "--format=%s")).toMatch(/^data: snapshot /);
       expect(git(runner, "show", "--no-renames", "--name-only", "--format=", "HEAD").split("\n").sort()).toEqual([...thisRunsFiles].sort());
@@ -485,7 +517,10 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
       const realGit = execFileSync("bash", ["-c", "command -v git"], { env: ISOLATED, encoding: "utf8" }).trim();
       const stand = join(dirname(origin), "stand-in");
       mkdirSync(stand);
-      writeFileSync(join(stand, "git"), `#!/bin/sh\nif [ "$1" = pull ]; then echo "fatal: unable to access the remote (made to fail here)" >&2; exit 128; fi\nexec "${realGit}" "$@"\n`);
+      writeFileSync(
+        join(stand, "git"),
+        `#!/bin/sh\nfor word in "$@"; do if [ "$word" = pull ]; then echo "fatal: unable to access the remote (made to fail here)" >&2; exit 128; fi; done\nexec "${realGit}" "$@"\n`,
+      );
       chmodSync(join(stand, "git"), 0o755);
 
       const run = commitResults(runner, { GITHUB_REF_NAME: "main", PATH: `${stand}:${ISOLATED.PATH}` });
@@ -507,7 +542,7 @@ describe("the refresh job's commit step", { timeout: 60_000 }, () => {
     expect(run.output.match(/this remote takes no pushes/g)).toHaveLength(3);
     expect(run.output).toContain("Push rejected (attempt 2); rebasing");
     expect(run.output).toContain("Push rejected (attempt 3).");
-    expect(run.output).toContain("::error::Could not push today's snapshot after 3 attempts.");
+    expect(run.output).toContain("::error::Today's snapshot was not pushed: the remote rejected three pushes.");
     expect(git(origin, "rev-parse", "main")).toBe(before);
     expect(git(runner, "log", "-1", "--format=%s")).toMatch(/^data: snapshot /);
   });

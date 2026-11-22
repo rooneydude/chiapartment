@@ -155,7 +155,7 @@ describe("two versions of a unit map, put together", () => {
       [BASE, good, '{"schemaVersion":1,"units":[]}\n', `this run's file is not a unit map (it has no "units")`],
       [BASE, '"units"\n', good, `the file on the branch is not a unit map (it has no "units")`],
       ["not json at all", good, good, "the file both sides started from is not JSON"],
-      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { buildingId: "the-leo" }), good, "the two files are for different buildings (the-leo, 1225-old-town)"],
+      [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { buildingId: "the-leo" }), good, `the two files are for different buildings ("the-leo", "1225-old-town")`],
       // a pull request changed the format while this run, on the old code, was under way
       [BASE, file("2026-11-19T22:05:00.000Z", { "1014": at("N") }, { schemaVersion: 2, levels: [1, 2] }), good, "the two files are in different versions of the format (2, 1)"],
     ];
@@ -164,10 +164,31 @@ describe("two versions of a unit map, put together", () => {
       expect(ran.code, why).toBe(0);
       expect(ran.result, why).toBe(landed);
       expect(ran.others, why).toEqual([base, mine]);
-      // one line, in the form GitHub shows on the run's page
-      expect(ran.said).toBe(`::warning::The unit map ${NAME} was left as it landed and this run's version of it was not pushed: ${why}. Today's prices are not affected.\n`);
+      // one line, in the form GitHub shows on the run's page — and about what
+      // this program did, not about the prices, whose push is still to come
+      expect(ran.said).toBe(`::warning::The unit map ${NAME} was left as it landed; this run's version of it is dropped: ${why}.\n`);
       expect(ran.complained).toBe("");
     }
+  });
+
+  it("keeps its warning to one line whatever the files hold", () => {
+    // A file that landed must not be able to write a line of its own into
+    // the run's log: GitHub would read one starting with "::" as a command.
+    const hostile = `${JSON.stringify({ schemaVersion: 1, buildingId: "a\n::error::made up\r\n::set-output name=x::y", units: {} }, null, 2)}\n`;
+    const ran = merge("", hostile, file("2026-11-19T22:11:27.000Z", { "1014": at("N") }));
+    expect(ran.code).toBe(0);
+    expect(ran.result).toBe(hostile);
+    expect(ran.said.endsWith(".\n")).toBe(true);
+    expect(ran.said.trimEnd().split(/[\r\n]/)).toHaveLength(1);
+    expect(ran.said.startsWith(`::warning::The unit map ${NAME} was left as it landed;`)).toBe(true);
+
+    // …nor a file's name: git allows a line break in one.
+    const paths = ["name-base", "name-landed", "name-mine"].map((name) => join(DIR, `${name}.json`));
+    ["", "not a unit map\n", file("2026-11-19T22:11:27.000Z", { "1014": at("N") })].forEach((text, i) => writeFileSync(paths[i]!, text));
+    const named = spawnSync("node", [PROGRAM, ...paths, "data/unitmaps/odd\n::error::made up.json"], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+    expect(named.status).toBe(0);
+    expect(named.stdout.trimEnd().split(/[\r\n]/)).toHaveLength(1);
+    expect(named.stdout).toContain("data/unitmaps/odd ::error::made up.json");
   });
 
   it("says nothing when it merges", () => {
