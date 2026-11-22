@@ -504,11 +504,30 @@ in the browser:
       commit-step tests now compare what is on the branch, byte for byte,
       with what each side wrote.
 
+  Fifth review, of the commit step as simplified: nothing serious, and
+  four smaller notes, each taken up.
+
+  15. A file that exists but cannot be staged (one git has since been told
+      to ignore, say) stopped the step before it committed anything. It is
+      now left out, with a warning, and the snapshot goes through.
+  16. The two merge rules stayed written in the checkout's settings, where
+      they would have changed a person's later merges had the step ever
+      been run in a checkout that is kept. They are now handed to the
+      step's own `git pull` and stored nowhere.
+  17. Two messages said more than was known: the error after a failed pull
+      named a cause that may not have happened, and the merge program's
+      warning spoke of the prices before their push had been tried. Each
+      now says only what was done. The warning is also kept to one line
+      whatever the files hold, so that a file cannot write a line of its
+      own into the run's log.
+
   What the commit step does differently from before this work, in full:
   two overlapping refresh runs no longer cost the later one its snapshot
-  (their unit maps are merged, the later skyline wins); a step that stops
-  says why on the run's page and leaves the checkout on the run's own
-  commit; a missing skyline file no longer keeps the unit map from being
+  (their unit maps are merged, the later skyline wins); a unit map that
+  cannot be merged stays as it landed instead of being merged line by
+  line; a step that stops says why on the run's page and leaves the
+  checkout on the run's own commit; and a missing skyline file, or a file
+  that cannot be staged, no longer keeps the run's other files from being
   committed. Nothing else changed.
 
   Not run by any test, and said so in the rehearsal: installing
