@@ -126,8 +126,9 @@ Its flag handling is code (`scraper/src/ci-flags.ts`). Its commit-and-push
 step (`.github/scripts/commit-snapshot.sh`) is run against real throwaway
 repositories: a pull request merged during the scrape, another refresh run
 that pushed first (the two runs' unit maps are merged by
-`.github/scripts/merge-unitmap.mjs`), files that cannot be put together
-(the day's prices then go up alone, with a warning), a remote that refuses.
+`.github/scripts/merge-unitmap.mjs`; one that cannot be merged stays as it
+landed and the prices go through), changes that do not go together with
+what landed (the step stops and pushes nothing), a remote that refuses.
 And the job is
 rehearsed offline by running the workflow's own commands
 (`scraper/test/refresh-rehearsal.test.ts`): the command and variables of

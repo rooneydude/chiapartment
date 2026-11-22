@@ -469,12 +469,11 @@ in the browser:
      leaves a unit map unreadable, landing while a run is under way, made
      the new merge refuse — and the step then pushed nothing, where the
      old one would have pushed the snapshot. The workflow's own rule is
-     that positional data never blocks prices. The step now keeps to it:
-     whenever this run's other files cannot be put together with what
-     landed (an unreadable or removed unit map, a recorded response changed
-     on both sides), the snapshot alone goes on top and a warning on the
-     run's page names what was left out. The step fails only when the
-     snapshot itself cannot go on top.
+     that positional data never blocks prices. The merge program now keeps
+     to it: where two unit maps cannot be merged (one is unreadable, they
+     are in different versions of the format) it leaves the one that
+     landed exactly as it is, drops this run's, and puts a warning on the
+     run's page. The prices go through.
   10. *What the step sets up for a race ran before every push*, and under
       `set -e` could have stopped a run nothing raced with. Its failure is
       now a warning, and the step goes on to push.
@@ -486,6 +485,31 @@ in the browser:
       read them; a per-cent sign in the checkout's path broke the merge
       program's command line; unit maps in two versions of the format were
       joined; no test pinned the order of units in a merged map.
+
+  Fourth review, of my first answer to 9:
+
+  13. *That answer could undo what had landed.* I had first made the step
+      replace its commit by one carrying the snapshot alone whenever the
+      rest did not go together with what landed. Where a pull request had
+      left a link or a file at `data/snapshots`, that commit replaced it
+      with a folder; where the folder had been moved, it put the snapshot
+      in the old place and called the run a success; and it also ran when
+      a pull had merely failed. I took it out. What it was for is covered
+      by 9, inside the merge program, with nothing that rebuilds a commit.
+      Every other case in which this run's files do not go together with
+      what landed — a pull request removed the unit map, a recorded
+      response was changed on both sides, the snapshots folder moved —
+      stops the step, pushing nothing, as it did before any of this work.
+  14. *Its tests never read the snapshot they said had been pushed.* The
+      commit-step tests now compare what is on the branch, byte for byte,
+      with what each side wrote.
+
+  What the commit step does differently from before this work, in full:
+  two overlapping refresh runs no longer cost the later one its snapshot
+  (their unit maps are merged, the later skyline wins); a step that stops
+  says why on the run's page and leaves the checkout on the run's own
+  commit; a missing skyline file no longer keeps the unit map from being
+  committed. Nothing else changed.
 
   Not run by any test, and said so in the rehearsal: installing
   dependencies and the browser, and the skyline and unit-map steps, which
