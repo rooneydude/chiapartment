@@ -169,7 +169,8 @@
       "neighborhood": "Old Town",
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
-        "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change."
+        "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change.",
+        "The Rent column is base rent. The site's own fee guide adds required monthly charges on top of every rent: a $12 liability waiver, which a row's detail adds in, and allocated utilities and electricity, which it names without an amount."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
@@ -249,7 +250,8 @@
       "neighborhood": "Old Town",
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
-        "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change."
+        "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change.",
+        "The Rent column is base rent. The site's own fee guide adds required monthly charges on top of every rent: a $12 liability waiver, which a row's detail adds in, and allocated utilities and electricity, which it names without an amount."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
@@ -333,7 +335,8 @@
       "neighborhood": "Old Town",
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
-        "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change."
+        "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change.",
+        "The Rent column is base rent. The site's own fee guide adds required monthly charges on top of every rent: a $12 liability waiver, which a row's detail adds in, and allocated utilities and electricity, which it names without an amount."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
@@ -485,7 +488,7 @@
       },
       "neighborhood": "Fulton Market",
       "dataNotes": [
-        "The site lists floor-plan stacks with a “starting from” price, not individual apartments (the penthouses excepted). It publishes no square footage, no lease lengths and no move-in dates: every active plan simply says “Available Now”.",
+        "The site lists floor-plan stacks with a “starting from” price, not individual apartments (the penthouses excepted). It publishes no square footage and no lease lengths, and hardly a move-in date: an active plan says “Available now”, now and then a date, and the penthouses “Contact for availability”.",
         "Its page is a delayed copy of the building's own price list: a change shows up here 1–5 days after the building makes it. Open a row to see when the building last edited that price."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": false}

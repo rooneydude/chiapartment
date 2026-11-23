@@ -96,10 +96,68 @@ function parseCount(text: string, label: RegExp): number | null {
 }
 
 /** Dollar amounts printed in a piece of text, as whole dollars. */
+/** A price slot that prints nothing but a number, signed or not: "$-1", "$0", "-1". */
+const PLACEHOLDER_AMOUNT = /^\s*[-+]?\s*\$?\s*[-+]?\d[\d,]*(?:\.\d+)?\s*$/;
+
 function dollarAmounts(text: string): number[] {
   return [...text.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)/g)]
     .map((m) => Math.round(Number.parseFloat(m[1]!.replace(/,/g, ""))))
     .filter((n) => Number.isFinite(n));
+}
+
+/** A plain amount, or a plain range of two: "$12.00", "$375.00 – $450.00". Anything else in the slot is words. */
+const PLAIN_AMOUNT = /^\$\s?(\d[\d,]*(?:\.\d+)?)(?:\s*[–—-]\s*\$\s?(\d[\d,]*(?:\.\d+)?))?$/;
+
+/** The required monthly charges a page's fee guide lists: what every rent on that page is owed with. */
+export interface RequiredMonthly {
+  /** The sum of the per-apartment charges the guide puts a plain amount on. Absent when it prices none. */
+  fees?: { min: number; max: number };
+  /** The charges it gives in words, or on another basis than per apartment — each as the site writes it. */
+  unpriced: string[];
+}
+
+/**
+ * The page's own "Fee Guides" (section#fees): rows marked Required and
+ * Monthly. A charge per unit with a plain amount ("$12.00") is added up; one
+ * given in words ("Allocated (Utilities)", "Billed Directly by ComEd") is
+ * named as the site names it. One-time fees, optional add-ons and
+ * situational fees are not part of a month's rent and are left where they
+ * are. Until 23 Nov 2026 none of this was read, so these towers showed rent
+ * alone next to a building whose required charges were named.
+ */
+function requiredMonthlyCharges($: cheerio.CheerioAPI): RequiredMonthly {
+  let min = 0;
+  let max = 0;
+  let priced = false;
+  const unpriced: string[] = [];
+  $("#fees table tbody tr").each((_, tr) => {
+    const cell = (name: string): string => {
+      const td = $(tr).find(`td.${name}`).first().clone();
+      td.find("sup").remove(); // footnote marks
+      return td.text().replace(/\s+/g, " ").trim();
+    };
+    if (!/^required$/i.test(cell("status")) || !/^monthly$/i.test(cell("freq"))) return;
+    const label = cell("label");
+    if (label === "") return;
+    const amount = cell("amount");
+    const applied = cell("applied");
+    const plain = PLAIN_AMOUNT.exec(amount);
+    if (plain && /^per unit$/i.test(applied)) {
+      const low = Number.parseFloat(plain[1]!.replace(/,/g, ""));
+      const high = plain[2] !== undefined ? Number.parseFloat(plain[2].replace(/,/g, "")) : low;
+      if (Number.isFinite(low) && Number.isFinite(high) && high >= low) {
+        min += low;
+        max += high;
+        priced = true;
+        return;
+      }
+    }
+    // An amount on another basis (per leaseholder, per pet) cannot be added to an apartment's rent: it is quoted with its basis.
+    const basis = plain && applied !== "" ? ` (${applied.toLowerCase()})` : "";
+    unpriced.push(`${label}: ${amount === "" ? "no amount given" : amount}${basis}`);
+  });
+  const cents = (n: number): number => Math.round(n * 100) / 100;
+  return { ...(priced ? { fees: { min: cents(min), max: cents(max) } } : {}), unpriced };
 }
 
 /** How far a printed price may differ from the row's own data before neither is believed. */
@@ -119,6 +177,8 @@ export interface OldTownParkPage {
   pageTower: string | null;
   /** Things worth a log line (price mismatches, duplicate rows). */
   remarks: string[];
+  /** The required monthly charges of the page's fee guide; every listing carries them. */
+  requiredMonthly: RequiredMonthly;
 }
 
 export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): OldTownParkPage {
@@ -130,6 +190,7 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
   let rowCount = 0;
   let unreadableRows = 0;
   const text = (el: object | undefined): string => (el ? spacedText($, el) : "");
+  const requiredMonthly = requiredMonthlyCharges($);
 
   // Every unit row on the page, wherever it sits — a row outside a plan
   // group, or without its data attribute, must not simply go unnoticed.
@@ -235,8 +296,15 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
           }
         }
       } else if (priceText) {
-        // The price slot prints words: the site is not quoting this unit.
-        noPriceNote = priceText.slice(0, 60);
+        // The price slot does not print a rent: the site is not quoting this
+        // unit. Words ("Contact for Pricing") are the site's own answer and
+        // are quoted as they stand. A bare number that cannot be a rent is a
+        // placeholder — "$-1", with data-rent-min="-1", is what the site
+        // prints for a unit its pricing has not reached yet (23 Nov 2026,
+        // #0302 and #2410, both newly listed) — and is said to be one, so
+        // that nobody reads "1 Bed — $-1" as a rent.
+        const shown = priceText.slice(0, 60);
+        noPriceNote = PLACEHOLDER_AMOUNT.test(priceText) ? `No price on the site (it shows “${shown}”)` : shown;
       }
     } else if (Number.isFinite(attrMin) && attrMin >= MIN_SANE_RENT && attrMin <= MAX_SANE_RENT) {
       // Markup with no price element at all: the data attributes are all there is.
@@ -276,6 +344,8 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
       ...(outdoorSqft !== undefined ? { outdoorSqft } : {}),
       price,
       ...(priceMax !== undefined ? { priceMax } : {}),
+      ...(requiredMonthly.fees ? { monthlyFees: requiredMonthly.fees } : {}),
+      ...(requiredMonthly.unpriced.length > 0 ? { monthlyFeesUnpriced: requiredMonthly.unpriced } : {}),
       availableDate,
       ...(availableNow !== undefined ? { availableNow } : {}),
       url,
@@ -312,6 +382,7 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
     unreadableRows,
     pageTower,
     remarks,
+    requiredMonthly,
   };
 }
 

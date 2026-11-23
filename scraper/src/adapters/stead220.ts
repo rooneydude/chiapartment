@@ -3,7 +3,7 @@ import { parseAvailableDate } from "../../../shared/src/parse";
 import { chicagoDate } from "../../../shared/src/time";
 import type { AlsoListed, UnitListing } from "../../../shared/src/types";
 import { coerceBeds, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
-import { throwIfRefused } from "./guard";
+import { clipNotice, throwIfRefused } from "./guard";
 import type { Adapter } from "./types";
 
 /**
@@ -163,6 +163,10 @@ export interface SteadPage {
   alsoListed: AlsoListed[];
   /** How many floorplan records the page carried at all. */
   planCount: number;
+  /** The building's current leasing offer(s), from the bar across the top of the page. */
+  notices: string[];
+  /** What that bar says when it is not an offer ("Now leasing in Fulton Market"): logged, not recorded. */
+  announcements: string[];
   /** Things worth a log line (a card that matches no data record). */
   remarks: string[];
 }
@@ -248,7 +252,34 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
     });
   }
 
-  return { listings: dedupeListings(listings), alsoListed, planCount: tags.length, remarks };
+  // The bar across the top of the page: an offer is a notice; whatever else it says is kept apart.
+  const bar = announcementBar(html);
+  return { listings: dedupeListings(listings), alsoListed, planCount: tags.length, notices: bar.offers, announcements: bar.other, remarks };
+}
+
+/** What makes an announcement an offer: a figure, something free, off, credited, waived or saved, or a length of time. */
+const READS_AS_OFFER = /\d|\bfree\b|\boff\b|credit|special|waiv|concession|discount|incentive|\bsave\b|\bweeks?\b|\bmonths?\b/i;
+
+/**
+ * The bar across the top of the page, which the site itself labels "Leasing
+ * offer". On 23 Nov 2026 it read "6 WEEKS FREE on select apartments": every
+ * price here is a "starting from" figure, and six weeks' rent changes what
+ * it is worth, yet nothing recorded it. On 15 Nov the same bar read "Now
+ * leasing in Fulton Market", which is a slogan and not an offer; that kind is
+ * left out of the notices (they are for specials and concessions) and only
+ * logged.
+ */
+export function announcementBar(html: string): { offers: string[]; other: string[] } {
+  const $ = cheerio.load(html);
+  const offers: string[] = [];
+  const other: string[] = [];
+  $(".announce-bar__msg").each((_, el) => {
+    const said = clipNotice($(el).text());
+    if (said === "") return;
+    const list = READS_AS_OFFER.test(said) ? offers : other;
+    if (!list.includes(said)) list.push(said);
+  });
+  return { offers, other };
 }
 
 export const stead220: Adapter = {
@@ -272,6 +303,10 @@ export const stead220: Adapter = {
     }
     for (const remark of page.remarks) ctx.log(remark);
     for (const row of page.alsoListed) ctx.reportAlsoListed?.(row);
+    for (const notice of page.notices) ctx.reportNotice?.(notice);
+    for (const said of page.announcements) {
+      ctx.log(`the bar across the top of the page says “${said}” — not an offer, so not recorded as a notice`);
+    }
     ctx.log(
       `${page.listings.length} priced floorplans, ${page.alsoListed.length} listed without a price or not available`,
     );
