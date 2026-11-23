@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SnapshotSchema } from "../../shared/src/types";
-import { buildData } from "./build-data";
+import { buildData, loadSnapshots } from "./build-data";
 import { describeFlags, flagOutputs, resolveRefreshFlags, type RefreshRequest } from "./ci-flags";
 import { describeRun, loadConfig, refresh } from "./run";
 
@@ -42,15 +42,17 @@ const flags = parseFlags(rest);
 const root = process.cwd();
 
 /**
- * A whole number given as `--name=12`; the fallback when the flag is not
- * given at all. A flag that is given but is not a whole number (`--name 12`,
- * `--name=soon`) is refused: a mistyped flag must not quietly mean the default.
+ * A whole number given as `--name=12`, within the range that makes sense for
+ * the flag; the fallback when the flag is not given at all. A flag that is
+ * given but is not such a number (`--name 12`, `--name=soon`, a wait of a
+ * month) is refused: a mistyped flag must not quietly mean something else.
  */
-function numberFlag(name: string, fallback: number): number {
+function numberFlag(name: string, fallback: number, least: number, most: number): number {
   const value = flags.get(name);
   if (value === undefined) return fallback;
-  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
-  throw new Error(`--${name} takes a whole number, written like this: --${name}=${fallback}`);
+  const n = typeof value === "string" && /^\d{1,9}$/.test(value) ? Number(value) : Number.NaN;
+  if (n >= least && n <= most) return n;
+  throw new Error(`--${name} takes a whole number from ${least} to ${most}, written like this: --${name}=${fallback}`);
 }
 
 try {
@@ -107,7 +109,9 @@ try {
     }
     // The deploy workflow's last job: does the site serve what was just deployed?
     case "verify-live": {
-      const { DEFAULT_ATTEMPTS, DEFAULT_TIMEOUT_MS, DEFAULT_WAIT_MS, describeCopy, staleSiteMessage, verifyLive } = await import("./verify-live");
+      const { DEFAULT_ATTEMPTS, DEFAULT_TIMEOUT_MS, DEFAULT_WAIT_MS, describeCopy, instant, liveDataUrl, staleSiteMessage, verifyLive } = await import(
+        "./verify-live"
+      );
       const known = ["attempts", "wait-ms", "timeout-ms"];
       for (const name of flags.keys()) {
         if (!known.includes(name)) throw new Error(`verify-live does not know --${name}. It takes ${known.map((k) => `--${k}=…`).join(", ")}.`);
@@ -118,11 +122,32 @@ try {
       // because it was told nothing would pass for ever.
       if (builtAt === "") throw new Error("The build did not say when the site's copy was built (BUILT_AT is empty), so the site could not be checked.");
       if (siteUrl === "") throw new Error("The deployment did not say where the site is (SITE_URL is empty), so the site could not be checked.");
-      const attempts = numberFlag("attempts", DEFAULT_ATTEMPTS);
-      const waitMs = numberFlag("wait-ms", DEFAULT_WAIT_MS);
-      const timeoutMs = numberFlag("timeout-ms", DEFAULT_TIMEOUT_MS);
-      const result = await verifyLive({ siteUrl, builtAt, attempts, waitMs, timeoutMs, log: (line) => console.log(line) });
-      if (!result.ok) throw new Error(staleSiteMessage({ siteUrl, builtAt }, result, waitMs));
+      // Handed over, but not what it should be: said in words that name which, and what came.
+      try {
+        liveDataUrl(siteUrl);
+      } catch {
+        throw new Error(`The deployment handed over something that is not a web address (SITE_URL is ${JSON.stringify(siteUrl)}), so the site could not be checked.`);
+      }
+      if (instant(builtAt) === null) {
+        throw new Error(`The build handed over something that is not a build time (BUILT_AT is ${JSON.stringify(builtAt)}), so the site could not be checked.`);
+      }
+      const attempts = numberFlag("attempts", DEFAULT_ATTEMPTS, 1, 500);
+      const waitMs = numberFlag("wait-ms", DEFAULT_WAIT_MS, 0, 600_000);
+      const timeoutMs = numberFlag("timeout-ms", DEFAULT_TIMEOUT_MS, 1, 120_000);
+      // The newest snapshot on the branch, as checked out here and as the compiler reads it: the page has to show it.
+      const committed = loadSnapshots(root).snapshots;
+      const newestSnapshot = committed.length > 0 ? committed[committed.length - 1]!.timestamp : undefined;
+      console.log(newestSnapshot === undefined ? "The branch holds no snapshot yet: only the build is looked for." : `The newest snapshot on the branch is that of ${newestSnapshot}.`);
+      const result = await verifyLive({
+        siteUrl,
+        builtAt,
+        ...(newestSnapshot !== undefined ? { newestSnapshot } : {}),
+        attempts,
+        waitMs,
+        timeoutMs,
+        log: (line) => console.log(line),
+      });
+      if (!result.ok) throw new Error(staleSiteMessage({ siteUrl, builtAt }, result));
       console.log(`The site serves ${describeCopy(result.served)} (look ${result.attempts}).`);
       break;
     }
