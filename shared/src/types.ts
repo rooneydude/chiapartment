@@ -615,11 +615,18 @@ export interface BuildingHistory {
 /** Shape of the compiled config.json (buildings.json + build-time health). */
 export type CompiledConfig = BuildingsConfig & {
   health?: {
+    /**
+     * When this copy of the site's data was built. After a deployment the
+     * live copy has to carry this stamp, or a later one
+     * (scraper/src/verify-live.ts).
+     */
     generated: string;
     /** buildingId → warning count for dashboard badges. */
     buildings: Record<string, number>;
     /** How many snapshot files were compiled. */
     snapshots?: number;
+    /** The time of the newest snapshot compiled: the data this copy was built from. */
+    latestSnapshot?: string;
     /** Snapshot files that failed schema validation and were left out. */
     skippedSnapshots?: string[];
   };

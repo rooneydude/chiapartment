@@ -401,6 +401,8 @@ export function buildData(root: string): void {
       generated,
       buildings: warningCounts,
       snapshots: snapshots.length,
+      // sorted by time above: the last one is the newest
+      ...(snapshots.length > 0 ? { latestSnapshot: snapshots[snapshots.length - 1]!.timestamp } : {}),
       ...(skipped.length > 0 ? { skippedSnapshots: skipped } : {}),
     },
   };
