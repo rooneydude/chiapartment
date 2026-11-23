@@ -83,7 +83,7 @@ describe("does the site serve what was deployed?", () => {
   it("no, when the site still serves the copy from before — 23 Nov: a snapshot behind", async () => {
     const s = site([() => data(BEFORE, OLDER_SNAPSHOT)]);
     const result = await verifyLive({ siteUrl: SITE, builtAt: BUILT_AT, attempts: 4, waitMs: 1000, fetch: s.fetch, sleep: s.sleep, now: s.now });
-    expect(result).toEqual({ ok: false, seen: `serves a copy built at ${BEFORE}, from the snapshot of ${OLDER_SNAPSHOT}`, attempts: 4, behind: true, elapsedMs: 3000 });
+    expect(result).toEqual({ ok: false, seen: `serves a copy built at ${BEFORE}, from the snapshot of ${OLDER_SNAPSHOT}`, attempts: 4, found: "older", elapsedMs: 3000 });
     expect(s.asked).toHaveLength(4);
     expect(s.waited).toEqual([1000, 1000, 1000]); // no wait after the last look
   });
@@ -91,7 +91,7 @@ describe("does the site serve what was deployed?", () => {
   it("no, when only the code changed and the copy from before is still served: same snapshot, earlier build", async () => {
     const s = site([() => data(BEFORE, SNAPSHOT)]);
     const result = await verifyLive({ siteUrl: SITE, builtAt: BUILT_AT, attempts: 2, waitMs: 500, fetch: s.fetch, sleep: s.sleep, now: s.now });
-    expect(result).toEqual({ ok: false, seen: `serves a copy built at ${BEFORE}, from the snapshot of ${SNAPSHOT}`, attempts: 2, behind: true, elapsedMs: 500 });
+    expect(result).toEqual({ ok: false, seen: `serves a copy built at ${BEFORE}, from the snapshot of ${SNAPSHOT}`, attempts: 2, found: "older", elapsedMs: 500 });
   });
 
   it("goes by when the copy was built, not by its snapshot: a later build of an older snapshot is still what was deployed last", async () => {
@@ -115,7 +115,7 @@ describe("does the site serve what was deployed?", () => {
         ok: false,
         seen: `serves a copy built at ${BUILT_AT}, from the snapshot of ${OLDER_SNAPSHOT}, which does not hold the newest snapshot on the branch (${SNAPSHOT})`,
         attempts: 2,
-        behind: true,
+        found: "lacks-newest",
         elapsedMs: 100,
       });
       // one second short of it is short of it
@@ -133,7 +133,7 @@ describe("does the site serve what was deployed?", () => {
       ];
       for (const [answer, seen] of cases) {
         const s = site([answer]);
-        expect(await verifyLive({ ...need, attempts: 1, fetch: s.fetch, sleep: s.sleep, now: s.now })).toMatchObject({ ok: false, seen, behind: true });
+        expect(await verifyLive({ ...need, attempts: 1, fetch: s.fetch, sleep: s.sleep, now: s.now })).toMatchObject({ ok: false, seen, found: "lacks-newest" });
       }
     });
 
@@ -252,7 +252,7 @@ describe("does the site serve what was deployed?", () => {
         ok: false,
         seen,
         attempts: 2,
-        behind: false,
+        found: "unread",
         elapsedMs: 250,
       });
     }
@@ -264,7 +264,7 @@ describe("does the site serve what was deployed?", () => {
       ok: false,
       seen: "answered HTTP 503 for its data",
       attempts: 2,
-      behind: false,
+      found: "unread",
       elapsedMs: 100,
     });
   });
@@ -280,7 +280,7 @@ describe("does the site serve what was deployed?", () => {
       return Promise.resolve(new Response(body, { status: 200 }));
     }) as typeof fetch;
     const result = await verifyLive({ siteUrl: SITE, builtAt: BUILT_AT, attempts: 1, fetch: cutOff });
-    expect(result).toMatchObject({ ok: false, seen: "stopped half way through its answer (terminated: other side closed)", behind: false });
+    expect(result).toMatchObject({ ok: false, seen: "stopped half way through its answer (terminated: other side closed)", found: "unread" });
   });
 
   it("goes on looking for twelve minutes — twenty-five looks, half a minute apart — unless told otherwise", async () => {
@@ -289,7 +289,7 @@ describe("does the site serve what was deployed?", () => {
     expect((DEFAULT_ATTEMPTS - 1) * DEFAULT_WAIT_MS).toBeGreaterThan(10 * 60_000);
     const s = site([() => data(BEFORE, OLDER_SNAPSHOT)]);
     const result = await verifyLive({ siteUrl: SITE, builtAt: BUILT_AT, fetch: s.fetch, sleep: s.sleep, now: s.now });
-    expect(result).toMatchObject({ ok: false, attempts: 25, behind: true, elapsedMs: 24 * 30_000 });
+    expect(result).toMatchObject({ ok: false, attempts: 25, found: "older", elapsedMs: 24 * 30_000 });
     expect(s.waited).toEqual(Array.from({ length: 24 }, () => 30_000));
   });
 
@@ -320,7 +320,7 @@ describe("does the site serve what was deployed?", () => {
     it("a site that takes the call and says nothing counts as not answering, look after look", async () => {
       const s = silentSite();
       const result = await verifyLive({ siteUrl: SITE, builtAt: BUILT_AT, attempts: 2, waitMs: 0, timeoutMs: 40, fetch: s.fetch, sleep: noWait });
-      expect(result).toMatchObject({ ok: false, seen: "did not answer within 0.04 s", attempts: 2, behind: false });
+      expect(result).toMatchObject({ ok: false, seen: "did not answer within 0.04 s", attempts: 2, found: "unread" });
       expect(s.limits).toHaveLength(2);
       expect(s.limits[0]).toBeInstanceOf(AbortSignal);
       expect(s.limits[0]).not.toBe(s.limits[1]); // each look has its own time
@@ -384,7 +384,7 @@ describe("does the site serve what was deployed?", () => {
 
   describe("the failure, in one line", () => {
     const about = { siteUrl: SITE, builtAt: BUILT_AT };
-    const stale = { seen: `serves a copy built at ${BEFORE}, from the snapshot of ${OLDER_SNAPSHOT}`, attempts: 25, behind: true, elapsedMs: 12 * 60_000 + 4000 };
+    const stale = { seen: `serves a copy built at ${BEFORE}, from the snapshot of ${OLDER_SNAPSHOT}`, attempts: 25, found: "older", elapsedMs: 12 * 60_000 + 4000 } as const;
 
     it("says what was built, what was served, how long was looked, and that nothing is lost", () => {
       expect(staleSiteMessage(about, stale)).toBe(
@@ -393,12 +393,25 @@ describe("does the site serve what was deployed?", () => {
       );
     });
 
-    it("calls the page behind only when an older copy was read from it", () => {
+    it("opens with what was found, three ways: a site that could not be read is not said to be behind", () => {
       // twenty-five looks of twenty seconds and twenty-four waits: the time it took, not the time it was meant to take
-      const unread = { seen: "did not answer within 20 s", attempts: 25, behind: false, elapsedMs: 25 * 20_000 + 24 * 30_000 };
+      const unread = { seen: "did not answer within 20 s", attempts: 25, found: "unread", elapsedMs: 25 * 20_000 + 24 * 30_000 } as const;
       expect(staleSiteMessage(about, unread)).toBe(
-        `The site does not serve what this run deployed. This run's copy was built at ${BUILT_AT}; after 25 looks over about 20 minutes at ${SITE} the site did not answer within 20 s. ` +
-          "No data is lost, every snapshot is committed before anything is deployed; but the site's data could not be read, so whether the page is behind is not known.",
+        `The site could not be read, so whether it serves what this run deployed is not known. This run's copy was built at ${BUILT_AT}; after 25 looks over about 20 minutes at ${SITE} the site did not answer within 20 s. ` +
+          "No data is lost: every snapshot is committed before anything is deployed.",
+      );
+    });
+
+    it("…and a site that serves this run's copy without the newest snapshot is not said to have lost this run's deployment", () => {
+      const lacks = {
+        seen: `serves a copy built at ${BUILT_AT}, from the snapshot of ${OLDER_SNAPSHOT}, which does not hold the newest snapshot on the branch (${SNAPSHOT})`,
+        attempts: 25,
+        found: "lacks-newest",
+        elapsedMs: 12 * 60_000,
+      } as const;
+      expect(staleSiteMessage(about, lacks)).toBe(
+        `As far as its data says, the site does not show the newest snapshot on the branch. This run's copy was built at ${BUILT_AT}; after 25 looks over about 12 minutes at ${SITE} the site serves a copy built at ${BUILT_AT}, from the snapshot of ${OLDER_SNAPSHOT}, which does not hold the newest snapshot on the branch (${SNAPSHOT}). ` +
+          "No data is lost, every snapshot is committed before anything is deployed: the deployment that carries that snapshot has not arrived, and the next one should bring the page up to date.",
       );
     });
 

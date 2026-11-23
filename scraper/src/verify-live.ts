@@ -95,8 +95,14 @@ export type LiveResult =
       /** What the last look found, in words that complete "…: the site <seen>". */
       seen: string;
       attempts: number;
-      /** The last look read a copy, and it was an older one. Only then is the page known to be behind. */
-      behind: boolean;
+      /**
+       * What the last look established. "older": the site serves a copy from
+       * before this run's. "lacks-newest": it serves this run's copy or a
+       * later one, which does not hold (or does not say it holds) the newest
+       * snapshot on the branch. "unread": nothing, because its data could
+       * not be read.
+       */
+      found: "older" | "lacks-newest" | "unread";
       /** How long the looking took, first look to last. */
       elapsedMs: number;
     };
@@ -171,48 +177,65 @@ export async function verifyLive(check: LiveCheck): Promise<LiveResult> {
 
   const started = clock();
   let seen = "";
-  let behind = false;
+  let found: "older" | "lacks-newest" | "unread" = "unread";
   for (let attempt = 1; attempt <= attempts; attempt++) {
     // The address differs each time, for any cache in between that goes by the whole address.
     url.searchParams.set("checked", `${clock()}-${attempt}`);
-    const found = await look(url, doFetch, timeoutMs);
-    behind = false;
-    if ("copy" in found) {
-      const servedAt = instant(found.copy.builtAt);
-      const dataAt = found.copy.latestSnapshot === null ? null : instant(found.copy.latestSnapshot);
+    const looked = await look(url, doFetch, timeoutMs);
+    if (!("copy" in looked)) {
+      found = "unread";
+      seen = looked.seen;
+    } else {
+      const copy = looked.copy;
+      const servedAt = instant(copy.builtAt);
+      const dataAt = copy.latestSnapshot === null ? null : instant(copy.latestSnapshot);
       const thisBuildOrLater = servedAt !== null && servedAt >= builtAt;
       const holdsNewest = needSnapshot === null || (dataAt !== null && dataAt >= needSnapshot);
-      if (thisBuildOrLater && holdsNewest) return { ok: true, served: found.copy, attempts: attempt };
-      behind = servedAt !== null;
-      seen =
-        servedAt === null
-          ? `serves data built at ${JSON.stringify(found.copy.builtAt)}, which is not a time`
-          : !thisBuildOrLater
-            ? `serves ${describeCopy(found.copy)}`
-            : dataAt === null
-              ? // only what was seen: a copy that does not say what it holds has not been seen to lack anything
-                `serves ${describeCopy(found.copy)}, which does not say in a form that can be read which snapshot it holds (the newest on the branch is that of ${check.newestSnapshot})`
-              : `serves ${describeCopy(found.copy)}, which does not hold the newest snapshot on the branch (${check.newestSnapshot})`;
-    } else {
-      seen = found.seen;
+      if (thisBuildOrLater && holdsNewest) return { ok: true, served: copy, attempts: attempt };
+      if (servedAt === null) {
+        found = "unread";
+        seen = `serves data built at ${JSON.stringify(copy.builtAt)}, which is not a time`;
+      } else if (!thisBuildOrLater) {
+        found = "older";
+        seen = `serves ${describeCopy(copy)}`;
+      } else {
+        found = "lacks-newest";
+        // Only what was seen: a copy that does not say what it holds has not been seen to lack anything.
+        seen =
+          dataAt === null
+            ? `serves ${describeCopy(copy)}, which does not say in a form that can be read which snapshot it holds (the newest on the branch is that of ${check.newestSnapshot})`
+            : `serves ${describeCopy(copy)}, which does not hold the newest snapshot on the branch (${check.newestSnapshot})`;
+      }
     }
     log(`Look ${attempt} of ${attempts}: the site ${seen}; this deployment's copy was built at ${check.builtAt}.`);
     if (attempt < attempts) await sleep(waitMs);
   }
-  return { ok: false, seen, attempts, behind, elapsedMs: clock() - started };
+  return { ok: false, seen, attempts, found, elapsedMs: clock() - started };
 }
 
 /** What the run's page says when the check fails. One line. */
 export function staleSiteMessage(
   check: { siteUrl: string; builtAt: string },
-  result: { seen: string; attempts: number; behind: boolean; elapsedMs: number },
+  result: { seen: string; attempts: number; found: "older" | "lacks-newest" | "unread"; elapsedMs: number },
 ): string {
   const minutes = Math.round(result.elapsedMs / 60_000);
   const over = result.attempts <= 1 ? "one look" : minutes >= 1 ? `${result.attempts} looks over about ${minutes} minute${minutes === 1 ? "" : "s"}` : `${result.attempts} looks`;
-  // Only an older copy, read from the site, shows that the page is behind. A
-  // site that could not be read shows nothing either way.
-  const whatFollows = result.behind
-    ? "No data is lost, every snapshot is committed before anything is deployed: the page is behind, and the next deployment should bring it up to date."
-    : "No data is lost, every snapshot is committed before anything is deployed; but the site's data could not be read, so whether the page is behind is not known.";
-  return `The site does not serve what this run deployed. This run's copy was built at ${check.builtAt}; after ${over} at ${check.siteUrl} the site ${result.seen}. ${whatFollows}`.replace(/[\r\n]+/g, " ");
+  // The line opens and closes with what was established, and no more: three
+  // different things can be wrong, and a reader sent after the wrong one
+  // looks for a lost deployment that was not lost.
+  const [opening, closing] = {
+    older: [
+      "The site does not serve what this run deployed.",
+      "No data is lost, every snapshot is committed before anything is deployed: the page is behind, and the next deployment should bring it up to date.",
+    ],
+    "lacks-newest": [
+      "As far as its data says, the site does not show the newest snapshot on the branch.",
+      "No data is lost, every snapshot is committed before anything is deployed: the deployment that carries that snapshot has not arrived, and the next one should bring the page up to date.",
+    ],
+    unread: [
+      "The site could not be read, so whether it serves what this run deployed is not known.",
+      "No data is lost: every snapshot is committed before anything is deployed.",
+    ],
+  }[result.found];
+  return `${opening} This run's copy was built at ${check.builtAt}; after ${over} at ${check.siteUrl} the site ${result.seen}. ${closing}`.replace(/[\r\n]+/g, " ");
 }

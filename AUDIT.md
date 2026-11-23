@@ -589,10 +589,13 @@ in the browser:
     order); that the check waits between its looks (nothing noticed when
     it did not; it is now held with a wait the test controls, and once by
     the clock); what the request itself looks like.
-  - The failure line said "about 12 minutes" whatever the looking took and
-    "the page is behind" even when the site could not be read. It now says
-    how long it really took, and calls the page behind only when an older
-    copy was read from it. A failed request says why, as far as Node knows.
+  - The failure line said "about 12 minutes" whatever the looking took,
+    and opened and closed the same way whatever was found. It now says how
+    long the looking really took, and which of three things was found: an
+    older copy (the page is behind); this run's copy without the newest
+    snapshot (another deployment has not arrived); or a site that could
+    not be read (nothing is known about the page). A failed request says
+    why, as far as Node knows.
   - Numbers out of range, and hand-overs that are not what they should be
     (an address with no scheme, a build time of "1"), are refused by name.
 

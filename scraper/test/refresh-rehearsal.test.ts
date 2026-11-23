@@ -611,10 +611,12 @@ describe("the job from start to compiled data, command by command", { timeout: 3
       const lacking = await p.run(look, "schedule", handed, { append: " -- --attempts=2 --wait-ms=20" });
       expect(lacking.code).toBe(1);
       expect(lacking.stdout).toContain(`The newest snapshot on the branch is that of ${today.timestamp}.`);
+      // The whole line: it does not say this run's deployment was lost (it was not), but what is missing.
       expect(lacking.stderr).toContain(
-        `after 2 looks at ${wrongCommit.url} the site serves a copy built at ${builtAt}, from the snapshot of ${yesterday.timestamp}, which does not hold the newest snapshot on the branch (${today.timestamp}).`,
+        `::error::As far as its data says, the site does not show the newest snapshot on the branch. This run's copy was built at ${builtAt}; ` +
+          `after 2 looks at ${wrongCommit.url} the site serves a copy built at ${builtAt}, from the snapshot of ${yesterday.timestamp}, which does not hold the newest snapshot on the branch (${today.timestamp}). ` +
+          "No data is lost, every snapshot is committed before anything is deployed: the deployment that carries that snapshot has not arrived, and the next one should bring the page up to date.",
       );
-      expect(lacking.stderr).toContain("the page is behind, and the next deployment should bring it up to date.");
     } finally {
       await wrongCommit.close();
     }
@@ -665,8 +667,10 @@ describe("the job from start to compiled data, command by command", { timeout: 3
       expect(silent.code).toBe(1);
       expect(silent.stdout).toContain("Look 1 of 2: the site did not answer within 0.3 s;");
       expect(silent.stderr).toContain(`after 2 looks at ${site.url} the site did not answer within 0.3 s.`);
-      expect(silent.stderr).toContain("but the site's data could not be read, so whether the page is behind is not known.");
-      expect(silent.stderr).not.toContain("the page is behind, and");
+      // The line opens with what was found: nothing was read, so nothing is said about the page.
+      expect(silent.stderr).toContain("::error::The site could not be read, so whether it serves what this run deployed is not known. This run's copy was built at 2026-11-23T10:29:25.000Z; after 2 looks at");
+      expect(silent.stderr).toContain("0.3 s. No data is lost: every snapshot is committed before anything is deployed.");
+      expect(silent.stderr).not.toContain("the page is behind");
       expect(site.asked).toEqual(["/tracker/data/config.json", "/tracker/data/config.json"]);
       expect(Date.now() - started).toBeLessThan(60_000); // not the minutes a look with no limit would take
 
