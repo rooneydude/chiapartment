@@ -41,7 +41,7 @@ export interface Job {
 /** Everything a step may say. `shell`, `working-directory`, `timeout-minutes` and the like are not reproduced here, so they are refused. */
 const STEP_KEYS = new Set(["name", "id", "uses", "with", "run", "env", "if", "continue-on-error"]);
 /** Everything a job may say. Not `env`, `defaults`, `container`, `strategy`, `timeout-minutes`: see above. */
-const JOB_KEYS = new Set(["runs-on", "needs", "if", "uses", "outputs", "permissions", "environment", "steps"]);
+const JOB_KEYS = new Set(["runs-on", "needs", "if", "uses", "outputs", "permissions", "environment", "concurrency", "steps"]);
 /** Everything a workflow may say at the top. Not `env` or `defaults`. */
 const WORKFLOW_KEYS = new Set(["name", "on", "permissions", "concurrency", "jobs"]);
 

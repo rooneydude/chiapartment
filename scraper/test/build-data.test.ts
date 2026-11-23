@@ -290,6 +290,32 @@ describe("buildData metrics and warnings", () => {
     ) as CompiledConfig;
     expect(cfg.health?.snapshots).toBe(1);
     expect(cfg.health?.skippedSnapshots).toEqual(["2026-07-02T12-00-00Z.json"]);
+    // what the site is built from is the newest snapshot that was compiled, not the newest file
+    expect(cfg.health?.latestSnapshot).toBe("2026-07-01T12:00:00Z");
+  });
+
+  it("says which snapshot the site's data was built from: the newest, whatever order the files come in", () => {
+    setup();
+    writeSnapshot("2026-07-03T12:00:00Z", "ok", [unit("101", 2010)]);
+    writeSnapshot("2026-07-01T12:00:00Z", "ok", [unit("101", 2000)]);
+    writeSnapshot("2026-07-02T12:00:00Z", "error", []);
+    buildData(ROOT);
+    const cfg = JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "config.json"), "utf8")) as CompiledConfig;
+    expect(cfg.health?.latestSnapshot).toBe("2026-07-03T12:00:00Z");
+    // a run in which the building could not be read is still the newest run
+    rmSync(join(ROOT, "data", "snapshots", "2026-07-03T12-00-00Z.json"));
+    buildData(ROOT);
+    expect((JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "config.json"), "utf8")) as CompiledConfig).health?.latestSnapshot).toBe(
+      "2026-07-02T12:00:00Z",
+    );
+  });
+
+  it("names no snapshot when there is none", () => {
+    setup();
+    buildData(ROOT);
+    const cfg = JSON.parse(readFileSync(join(ROOT, "web", "public", "data", "config.json"), "utf8")) as CompiledConfig;
+    expect(cfg.health?.snapshots).toBe(0);
+    expect(cfg.health?.latestSnapshot).toBeUndefined();
   });
 
   it("publishes warning counts in config health", () => {

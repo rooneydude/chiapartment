@@ -553,7 +553,51 @@ in the browser:
   had happened to keep the two apart; the refresh is quicker now.
   Deployments now wait for one another instead of cancelling. (This
   session may not start a workflow by hand, so the site caught up with the
-  next deployment rather than at once.)
+  next deployment, fourteen minutes later, rather than at once.)
+
+  What let it pass unseen is that nothing looked at the page itself. Now
+  something does. Every build of the site's data is stamped with the time
+  it was made, and after every deployment a last job reads the live site
+  and fails, saying what it found, unless the site carries this build's
+  stamp or a later one (`scraper/src/verify-live.ts`). The stamp rather
+  than the newest snapshot, so that a deployment which changes only the
+  code is held to the same test. It goes on looking for twelve minutes —
+  the site's own answers allow a copy to be reused for ten
+  (`cache-control: max-age=600`) — and no single look may take longer than
+  twenty seconds, so the check itself always ends. It refuses to pass on
+  an empty hand-over, so a broken wire between the jobs cannot turn it into
+  a check that always passes. On 23 Nov it would have ended the run red,
+  with the reason.
+
+  Two independent reviews followed, of the workflow and of the check and
+  its tests. Neither found a way for a stale page to pass, a current one
+  to fail, or the check to hang. What they did find, and what was done:
+
+  - The queue was held by the whole run, check included, so a deployment
+    that failed its check would have held up the one that would put the
+    page right. Building and publishing are now one job, one run at a
+    time, and the check runs after it, outside the queue. The refresh
+    workflow's own queue was moved the same way, to its scrape job.
+  - A page built from the wrong commit (the commit the run started from,
+    in place of the branch with the day's snapshot) carries the right
+    stamp and the wrong data, and the stamp alone would pass it. The check
+    now also reads the newest snapshot on the branch and holds the page to
+    it: green means the page shows the newest data there is.
+  - Tests that did not hold what they said: that the build checks out the
+    branch (another job's checkout could stand in for it; each job's text
+    is now read on its own, and every step of both jobs is listed in
+    order); that the check waits between its looks (nothing noticed when
+    it did not; it is now held with a wait the test controls, and once by
+    the clock); what the request itself looks like.
+  - The failure line said "about 12 minutes" whatever the looking took,
+    and opened and closed the same way whatever was found. It now says how
+    long the looking really took, and which of three things was found: an
+    older copy (the page is behind); this run's copy without the newest
+    snapshot (another deployment has not arrived); or a site that could
+    not be read (nothing is known about the page). A failed request says
+    why, as far as Node knows.
+  - Numbers out of range, and hand-overs that are not what they should be
+    (an address with no scheme, a build time of "1"), are refused by name.
 
 ---
 

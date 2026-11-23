@@ -34,12 +34,16 @@ permissions:
   id-token: write
   issues: write # price alerts
 
-concurrency:
-  group: refresh
-
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    # One scrape at a time. The queue is this job's alone: held by the whole
+    # run, it would also be held through the deployment and the check after
+    # it, and a second refresh would wait out a failing check before it
+    # could so much as look at the sites. (Publishing has its own queue, in
+    # deploy.yml.) And no cancelling: a scrape is never cut short.
+    concurrency:
+      group: refresh
     outputs:
       ok: ${{ steps.scrape.outputs.ok }}
       total: ${{ steps.scrape.outputs.total }}

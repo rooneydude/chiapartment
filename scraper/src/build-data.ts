@@ -222,15 +222,13 @@ export function findMethodChanges(okRuns: OkRun[]): MethodChange[] {
 }
 
 /**
- * Compile committed per-run snapshots into the compact per-building files the
- * static frontend fetches. Runs at build time; output is gitignored.
+ * Every committed snapshot that reads as one, oldest first, and the names of
+ * the files that do not. The compiler goes by this, and so does the check
+ * that follows a deployment: what the one leaves out, the other must not ask
+ * the site for.
  */
-export function buildData(root: string): void {
-  const config = loadConfig(root);
+export function loadSnapshots(root: string): { snapshots: Snapshot[]; skipped: string[] } {
   const snapDir = join(root, "data", "snapshots");
-  const outDir = join(root, "web", "public", "data");
-  mkdirSync(join(outDir, "buildings"), { recursive: true });
-
   const snapshots: Snapshot[] = [];
   const skipped: string[] = [];
   if (existsSync(snapDir)) {
@@ -245,6 +243,19 @@ export function buildData(root: string): void {
     }
   }
   snapshots.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return { snapshots, skipped };
+}
+
+/**
+ * Compile committed per-run snapshots into the compact per-building files the
+ * static frontend fetches. Runs at build time; output is gitignored.
+ */
+export function buildData(root: string): void {
+  const config = loadConfig(root);
+  const outDir = join(root, "web", "public", "data");
+  mkdirSync(join(outDir, "buildings"), { recursive: true });
+
+  const { snapshots, skipped } = loadSnapshots(root);
 
   const focusBeds = config.focus?.beds ?? null;
   const warningCounts: Record<string, number> = {};
@@ -401,6 +412,8 @@ export function buildData(root: string): void {
       generated,
       buildings: warningCounts,
       snapshots: snapshots.length,
+      // sorted by time above: the last one is the newest
+      ...(snapshots.length > 0 ? { latestSnapshot: snapshots[snapshots.length - 1]!.timestamp } : {}),
       ...(skipped.length > 0 ? { skippedSnapshots: skipped } : {}),
     },
   };
