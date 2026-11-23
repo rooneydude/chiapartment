@@ -599,6 +599,61 @@ in the browser:
   - Numbers out of range, and hand-overs that are not what they should be
     (an address with no scheme, a build time of "1"), are refused by name.
 
+- **23 Nov 2026 — the data checked against the sites again, a week on.**
+  One scrape from this session (six of six buildings) with every raw
+  response kept, and what the tracker recorded compared with it field by
+  field, by code written for the comparison rather than the scrapers' own.
+  1225 Old Town: 16 of 16 units identical, all 272 lease-term prices
+  included. Old Town Park: all 51 rows accounted for, every rent, date and
+  area as the page prints it. The Leo (one unit) and Stead 220 (16 plans):
+  identical. No wrong figure anywhere.
+
+  What the comparison did find is things the sites say that the tracker
+  did not record:
+
+  - Old Town Park's pages carry a fee guide. Three charges are required
+    every month on top of every rent: a $12 liability waiver, allocated
+    utilities, and electricity. None was recorded, so these towers showed
+    rent alone beside a building whose required charges were named. They
+    are recorded now: the $12 is added up in a row's detail, the other two
+    are named. (The detail's sentence used to add "which is the figure the
+    leasing site headlines". That was true of 1225 only, and is gone.) The
+    guide is one table for all three towers, and some of its rows say whom
+    they are for: a row that names its towers is read on those towers'
+    pages only, and a row for one kind of suite is named and kept out of
+    the sum. If the guide cannot be read on a page that lists apartments,
+    the building's page says so, since rent with nothing beside it would
+    look like the whole bill.
+  - Stead 220's page has a bar across the top that read "6 WEEKS FREE on
+    select apartments". On 15 Nov it read "Now leasing in Fulton Market",
+    and the audit of that day rightly found no offer there; nothing was
+    watching the bar when one appeared. Whatever the bar says is now a
+    notice, unless it is only an invitation of that kind, which is logged
+    and left out. (The first rule written was the other way round, recording
+    the bar only when it used one of a dozen words; a review found nine
+    ordinary ways of wording an offer that it would have missed.)
+  - A newly listed Old Town Park unit can appear before the site has
+    priced it, and the page then prints "$-1". It was listed without a
+    price, as it should be, under a note that read "1 Bed — $-1". The note
+    now says the site shows no usable price.
+
+  Left as they are, and why: the one-time application and administrative
+  fees and the optional parking and pet prices that 1225 and Old Town Park
+  publish (not part of a month's rent, and the snapshot has no place for
+  them); Old Town Park's plan names, which are the site's internal codes
+  ("S1-1" where the page prints "Plan S1"); and a priced row that is
+  listed apart for want of a bed count (a townhome), which shows its rent
+  without the required charges beside it.
+
+  Dependencies: eight small updates that the package registry's advisory
+  check asked for (seven patch-level, and undici from 7.29 to 7.30), none
+  of which changes anything here (every test, the build and the browser
+  tests pass on them; an independent check found exactly those eight
+  entries changed, each matching the registry). Two more that it
+  lists need major upgrades, of the test runner and of the validation
+  library. Both concern input a stranger controls, which neither is given
+  here; they are left for a change of their own.
+
 ---
 
 # Previous audit — 8 Sep 2026

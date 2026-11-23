@@ -163,10 +163,12 @@ export const UnitListingSchema = z.object({
    */
   monthlyFees: z.object({ min: z.number().nonnegative(), max: z.number().nonnegative() }).optional(),
   /**
-   * Required monthly charges the site lists WITHOUT an amount, in the site's
-   * own words — "Utility Billing Bundle: Varies". They are owed on top of
-   * `price` (and of `monthlyFees`, which only counts charges the site puts a
-   * number on), so a rent shown without them is not the whole monthly bill.
+   * Required monthly charges that are not in `monthlyFees`, in the site's
+   * own words: given without an amount ("Utility Billing Bundle: Varies"),
+   * or with one that cannot be added to one apartment's rent ("$12.00 (per
+   * leaseholder)", a charge for one kind of suite). They are owed on top of
+   * `price` and of `monthlyFees`, so a rent shown without them is not the
+   * whole monthly bill.
    */
   monthlyFeesUnpriced: z.array(z.string()).optional(),
   /** Lease term (months) the advertised `price` applies to, when the site says. */
@@ -428,7 +430,7 @@ export interface BriefListing {
   priceMax?: number;
   /** Mandatory monthly charges on top of base rent, when published. */
   monthlyFees?: { min: number; max: number };
-  /** Required monthly charges the site lists without an amount ("Utility Billing Bundle: Varies"). */
+  /** Required monthly charges that are not in `monthlyFees` ("Utility Billing Bundle: Varies"). */
   monthlyFeesUnpriced?: string[];
   availableDate: string | null;
   availableNow?: boolean;

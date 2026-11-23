@@ -9,9 +9,9 @@ import {
   type UnitListing,
 } from "../../shared/src/types";
 import { leaseTermsFrom, leo, isWafPage, parseLeoCards, parseLeoInventory, parseLeoPage } from "../src/adapters/leo";
-import { oldtownpark, parseOldTownParkPage } from "../src/adapters/oldtownpark";
+import { FEE_GUIDE_GAP, oldtownpark, parseOldTownParkPage } from "../src/adapters/oldtownpark";
 import { leasingUrlForDate, parseLeaseTable, parseMarketingPage, sightmap } from "../src/adapters/sightmap";
-import { extractSsrData, parseSteadFloorplans, stead220 } from "../src/adapters/stead220";
+import { announcementBar, extractSsrData, parseSteadFloorplans, stead220 } from "../src/adapters/stead220";
 import { SiteBlockedError, type AdapterContext } from "../src/adapters/types";
 import { makeFixtureFetch } from "../src/fixtures";
 
@@ -1041,8 +1041,231 @@ describe("oldtownpark adapter (plan types and integrity checks)", () => {
     expect(p.listings).toEqual([]);
     expect(p.alsoListed.map((a) => [a.unitNumber, a.beds, a.price, a.note])).toEqual([
       ["0801", 2, undefined, "2 Bed — Call for Details"],
-      ["0802", 2, undefined, "2 Bed — $0"],
+      ["0802", 2, undefined, "2 Bed — No usable price on the site (it shows “$0”)"],
     ]);
+  });
+
+  it("says a unit the site has not priced yet has no price, instead of quoting its placeholder as a rent", () => {
+    // 23 Nov 2026, tower 3, #2410, newly listed: the price slot printed "$-1" and the row's data said -1.
+    const html = page(
+      group("jr-2-bed", "Jr. 2 Bed", row("2410", 'data-rent-min="-1" data-rent-max="-1"', "$-1", "12/8/2026") + row("2412", 'data-rent-min="3555" data-rent-max="3671"', "$3,555 - $3,671")),
+    );
+    const p = parsed(html);
+    expect(p.listings.map((l) => [l.unitNumber, l.price, l.priceMax])).toEqual([["2412", 3555, 3671]]);
+    expect(p.alsoListed.map((a) => [a.unitNumber, a.beds, a.price, a.availableDate, a.note])).toEqual([
+      ["2410", 2, undefined, "2026-12-08", "Jr. 2 Bed — No usable price on the site (it shows “$-1”)"],
+    ]);
+    const noteFor = (printed: string): string | undefined =>
+      parsed(page(group("jr-2-bed", "Jr. 2 Bed", row("2410", 'data-rent-min="-1" data-rent-max="-1"', printed, "12/8/2026")))).alsoListed[0]?.note;
+    // Numbers too small to be a rent, however they are printed — one or two of them, any kind of minus.
+    for (const printed of ["-1", "$ 0.00", "-$1", "$-1 - $-1", "$-1 – $0", "$\u22121", "$399"]) {
+      expect(noteFor(printed), printed).toBe(`Jr. 2 Bed — No usable price on the site (it shows “${printed}”)`);
+    }
+    // Words stay the site's own words; and so does a rent-sized number that
+    // only lacks its dollar sign — it is not a placeholder, whatever else it is.
+    for (const printed of ["Pricing Coming Soon", "TBD", "3,555", "3555 - 3671", "$-1 or call"]) {
+      expect(noteFor(printed), printed).toBe(`Jr. 2 Bed — ${printed}`);
+    }
+  });
+
+  describe("the fee guide: what every rent on the page is owed with", () => {
+    /** One row of the site's fee guide. */
+    const fee = (label: string, amount: string, applied: string, freq: string, status: string) =>
+      `<tr><td class="label">${label}</td><td class="amount">${amount}</td><td class="applied">${applied}</td><td class="freq">${freq}</td><td class="status status-${status.toLowerCase()}">${status}</td></tr>`;
+    /** A tower page with one priced unit, one row the site has not priced, and a fee guide. */
+    const withFees = (fees: string) =>
+      `<html><body class="en-US template-availability page-availability-tower-3"><div class="yard__availability">${group(
+        "2-br",
+        "2 Bed",
+        row("0801", 'data-rent-min="4096" data-rent-max="4462"', "$4,096 - $4,462") + row("0802", 'data-rent-min="-1" data-rent-max="-1"', "$-1"),
+      )}</div><section id="fees"><h3>Essentials</h3><table><thead><tr><th>Fee Label</th><th>Amount</th></tr></thead><tbody>${fees}</tbody></table></section></body></html>`;
+
+    it("reads the real pages' three required monthly charges onto every unit: one with an amount, two in words", async () => {
+      for (const id of ["old-town-park-1", "old-town-park-2", "old-town-park-3"]) {
+        const { listings, alsoListed } = await run(oldtownpark, id);
+        expect(listings.length, id).toBeGreaterThan(0);
+        for (const l of listings) {
+          expect(l.monthlyFees, `${id} #${l.unitNumber}`).toEqual({ min: 12, max: 12 });
+          expect(l.monthlyFeesUnpriced, `${id} #${l.unitNumber}`).toEqual([
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd",
+          ]);
+        }
+        // Rows listed apart from the units carry no fee fields: there is no place for them there.
+        for (const a of alsoListed) {
+          expect(a, `${id} #${a.unitNumber}`).not.toHaveProperty("monthlyFees");
+          expect(a, `${id} #${a.unitNumber}`).not.toHaveProperty("monthlyFeesUnpriced");
+        }
+      }
+    });
+
+    it("adds up plain per-unit amounts, ranges included, and names everything else as the site does", () => {
+      const p = parsed(
+        withFees(
+          fee("Trash Valet<sup>1</sup>", "$25.00", "Per Unit", "Monthly", "Required") +
+            fee("Amenity Fee", "$40.00 – $55.50", "Per Unit", "Monthly", "Required") +
+            fee("Utility – Water (RUBS)<sup>2</sup>", "Allocated (Utilities)", "Per Unit", "Monthly", "Required") +
+            fee("Liability Waiver", "$12.00", "Per Leaseholder", "Monthly", "Required") +
+            fee("Smart Home", "$30.00 + Usage", "Per Unit", "Monthly", "Required") +
+            fee("Nothing Printed", "", "Per Unit", "Monthly", "Required"),
+        ),
+      );
+      expect(p.requiredMonthly).toEqual({
+        fees: { min: 65, max: 80.5 },
+        unpriced: [
+          "Utility – Water (RUBS): Allocated (Utilities)",
+          "Liability Waiver: $12.00 (per leaseholder)",
+          "Smart Home: $30.00 + Usage",
+          "Nothing Printed: no amount given",
+        ],
+      });
+      expect(p.listings.map((l) => [l.unitNumber, l.price, l.priceMax, l.monthlyFees, l.monthlyFeesUnpriced])).toEqual([
+        ["0801", 4096, 4462, p.requiredMonthly.fees, p.requiredMonthly.unpriced],
+      ]);
+      // the base rent itself is untouched: charges are recorded beside it, never added into it
+      expect(p.alsoListed.map((a) => a.unitNumber)).toEqual(["0802"]);
+      expect(p.alsoListed[0]).not.toHaveProperty("monthlyFees");
+    });
+
+    it("leaves out what is not a required monthly charge: one-time fees, optional add-ons, situational fees", () => {
+      const p = parsed(
+        withFees(
+          fee("Application Fee", "$75.00", "Per Applicant", "One-Time / Application", "Required") +
+            fee("Administrative Fee", "$500.00", "Per Unit", "One-Time / Application", "Required") +
+            fee("Parking – Single Space", "$375.00 – $450.00", "Per Rentable Item", "Monthly", "Optional") +
+            fee("Internet – Managed WiFi", "$70.00", "Per Unit", "Monthly", "Optional") +
+            fee("Late Fee for Rent Payment", "$10.00 + 5% of Rent Over $500.00", "Per Unit", "Per Occurrence", "Situational"),
+        ),
+      );
+      expect(p.requiredMonthly).toEqual({ unpriced: [] });
+      expect(p.listings).toHaveLength(1);
+      expect(p.listings[0]).not.toHaveProperty("monthlyFees");
+      expect(p.listings[0]).not.toHaveProperty("monthlyFeesUnpriced");
+    });
+
+    it("reads a row that names its towers on those towers' pages only", () => {
+      // The guide is one table for the whole complex, printed on every tower's page (this is tower 3's).
+      const rows =
+        fee("Liability Waiver", "$12.00", "Per Unit", "Monthly", "Required") +
+        fee("Internet – Managed WiFi (Tower 3)<sup>8</sup>", "$70.00", "Per Unit", "Monthly", "Required") +
+        fee("Cable – Third Party Provider (Towers 1 &amp; 2)", "$55.00", "Per Unit", "Monthly", "Required") +
+        fee("Valet Trash (Towers 1, 2 and 3)", "$10.00", "Per Unit", "Monthly", "Required") +
+        fee("Storage (Tower 2)", "Varies", "Per Unit", "Monthly", "Required");
+      expect(parsed(withFees(rows)).requiredMonthly).toEqual({ fees: { min: 92, max: 92 }, unpriced: [] });
+      // The same guide on a page that does not say which tower it is: a row for
+      // certain towers cannot be placed, so it is named with its amount and not summed.
+      const nowhere = parsed(withFees(rows).replace("page-availability-tower-3", "page-availability"));
+      expect(nowhere.requiredMonthly).toEqual({
+        fees: { min: 12, max: 12 },
+        unpriced: [
+          "Internet – Managed WiFi (Tower 3): $70.00",
+          "Cable – Third Party Provider (Towers 1 & 2): $55.00",
+          "Valet Trash (Towers 1, 2 and 3): $10.00",
+          "Storage (Tower 2): Varies",
+        ],
+      });
+    });
+
+    it("names a charge for one kind of suite instead of putting it on every apartment", () => {
+      const p = parsed(
+        withFees(
+          fee("Liability Waiver", "$12.00", "Per Unit", "Monthly", "Required") +
+            fee("Amenity Fee – Penthouse Suite", "$150.00", "Per Unit", "Monthly", "Required") +
+            fee("Amenity Fee – Standard Suite", "$40.00", "Per Unit", "Monthly", "Required"),
+        ),
+      );
+      expect(p.requiredMonthly).toEqual({
+        fees: { min: 12, max: 12 },
+        unpriced: ["Amenity Fee – Penthouse Suite: $150.00", "Amenity Fee – Standard Suite: $40.00"],
+      });
+    });
+
+    it("counts a row printed twice once, takes the other ways of saying 'per apartment', and adds cents exactly", () => {
+      const twice = fee("Liability Waiver<sup>3</sup>", "$12.00", "Per Unit", "Monthly", "Required");
+      expect(parsed(withFees(twice + twice)).requiredMonthly).toEqual({ fees: { min: 12, max: 12 }, unpriced: [] });
+      const words = fee("Electricity – ComEd", "Billed Directly by ComEd", "Per Unit", "Monthly", "Required");
+      expect(parsed(withFees(words + twice + words)).requiredMonthly).toEqual({ fees: { min: 12, max: 12 }, unpriced: ["Electricity – ComEd: Billed Directly by ComEd"] });
+      // the whole section a second time (a copy for small screens)
+      const section = withFees(twice + words);
+      const again = section.replace("</body>", `${section.slice(section.indexOf("<section id=\"fees\">"), section.indexOf("</body>"))}</body>`);
+      expect(again.split('<section id="fees">')).toHaveLength(3);
+      expect(parsed(again).requiredMonthly).toEqual({ fees: { min: 12, max: 12 }, unpriced: ["Electricity – ComEd: Billed Directly by ComEd"] });
+
+      const perApartment = ["Per Unit", "Per Apartment", "per home", "Per Residence"].map((applied, i) => fee(`Charge ${i}`, "$0.10", applied, "Monthly", "Required")).join("");
+      expect(parsed(withFees(perApartment + fee("Charge 4", "$0.20", "Per Unit", "Monthly", "Required"))).requiredMonthly).toEqual({ fees: { min: 0.6, max: 0.6 }, unpriced: [] });
+    });
+
+    it("reads a cell's elements as separate words", () => {
+      const p = parsed(
+        withFees(
+          fee("<span>Liability</span><span>Waiver</span><sup>3</sup>", "<span>$12.00</span>", "<b>Per</b><b>Unit</b>", "Monthly", "Required") +
+            fee("Amenity Fee", "<span>$40.00</span><span>per month</span>", "Per Unit", "Monthly", "Required"),
+        ),
+      );
+      // "$40.00per month" would be neither an amount nor readable
+      expect(p.requiredMonthly).toEqual({ fees: { min: 12, max: 12 }, unpriced: ["Amenity Fee: $40.00 per month"] });
+    });
+
+    it("is not taken in by near misses: not required, not monthly, a range the wrong way round, a table that is not the guide", () => {
+      const p = parsed(
+        withFees(
+          fee("Pet Rent", "$35.00", "Per Unit", "Monthly", "Not Required") +
+            fee("Smart Lock", "$5.00", "Per Unit", "Monthly", "Required *") +
+            fee("Pest Control", "$8.00", "Per Unit", "Bi-Monthly", "Required") +
+            fee("", "$9.00", "Per Unit", "Monthly", "Required") +
+            fee("Parking", "$450.00 – $375.00", "Per Unit", "Monthly", "Required"),
+        ).replace(
+          "</body>",
+          `<section id="other"><table><tbody>${fee("Not In The Guide", "$99.00", "Per Unit", "Monthly", "Required")}</tbody></table></section></body>`,
+        ),
+      );
+      // Only the last row of the guide is a required monthly charge, and a range
+      // that runs backwards is quoted, not added.
+      expect(p.requiredMonthly).toEqual({ unpriced: ["Parking: $450.00 – $375.00"] });
+    });
+
+    it("says so on the building's page when units are listed and the guide cannot be read", async () => {
+      const scrape = async (html: string) => {
+        const logs: string[] = [];
+        const gaps: string[] = [];
+        const c = ctx(html, logs);
+        c.reportGap = (g) => gaps.push(g);
+        const listings = await oldtownpark.scrape(buildingById("old-town-park-3"), c);
+        return { listings, logs, gaps };
+      };
+      // the real page: the guide is read, and the log says what it yielded
+      const real = await scrape(realTower3());
+      expect(real.gaps).toEqual([]);
+      expect(real.logs).toContain("fee guide: $12 a month required of every apartment; 2 more required and outside that sum");
+      // the same page with the guide moved: rent alone would look like the whole bill
+      const moved = await scrape(realTower3().replace('id="fees"', 'id="pricing-and-fees"'));
+      expect(moved.listings.length).toBe(real.listings.length);
+      expect(moved.listings.every((l) => l.monthlyFees === undefined && l.monthlyFeesUnpriced === undefined)).toBe(true);
+      expect(moved.gaps).toEqual([FEE_GUIDE_GAP]);
+      expect(moved.logs).toContain("fee guide: no required monthly charge could be read from the page");
+      expect(FEE_GUIDE_GAP).toContain("could not be read this run");
+      // a tower with nothing listed has no rent to mislead about: nothing is said
+      const leased = await scrape(
+        '<html><body class="en-US template-availability page-availability-tower-3"><section class="yard__availability"><div class="yard__no-results"><h3>THREE Old Town Park is fully leased.</h3></div></section></body></html>',
+      );
+      expect([leased.listings, leased.gaps]).toEqual([[], []]);
+      // a guide with a range, and one with words only
+      const ranged = await scrape(withFees(fee("Amenity Fee", "$40.00 – $55.50", "Per Unit", "Monthly", "Required")));
+      expect(ranged.logs).toContain("fee guide: $40–$55.5 a month required of every apartment");
+      const wordsOnly = await scrape(withFees(fee("Electricity – ComEd", "Billed Directly by ComEd", "Per Unit", "Monthly", "Required")));
+      expect(wordsOnly.gaps).toEqual([]);
+      expect(wordsOnly.logs).toContain("fee guide: no required monthly charge with a plain amount; 1 more required and outside that sum");
+    });
+
+    it("a page with no fee guide adds nothing, and a guide with only charges in words adds no amount", () => {
+      const none = parsed(page(group("2-br", "2 Bed", row("0801", 'data-rent-min="4096" data-rent-max="4462"', "$4,096 - $4,462"))));
+      expect(none.requiredMonthly).toEqual({ unpriced: [] });
+      expect(none.listings[0]).not.toHaveProperty("monthlyFees");
+      const words = parsed(withFees(fee("Electricity – ComEd", "Billed Directly by ComEd", "Per Unit", "Monthly", "Required")));
+      expect(words.requiredMonthly).toEqual({ unpriced: ["Electricity – ComEd: Billed Directly by ComEd"] });
+      expect(words.listings[0]).not.toHaveProperty("monthlyFees");
+      expect(words.listings[0]!.monthlyFeesUnpriced).toEqual(["Electricity – ComEd: Billed Directly by ComEd"]);
+    });
   });
 
   it("publishes neither number when the printed price and the row's own data are far apart", () => {
@@ -1642,6 +1865,107 @@ describe("stead220 adapter (captured 2026-11-15)", () => {
     };
     await stead220.scrape(buildingById("stead-220"), ctx);
     expect(requests).toBe(1);
+  });
+
+  it("records an offer in the bar across the top of the page, and only logs a slogan there", async () => {
+    // 15 Nov 2026, as captured: the bar said "Now leasing in Fulton Market". Not an offer.
+    const captured = readFileSync(join(ROOT, "scraper/fixtures/stead-220/00-floorplans.html"), "utf8");
+    expect(announcementBar(captured)).toEqual({ offers: [], other: ["Now leasing in Fulton Market"] });
+    const quiet = await run(stead220, "stead-220");
+    expect(quiet.notices).toEqual([]);
+    expect(quiet.logs.join("\n")).toContain("the bar across the top of the page says “Now leasing in Fulton Market” — not an offer, so not recorded as a notice");
+
+    // 23 Nov 2026: the same bar, as the site wrote it that day.
+    const offer = captured.replace(
+      '<span class="announce-bar__msg">Now leasing in Fulton Market</span>',
+      '<span class="announce-bar__msg"><strong>6 WEEKS FREE</strong> on select apartments</span>',
+    );
+    expect(offer).not.toBe(captured);
+    expect(announcementBar(offer)).toEqual({ offers: ["6 WEEKS FREE on select apartments"], other: [] });
+    const page = parseSteadFloorplans(offer, "https://stead220.com/", CAPTURED);
+    expect(page.notices).toEqual(["6 WEEKS FREE on select apartments"]);
+    expect(page.listings).toHaveLength(13); // the plans themselves are read as before
+
+    // The adapter hands the offer to the run as a notice.
+    const notices: string[] = [];
+    await stead220.scrape(buildingById("stead-220"), {
+      fetch: (async () => new Response(offer, { status: 200, headers: { "content-type": "text/html" } })) as typeof fetch,
+      log: () => {},
+      now: () => CAPTURED,
+      reportNotice: (n) => notices.push(n),
+    });
+    expect(notices).toEqual(["6 WEEKS FREE on select apartments"]);
+
+    // What is recorded, and what is only logged. The rule leans towards
+    // recording: whatever the bar says is a notice unless it is only an invitation.
+    const bar = (text: string) => announcementBar(`<div class="announce-bar"><span class="announce-bar__msg">${text}</span></div>`);
+    for (const text of [
+      "Limited-time offer on select homes",
+      "Ask about our current offers",
+      "Big savings on select homes",
+      "Complimentary parking for a year",
+      "Reduced rents on select residences",
+      "No security deposit",
+      "Rent on us through the new year",
+      "Gift card with every lease",
+      "Promotions available — ask our team",
+      "Something nobody has thought of yet",
+    ]) {
+      expect(bar(text), text).toEqual({ offers: [text], other: [] });
+    }
+    // An invitation that carries an offer is an offer. Each of these hangs on one cue alone.
+    for (const cue of [
+      "$500 back",
+      "8% lower rents",
+      "6 weeks on the house",
+      "2 months on the house",
+      "parking is free",
+      "money off",
+      "a new offer",
+      "rent credit",
+      "fall specials",
+      "fees waived",
+      "concessions available",
+      "a discount",
+      "leasing incentives",
+      "savings inside",
+      "save today",
+      "complimentary parking",
+      "reduced rents",
+      "no deposit",
+      "promo inside",
+      "a gift card",
+      "a month on us",
+    ]) {
+      const text = `Now leasing — ${cue}`;
+      expect(bar(text), text).toEqual({ offers: [text], other: [] });
+    }
+    // Only an invitation: each of these hangs on one of its turns of phrase,
+    // and none is made an offer by a street number, a telephone number, the
+    // building's own name or a hyphenated "-free".
+    for (const text of [
+      "Now leasing in Fulton Market",
+      "Stead 220 — NOW LEASING at 220 N Ada St",
+      "Welcome to Stead 220",
+      "Book a tour today",
+      "Schedule your tour of our smoke-free, pet-friendly community",
+      "Call us about Fulton Market living",
+      "Call (312) 291-8777",
+      "Open daily 10am–6pm",
+    ]) {
+      expect(bar(text), text).toEqual({ offers: [], other: [text] });
+    }
+    expect(bar("  ")).toEqual({ offers: [], other: [] });
+    const twice = '<span class="announce-bar__msg">One month free</span>';
+    expect(announcementBar(`<div class="announce-bar">${twice}${twice}</div>`)).toEqual({ offers: ["One month free"], other: [] });
+    // Line breaks and runs of spaces are one space; a very long announcement is cut at a word, with a mark that it was.
+    expect(bar("6 WEEKS\n   FREE").offers).toEqual(["6 WEEKS FREE"]);
+    // …and two elements side by side are two words, not one run together.
+    expect(bar("<strong>6 WEEKS FREE</strong><span>on select apartments</span>").offers).toEqual(["6 WEEKS FREE on select apartments"]);
+    const long = bar(`Lease by Friday and ${"save ".repeat(80)}today`).offers[0]!;
+    expect(long.length).toBeLessThanOrEqual(301);
+    expect(long.endsWith("…")).toBe(true);
+    expect(announcementBar("<html><body>no bar here</body></html>")).toEqual({ offers: [], other: [] });
   });
 
   it("falls back to card markup when the embedded data is missing, and vice versa", () => {

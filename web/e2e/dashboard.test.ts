@@ -284,14 +284,17 @@ describe("a building's page", () => {
     const detail = await say(page, ".unit-detail");
     expect(detail).toContain("vacant since Oct 8, 2026");
     expect(detail).toContain(
-      "$2,382 is base rent. Also required every month, but the site publishes no amount for them: Utility Billing Bundle: Varies; Renters Liability Insurance - Third Party: Varies.",
+      "$2,382 is base rent. Also required every month, on top of it: Utility Billing Bundle: Varies; Renters Liability Insurance - Third Party: Varies.",
     );
     expect(await page.locator(".unit-detail a.unit-link").getAttribute("href")).toBe(
       "https://www.1225oldtown.com/OnlineLeasing.aspx?UnitId=12",
     );
     // a unit whose fees do carry numbers gets the sum instead
     await page.locator('table.units tbody tr:has-text("1503")').first().click();
-    expect(await say(page, ".unit-detail")).toContain("Base rent $5,007 + required monthly fees $100–$230 = $5,107–$5,237 a month");
+    const summed = await say(page, ".unit-detail");
+    expect(summed).toContain("Base rent $5,007 + required monthly fees $100–$230 = $5,107–$5,237 a month.");
+    // …and no more than the sum: which figure a site headlines differs from building to building
+    expect(summed).not.toContain("headlines");
 
     // what the run could not read is said on the page; what changed is named for what it is
     expect(await say(page, ".info-banner")).toContain(GAP);

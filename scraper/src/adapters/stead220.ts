@@ -2,8 +2,8 @@ import * as cheerio from "cheerio";
 import { parseAvailableDate } from "../../../shared/src/parse";
 import { chicagoDate } from "../../../shared/src/time";
 import type { AlsoListed, UnitListing } from "../../../shared/src/types";
-import { coerceBeds, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
-import { throwIfRefused } from "./guard";
+import { coerceBeds, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT, spacedText } from "../normalize";
+import { clipNotice, throwIfRefused } from "./guard";
 import type { Adapter } from "./types";
 
 /**
@@ -163,6 +163,10 @@ export interface SteadPage {
   alsoListed: AlsoListed[];
   /** How many floorplan records the page carried at all. */
   planCount: number;
+  /** The building's current leasing offer(s), from the bar across the top of the page. */
+  notices: string[];
+  /** What that bar says when it is not an offer ("Now leasing in Fulton Market"): logged, not recorded. */
+  announcements: string[];
   /** Things worth a log line (a card that matches no data record). */
   remarks: string[];
 }
@@ -248,7 +252,40 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
     });
   }
 
-  return { listings: dedupeListings(listings), alsoListed, planCount: tags.length, remarks };
+  // The bar across the top of the page: an offer is a notice; whatever else it says is kept apart.
+  const bar = announcementBar(html);
+  return { listings: dedupeListings(listings), alsoListed, planCount: tags.length, notices: bar.offers, announcements: bar.other, remarks };
+}
+
+/** What the bar says when it is only asking you in. */
+const ONLY_AN_INVITATION = /\bnow leasing\b|\bwelcome\b|\bbook (?:a|your) tour\b|\bschedule (?:a|your) tour\b|\bcall (?:us\b|\(?\d)|\bopen daily\b/i;
+/** …and what makes it an offer all the same: money, a share, weeks or months counted out, or a word for a concession. */
+const OFFER_CUE =
+  /\$\s?\d|\d\s?%|\d\s*(?:weeks?|months?)\b|(?<!-)\bfree\b|\boff\b|offer|credit|special|waiv|concession|discount|incentive|saving|\bsave\b|complimentary|reduced|deposit|promo|gift|\bon us\b/i;
+
+/**
+ * The bar across the top of the page, which the site itself labels "Leasing
+ * offer". On 23 Nov 2026 it read "6 WEEKS FREE on select apartments": every
+ * price here is a "starting from" figure, and six weeks' rent changes what
+ * it is worth, yet nothing recorded it. On 15 Nov the same bar read "Now
+ * leasing in Fulton Market", which is no offer.
+ *
+ * Whatever the bar says is recorded as a notice, unless it is only an
+ * invitation (and carries no cue of an offer): that kind is logged and left
+ * out. The rule leans this way on purpose. An offer worded in a way nobody
+ * foresaw is recorded; the cost is that a new kind of slogan is too.
+ */
+export function announcementBar(html: string): { offers: string[]; other: string[] } {
+  const $ = cheerio.load(html);
+  const offers: string[] = [];
+  const other: string[] = [];
+  $(".announce-bar__msg").each((_, el) => {
+    const said = clipNotice(spacedText($, el)); // "<strong>6 WEEKS FREE</strong><span>on…" must not run together
+    if (said === "") return;
+    const list = ONLY_AN_INVITATION.test(said) && !OFFER_CUE.test(said) ? other : offers;
+    if (!list.includes(said)) list.push(said);
+  });
+  return { offers, other };
 }
 
 export const stead220: Adapter = {
@@ -272,6 +309,10 @@ export const stead220: Adapter = {
     }
     for (const remark of page.remarks) ctx.log(remark);
     for (const row of page.alsoListed) ctx.reportAlsoListed?.(row);
+    for (const notice of page.notices) ctx.reportNotice?.(notice);
+    for (const said of page.announcements) {
+      ctx.log(`the bar across the top of the page says “${said}” — not an offer, so not recorded as a notice`);
+    }
     ctx.log(
       `${page.listings.length} priced floorplans, ${page.alsoListed.length} listed without a price or not available`,
     );
