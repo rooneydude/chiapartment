@@ -569,13 +569,32 @@ in the browser:
   a check that always passes. On 23 Nov it would have ended the run red,
   with the reason.
 
-  The queue is now the publishing job's alone (build and publish as one
-  job, one run at a time), and the check runs after it, outside the queue:
-  a deployment that fails its check does not hold up the one that would put
-  the page right. An independent review of the workflow asked for both
-  this and a test that had quietly stopped holding what it said it held
-  (that the build checks out the branch, not the commit the run started
-  from); each job's text is now read on its own.
+  Two independent reviews followed, of the workflow and of the check and
+  its tests. Neither found a way for a stale page to pass, a current one
+  to fail, or the check to hang. What they did find, and what was done:
+
+  - The queue was held by the whole run, check included, so a deployment
+    that failed its check would have held up the one that would put the
+    page right. Building and publishing are now one job, one run at a
+    time, and the check runs after it, outside the queue. The refresh
+    workflow's own queue was moved the same way, to its scrape job.
+  - A page built from the wrong commit (the commit the run started from,
+    in place of the branch with the day's snapshot) carries the right
+    stamp and the wrong data, and the stamp alone would pass it. The check
+    now also reads the newest snapshot on the branch and holds the page to
+    it: green means the page shows the newest data there is.
+  - Tests that did not hold what they said: that the build checks out the
+    branch (another job's checkout could stand in for it; each job's text
+    is now read on its own, and every step of both jobs is listed in
+    order); that the check waits between its looks (nothing noticed when
+    it did not; it is now held with a wait the test controls, and once by
+    the clock); what the request itself looks like.
+  - The failure line said "about 12 minutes" whatever the looking took and
+    "the page is behind" even when the site could not be read. It now says
+    how long it really took, and calls the page behind only when an older
+    copy was read from it. A failed request says why, as far as Node knows.
+  - Numbers out of range, and hand-overs that are not what they should be
+    (an address with no scheme, a build time of "1"), are refused by name.
 
 ---
 

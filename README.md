@@ -46,9 +46,11 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   Deployments wait for one another: only one run at a time builds and
   publishes. After each, a second job — outside that queue — looks at the
   live site and fails, saying what it found, unless the page is the copy
-  that was just built, or a later one (`scraper/src/verify-live.ts`). A red
-  **verify** job means the page is behind, not that data was lost: every
-  snapshot is committed before anything is deployed.
+  that was just built, or a later one, and holds the newest snapshot on the
+  branch (`scraper/src/verify-live.ts`). A green run therefore means the
+  page shows the newest data there is. A red **verify** job means the page
+  is behind, or could not be read; never that data was lost: every snapshot
+  is committed before anything is deployed.
 - **Weekday brief.** Compiled at build time as
   [`brief.json`](https://rooneydude.github.io/chiapartment/data/brief.json)
   (also `focusDelta` on each `data/buildings/<id>.json`). Studios + 2-beds
@@ -153,7 +155,8 @@ in Chromium against a few days of hand-made snapshots compiled by the real
 compiler; the 3D view is judged by its picture. Both run on every pull
 request. The check that follows a deployment is rehearsed too, against a
 stand-in for the live site: one that serves what was built, one that is a
-snapshot behind, and one that takes the call and says nothing.
+snapshot behind, one whose copy arrives a moment late, one built from the
+wrong commit, and one that takes the call and says nothing.
 
 ## Data status
 
