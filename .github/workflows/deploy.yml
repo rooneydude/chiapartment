@@ -27,6 +27,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      built_at: ${{ steps.built.outputs.built_at }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,6 +41,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # When this copy of the site was built: the stamp the last job looks for
+      # on the live site.
+      - name: Note what was built
+        id: built
+        run: npm run -s ci:built-at
       - uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -52,6 +59,32 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # A deployment that reports success has not thereby reached the page a
+  # person opens: on 23 Nov 2026 one did not, and every step was green. This
+  # job looks at the live site and fails, saying what it found, unless the
+  # site serves the copy this run built, or a later one
+  # (scraper/src/verify-live.ts, which `npm test` covers). The data is
+  # committed either way; what a red run here means is that the page is behind.
+  verify:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: The site serves what was deployed
+        env:
+          SITE_URL: ${{ needs.deploy.outputs.page_url }}
+          BUILT_AT: ${{ needs.build.outputs.built_at }}
+        run: npm run -s ci:verify-live

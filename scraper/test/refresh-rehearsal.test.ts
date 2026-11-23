@@ -1,5 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { join, normalize } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { SnapshotSchema, type BuildingHistory, type CompiledConfig, type Snapshot } from "../../shared/src/types";
 import { jobNames, jobSteps, Project, readJob, REPO, stepNamed, type Ran, type Step } from "./helpers/workflow";
@@ -32,6 +34,56 @@ const FLAGS = "Resolve flags (inputs or trigger file)";
 const SCRAPE = "Scrape";
 const COMMIT = "Commit results";
 const ALERTS = "Price alerts (GitHub issue → phone push via the GitHub app)";
+/** The deploy workflow's two steps of our own. */
+const BUILT = "Note what was built";
+const LIVE = "The site serves what was deployed";
+
+/**
+ * A stand-in for the live site: the data folder of a throwaway project,
+ * served under /tracker/data/ the way GitHub Pages serves the real one.
+ * `instead` answers one file differently (a copy of the site from before).
+ */
+function serveData(dataDir: string, instead: Record<string, string> = {}): Promise<{ url: string; close: () => Promise<void>; asked: string[] }> {
+  const asked: string[] = [];
+  const server: Server = createServer((req, res) => {
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    asked.push(path);
+    const rel = path.startsWith("/tracker/data/") ? path.slice("/tracker/data/".length) : null;
+    const file = rel === null ? null : normalize(join(dataDir, rel));
+    if (rel !== null && instead[rel] !== undefined) {
+      res.writeHead(200, { "content-type": "application/json" }).end(instead[rel]);
+    } else if (file === null || !file.startsWith(dataDir) || !existsSync(file) || !statSync(file).isFile()) {
+      res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+    } else {
+      res.writeHead(200, { "content-type": "application/json" }).end(readFileSync(file));
+    }
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({ url: `http://127.0.0.1:${port}/tracker/`, close: () => new Promise<void>((done) => server.close(() => done())), asked });
+    });
+  });
+}
+
+/** A stand-in for a site that takes the call and never says a word. */
+function serveSilence(): Promise<{ url: string; close: () => Promise<void>; asked: string[] }> {
+  const asked: string[] = [];
+  const server: Server = createServer((req) => {
+    asked.push(new URL(req.url ?? "/", "http://localhost").pathname);
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      const close = () =>
+        new Promise<void>((done) => {
+          server.close(() => done());
+          server.closeAllConnections();
+        });
+      resolve({ url: `http://127.0.0.1:${port}/tracker/`, close, asked });
+    });
+  });
+}
 
 const projects: Project[] = [];
 const project = (name: string, opts: { trigger?: string } = {}): Project => {
@@ -156,9 +208,25 @@ describe("the refresh workflow keeps no logic of its own", () => {
     });
   });
 
-  it("the site is built by one command, whose first half this file runs", () => {
-    expect(jobSteps("deploy.yml", "build").filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run build"]);
+  it("the site is built by one command, whose first half this file runs, and then looked at", () => {
+    expect(jobNames("deploy.yml")).toEqual(["build", "deploy", "verify"]);
+    const build = readJob("deploy.yml", "build");
+    expect(build.keys).toEqual({ "runs-on": "ubuntu-latest", outputs: "", steps: "" });
+    expect(build.steps.filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run build", "npm run -s ci:built-at"]);
+    expect(stepNamed(build.steps, BUILT).keys).toEqual({ name: BUILT, id: "built" });
     expect(scripts["build"]).toBe("npm run build:data && npm run -w web build");
+
+    // The last job is handed where the site is and what was built, by the two jobs before it.
+    const deploy = readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
+    expect(deploy).toContain("      built_at: ${{ steps.built.outputs.built_at }}\n");
+    expect(deploy).toContain("      page_url: ${{ steps.deployment.outputs.page_url }}\n");
+    const verify = readJob("deploy.yml", "verify");
+    expect(verify.keys).toEqual({ needs: "[build, deploy]", "runs-on": "ubuntu-latest", steps: "" });
+    expect(verify.steps.filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run -s ci:verify-live"]);
+    const look = stepNamed(verify.steps, LIVE);
+    // not conditional, and not allowed to fail quietly: a page that is behind turns the run red
+    expect(look.keys).toEqual({ name: LIVE });
+    expect(look.env).toEqual({ SITE_URL: "${{ needs.deploy.outputs.page_url }}", BUILT_AT: "${{ needs.build.outputs.built_at }}" });
   });
 
   it("deployments wait for one another; none is cancelled while it publishes", () => {
@@ -353,6 +421,133 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     expect(otp1.delta?.newUnits).toEqual([]);
     expect(otp1.delta?.removedUnits).toEqual([]);
     expect(existsSync(join(p.root, "web", "public", "data", "brief.json"))).toBe(true);
+    expect(config.health?.latestSnapshot).toBe(today.timestamp);
+
+    const builtAt = config.health!.generated;
+    expect(Number.isNaN(Date.parse(builtAt))).toBe(false);
+
+    // The deploy workflow's own two steps. "Note what was built" hands the last job the time this copy was built…
+    const deployBuild = jobSteps("deploy.yml", "build");
+    const built = await p.run(stepNamed(deployBuild, BUILT), "schedule", {});
+    expect(built.code, built.stderr).toBe(0);
+    expect(built.written).toBe(`built_at=${builtAt}\n`);
+    expect(built.stdout).toContain(`The site's data was built at ${builtAt}, from the snapshot of ${today.timestamp}.`);
+
+    // …and "The site serves what was deployed" looks for that copy on the site.
+    // Here the site is this project's compiled data, served the way Pages serves it.
+    const look = stepNamed(jobSteps("deploy.yml", "verify"), LIVE);
+    expect(look.run).toBe("npm run -s ci:verify-live");
+    const site = await serveData(join(p.root, "web", "public", "data"));
+    try {
+      const handed = { "needs.deploy.outputs.page_url": site.url, "needs.build.outputs.built_at": built.outputs["built_at"]! };
+      // First with two quick looks, so that a check which no longer knows its
+      // own copy fails here in a second, not after twelve minutes of looking…
+      const quick = await p.run(look, "schedule", handed, { append: " -- --attempts=2 --wait-ms=20" });
+      expect(quick.code, quick.stderr).toBe(0);
+      expect(quick.stdout).toContain(`The site serves a copy built at ${builtAt}, from the snapshot of ${today.timestamp} (look 1).`);
+      // …then exactly as the workflow writes it.
+      const fresh = await p.run(look, "schedule", handed);
+      expect(fresh.code, fresh.stderr).toBe(0);
+      expect(fresh.stdout).toContain(`The site serves a copy built at ${builtAt}, from the snapshot of ${today.timestamp} (look 1).`);
+      expect(site.asked).toEqual(["/tracker/data/config.json", "/tracker/data/config.json"]);
+    } finally {
+      await site.close();
+    }
+
+    // The case of 23 Nov: the deployment reports success and the site still
+    // serves the copy from before, built from yesterday's snapshot. The run has to go red.
+    const earlier = new Date(Date.parse(builtAt) - 4 * 60_000).toISOString();
+    const before = JSON.stringify({ ...config, health: { ...config.health, generated: earlier, snapshots: 1, latestSnapshot: yesterday.timestamp } });
+    const behind = await serveData(join(p.root, "web", "public", "data"), { "config.json": before });
+    try {
+      const handed = { "needs.deploy.outputs.page_url": behind.url, "needs.build.outputs.built_at": builtAt };
+      const stale = await p.run(look, "schedule", handed, { append: " -- --attempts=3 --wait-ms=20" });
+      expect(stale.code).toBe(1);
+      expect(stale.stderr).toContain(
+        `::error::The site does not serve what this run deployed. This run's copy was built at ${builtAt}; after 3 looks at ${behind.url} the site serves a copy built at ${earlier}, from the snapshot of ${yesterday.timestamp}.`,
+      );
+      expect(behind.asked).toHaveLength(3);
+
+      // Told nothing, the check does not pass: an empty hand-over means the
+      // workflow's wiring is broken, and a check that passed then would pass for ever.
+      const untold = await p.run(look, "schedule", { "needs.deploy.outputs.page_url": behind.url, "needs.build.outputs.built_at": "" });
+      expect(untold.code).toBe(1);
+      expect(untold.stderr).toContain("::error::The build did not say when the site's copy was built (BUILT_AT is empty)");
+      const nowhere = await p.run(look, "schedule", { "needs.deploy.outputs.page_url": "", "needs.build.outputs.built_at": builtAt });
+      expect(nowhere.code).toBe(1);
+      expect(nowhere.stderr).toContain("::error::The deployment did not say where the site is (SITE_URL is empty)");
+      expect(behind.asked).toHaveLength(3); // neither looked anywhere
+    } finally {
+      await behind.close();
+    }
+
+    // A deployment that changes only the code — same snapshot, new build — is
+    // held to the same test: the copy from before is still the copy from before.
+    const sameData = JSON.stringify({ ...config, health: { ...config.health, generated: earlier } });
+    const codeBehind = await serveData(join(p.root, "web", "public", "data"), { "config.json": sameData });
+    try {
+      const handed = { "needs.deploy.outputs.page_url": codeBehind.url, "needs.build.outputs.built_at": builtAt };
+      const stale = await p.run(look, "schedule", handed, { append: " -- --attempts=1" });
+      expect(stale.code).toBe(1);
+      expect(stale.stderr).toContain(`after one look at ${codeBehind.url} the site serves a copy built at ${earlier}, from the snapshot of ${today.timestamp}.`);
+    } finally {
+      await codeBehind.close();
+    }
+  });
+
+  it("a project with no snapshot yet builds, says so, and its site is checked like any other", async () => {
+    const p = project("empty");
+    const build = await p.run({ name: "build:data", run: "npm run -s build:data", env: {}, keys: {} } satisfies Step, "push", {});
+    expect(build.code, build.stderr).toBe(0);
+    const builtAt = (JSON.parse(readFileSync(join(p.root, "web", "public", "data", "config.json"), "utf8")) as CompiledConfig).health!.generated;
+    const built = await p.run(stepNamed(jobSteps("deploy.yml", "build"), BUILT), "push", {});
+    expect(built.code, built.stderr).toBe(0);
+    expect(built.written).toBe(`built_at=${builtAt}\n`);
+    expect(built.stdout).toContain(`The site's data was built at ${builtAt}, with no snapshot in it yet.`);
+    const look = stepNamed(jobSteps("deploy.yml", "verify"), LIVE);
+    const site = await serveData(join(p.root, "web", "public", "data"));
+    try {
+      const handed = { "needs.deploy.outputs.page_url": site.url, "needs.build.outputs.built_at": built.outputs["built_at"]! };
+      const ran = await p.run(look, "push", handed, { append: " -- --attempts=2 --wait-ms=20" });
+      expect(ran.code, ran.stderr).toBe(0);
+      expect(ran.stdout).toContain(`The site serves a copy built at ${builtAt} (look 1).`);
+    } finally {
+      await site.close();
+    }
+  });
+
+  it("a site that says nothing does not hold the run, and a mistyped flag is refused rather than ignored", async () => {
+    const p = project("silent");
+    const look = stepNamed(jobSteps("deploy.yml", "verify"), LIVE);
+    const site = await serveSilence();
+    try {
+      const handed = { "needs.deploy.outputs.page_url": site.url, "needs.build.outputs.built_at": "2026-11-23T10:29:25.000Z" };
+      const started = Date.now();
+      const silent = await p.run(look, "schedule", handed, { append: " -- --attempts=2 --wait-ms=10 --timeout-ms=300" });
+      expect(silent.code).toBe(1);
+      expect(silent.stdout).toContain("Look 1 of 2: the site did not answer within 0.3 s;");
+      expect(silent.stderr).toContain(`after 2 looks at ${site.url} the site did not answer within 0.3 s.`);
+      expect(site.asked).toEqual(["/tracker/data/config.json", "/tracker/data/config.json"]);
+      expect(Date.now() - started).toBeLessThan(60_000); // not the minutes a look with no limit would take
+
+      // `--wait-ms 10` is not `--wait-ms=10`. Taken as "no flag", it would
+      // quietly mean the default: a quarter of a minute between looks.
+      const spaced = await p.run(look, "schedule", handed, { append: " -- --attempts=1 --wait-ms 10 --timeout-ms=300" });
+      expect(spaced.code).toBe(1);
+      expect(spaced.stderr).toContain("::error::--wait-ms takes a whole number, written like this: --wait-ms=30000");
+      const worded = await p.run(look, "schedule", handed, { append: " -- --attempts=two --wait-ms=10 --timeout-ms=300" });
+      expect(worded.code).toBe(1);
+      expect(worded.stderr).toContain("::error::--attempts takes a whole number, written like this: --attempts=25");
+      const bare = await p.run(look, "schedule", handed, { append: " -- --attempts=1 --timeout-ms" });
+      expect(bare.code).toBe(1);
+      expect(bare.stderr).toContain("::error::--timeout-ms takes a whole number, written like this: --timeout-ms=20000");
+      const misspelt = await p.run(look, "schedule", handed, { append: " -- --atempts=1 --attempts=1 --wait-ms=10 --timeout-ms=300" });
+      expect(misspelt.code).toBe(1);
+      expect(misspelt.stderr).toContain("::error::verify-live does not know --atempts. It takes --attempts=…, --wait-ms=…, --timeout-ms=….");
+      expect(site.asked).toHaveLength(2); // none of the four looked anywhere
+    } finally {
+      await site.close();
+    }
   });
 
   it("a manual run for two buildings scrapes exactly those two, and with nothing to report opens no issue", async () => {

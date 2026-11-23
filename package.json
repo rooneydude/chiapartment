@@ -13,6 +13,8 @@
     "alerts": "tsx scraper/src/cli.ts alerts",
     "build:data": "tsx scraper/src/cli.ts build-data",
     "ci:flags": "tsx scraper/src/cli.ts ci-flags",
+    "ci:built-at": "tsx scraper/src/cli.ts built-at",
+    "ci:verify-live": "tsx scraper/src/cli.ts verify-live",
     "dev": "npm run build:data && npm run -w web dev",
     "build": "npm run build:data && npm run -w web build",
     "preview": "npm run -w web preview",
