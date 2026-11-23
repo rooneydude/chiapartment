@@ -1,2 +1,2 @@
-# 2026-11-20: first run of the refresh job after its flag and commit steps moved into tested code
+# 2026-11-23: first refresh with deployments queued and the live site looked at after each
 # (no flags: scrape all buildings)

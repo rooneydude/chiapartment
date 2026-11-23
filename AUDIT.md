@@ -553,7 +553,21 @@ in the browser:
   had happened to keep the two apart; the refresh is quicker now.
   Deployments now wait for one another instead of cancelling. (This
   session may not start a workflow by hand, so the site caught up with the
-  next deployment rather than at once.)
+  next deployment, fourteen minutes later, rather than at once.)
+
+  What let it pass unseen is that nothing looked at the page itself. Now
+  something does. Every build of the site's data is stamped with the time
+  it was made, and after every deployment a last job reads the live site
+  and fails, saying what it found, unless the site carries this build's
+  stamp or a later one (`scraper/src/verify-live.ts`). The stamp rather
+  than the newest snapshot, so that a deployment which changes only the
+  code is held to the same test. It goes on looking for twelve minutes —
+  the site's own answers allow a copy to be reused for ten
+  (`cache-control: max-age=600`) — and no single look may take longer than
+  twenty seconds, so the check itself always ends. It refuses to pass on
+  an empty hand-over, so a broken wire between the jobs cannot turn it into
+  a check that always passes. On 23 Nov it would have ended the run red,
+  with the reason.
 
 ---
 
