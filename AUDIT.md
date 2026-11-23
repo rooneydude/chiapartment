@@ -599,6 +599,48 @@ in the browser:
   - Numbers out of range, and hand-overs that are not what they should be
     (an address with no scheme, a build time of "1"), are refused by name.
 
+- **23 Nov 2026 — the data checked against the sites again, a week on.**
+  One scrape from this session (six of six buildings) with every raw
+  response kept, and what the tracker recorded compared with it field by
+  field, by code written for the comparison rather than the scrapers' own.
+  1225 Old Town: 16 of 16 units identical, all 272 lease-term prices
+  included. Old Town Park: all 51 rows accounted for, every rent, date and
+  area as the page prints it. The Leo (one unit) and Stead 220 (16 plans):
+  identical. No wrong figure anywhere.
+
+  What the comparison did find is things the sites say that the tracker
+  did not record:
+
+  - Old Town Park's pages carry a fee guide. Three charges are required
+    every month on top of every rent: a $12 liability waiver, allocated
+    utilities, and electricity. None was recorded, so these towers showed
+    rent alone beside a building whose required charges were named. They
+    are recorded now: the $12 is added up in a row's detail, the other two
+    are named. (The detail's sentence used to add "which is the figure the
+    leasing site headlines". That was true of 1225 only, and is gone.)
+  - Stead 220's page has a bar across the top that read "6 WEEKS FREE on
+    select apartments". On 15 Nov it read "Now leasing in Fulton Market",
+    and the audit of that day rightly found no offer there; nothing was
+    watching the bar when one appeared. An offer in it is now a notice; a
+    slogan is only logged.
+  - A newly listed Old Town Park unit can appear before the site has
+    priced it, and the page then prints "$-1". It was listed without a
+    price, as it should be, under a note that read "1 Bed — $-1". The note
+    now says the site shows no price.
+
+  Left as they are, and why: the one-time application and administrative
+  fees and the optional parking and pet prices that 1225 and Old Town Park
+  publish (not part of a month's rent, and the snapshot has no place for
+  them); Old Town Park's plan names, which are the site's internal codes
+  ("S1-1" where the page prints "Plan S1").
+
+  Dependencies: eight patch-level updates that the package registry's
+  advisory check asked for, none of which changes anything here (every
+  test, the build and the browser tests pass on them). Two more that it
+  lists need major upgrades, of the test runner and of the validation
+  library. Both concern input a stranger controls, which neither is given
+  here; they are left for a change of their own.
+
 ---
 
 # Previous audit — 8 Sep 2026
