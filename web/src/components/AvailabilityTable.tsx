@@ -203,7 +203,7 @@ function UnitDetail({
           <strong>
             {priceLabel(u.price + u.monthlyFees.min, (u.priceMax ?? u.price) + u.monthlyFees.max)}
           </strong>{" "}
-          a month, which is the figure the leasing site headlines.
+          a month.
           {unpriced.length === 0 ? " Usage-based utilities and insurance are extra." : ""}
         </div>
       )}

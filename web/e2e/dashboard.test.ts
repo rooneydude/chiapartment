@@ -291,7 +291,10 @@ describe("a building's page", () => {
     );
     // a unit whose fees do carry numbers gets the sum instead
     await page.locator('table.units tbody tr:has-text("1503")').first().click();
-    expect(await say(page, ".unit-detail")).toContain("Base rent $5,007 + required monthly fees $100–$230 = $5,107–$5,237 a month");
+    const summed = await say(page, ".unit-detail");
+    expect(summed).toContain("Base rent $5,007 + required monthly fees $100–$230 = $5,107–$5,237 a month.");
+    // …and no more than the sum: which figure a site headlines differs from building to building
+    expect(summed).not.toContain("headlines");
 
     // what the run could not read is said on the page; what changed is named for what it is
     expect(await say(page, ".info-banner")).toContain(GAP);
