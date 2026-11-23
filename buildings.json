@@ -170,7 +170,7 @@
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
         "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change.",
-        "The Rent column is base rent. The site's own fee guide adds required monthly charges on top of every rent: a $12 liability waiver, which a row's detail adds in, and allocated utilities and electricity, which it names without an amount."
+        "The Rent column is base rent. The site's own fee guide requires monthly charges on top of every rent (a liability waiver, allocated utilities, electricity). Snapshots taken since 23 Nov 2026 record them, and a row's detail then shows them."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
@@ -251,7 +251,7 @@
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
         "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change.",
-        "The Rent column is base rent. The site's own fee guide adds required monthly charges on top of every rent: a $12 liability waiver, which a row's detail adds in, and allocated utilities and electricity, which it names without an amount."
+        "The Rent column is base rent. The site's own fee guide requires monthly charges on top of every rent (a liability waiver, allocated utilities, electricity). Snapshots taken since 23 Nov 2026 record them, and a row's detail then shows them."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },
@@ -336,7 +336,7 @@
       "dataNotes": [
         "Per apartment: one price or a price range, square footage and a move-in date. No lease lengths — those only appear in the leasing portal each row links to, which blocks automated visitors.",
         "For some floor plans the site alternates between two prices (a range and a single figure) within minutes. The tracker looks twice and marks such switches “≈” instead of reporting a price change.",
-        "The Rent column is base rent. The site's own fee guide adds required monthly charges on top of every rent: a $12 liability waiver, which a row's detail adds in, and allocated utilities and electricity, which it names without an amount."
+        "The Rent column is base rent. The site's own fee guide requires monthly charges on top of every rent (a liability waiver, allocated utilities, electricity). Snapshots taken since 23 Nov 2026 record them, and a row's detail then shows them."
       ],
       "publishes": {"leaseLength": false, "leaseTable": false, "moveInDate": true, "sqft": true}
     },

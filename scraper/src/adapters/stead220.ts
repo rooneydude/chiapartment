@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { parseAvailableDate } from "../../../shared/src/parse";
 import { chicagoDate } from "../../../shared/src/time";
 import type { AlsoListed, UnitListing } from "../../../shared/src/types";
-import { coerceBeds, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT } from "../normalize";
+import { coerceBeds, dedupeListings, MAX_SANE_RENT, MIN_SANE_RENT, spacedText } from "../normalize";
 import { clipNotice, throwIfRefused } from "./guard";
 import type { Adapter } from "./types";
 
@@ -257,26 +257,32 @@ export function parseSteadFloorplans(html: string, baseUrl: string, ref: Date): 
   return { listings: dedupeListings(listings), alsoListed, planCount: tags.length, notices: bar.offers, announcements: bar.other, remarks };
 }
 
-/** What makes an announcement an offer: a figure, something free, off, credited, waived or saved, or a length of time. */
-const READS_AS_OFFER = /\d|\bfree\b|\boff\b|credit|special|waiv|concession|discount|incentive|\bsave\b|\bweeks?\b|\bmonths?\b/i;
+/** What the bar says when it is only asking you in. */
+const ONLY_AN_INVITATION = /\bnow leasing\b|\bwelcome\b|\bbook (?:a|your) tour\b|\bschedule (?:a|your) tour\b|\bcall (?:us\b|\(?\d)|\bopen daily\b/i;
+/** …and what makes it an offer all the same: money, a share, weeks or months counted out, or a word for a concession. */
+const OFFER_CUE =
+  /\$\s?\d|\d\s?%|\d\s*(?:weeks?|months?)\b|(?<!-)\bfree\b|\boff\b|offer|credit|special|waiv|concession|discount|incentive|saving|\bsave\b|complimentary|reduced|deposit|promo|gift|\bon us\b/i;
 
 /**
  * The bar across the top of the page, which the site itself labels "Leasing
  * offer". On 23 Nov 2026 it read "6 WEEKS FREE on select apartments": every
  * price here is a "starting from" figure, and six weeks' rent changes what
  * it is worth, yet nothing recorded it. On 15 Nov the same bar read "Now
- * leasing in Fulton Market", which is a slogan and not an offer; that kind is
- * left out of the notices (they are for specials and concessions) and only
- * logged.
+ * leasing in Fulton Market", which is no offer.
+ *
+ * Whatever the bar says is recorded as a notice, unless it is only an
+ * invitation (and carries no cue of an offer): that kind is logged and left
+ * out. The rule leans this way on purpose. An offer worded in a way nobody
+ * foresaw is recorded; the cost is that a new kind of slogan is too.
  */
 export function announcementBar(html: string): { offers: string[]; other: string[] } {
   const $ = cheerio.load(html);
   const offers: string[] = [];
   const other: string[] = [];
   $(".announce-bar__msg").each((_, el) => {
-    const said = clipNotice($(el).text());
+    const said = clipNotice(spacedText($, el)); // "<strong>6 WEEKS FREE</strong><span>on…" must not run together
     if (said === "") return;
-    const list = READS_AS_OFFER.test(said) ? offers : other;
+    const list = ONLY_AN_INVITATION.test(said) && !OFFER_CUE.test(said) ? other : offers;
     if (!list.includes(said)) list.push(said);
   });
   return { offers, other };

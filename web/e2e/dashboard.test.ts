@@ -284,7 +284,7 @@ describe("a building's page", () => {
     const detail = await say(page, ".unit-detail");
     expect(detail).toContain("vacant since Oct 8, 2026");
     expect(detail).toContain(
-      "$2,382 is base rent. Also required every month, but the site publishes no amount for them: Utility Billing Bundle: Varies; Renters Liability Insurance - Third Party: Varies.",
+      "$2,382 is base rent. Also required every month, on top of it: Utility Billing Bundle: Varies; Renters Liability Insurance - Third Party: Varies.",
     );
     expect(await page.locator(".unit-detail a.unit-link").getAttribute("href")).toBe(
       "https://www.1225oldtown.com/OnlineLeasing.aspx?UnitId=12",

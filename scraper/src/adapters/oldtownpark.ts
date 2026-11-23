@@ -96,8 +96,18 @@ function parseCount(text: string, label: RegExp): number | null {
 }
 
 /** Dollar amounts printed in a piece of text, as whole dollars. */
-/** A price slot that prints nothing but a number, signed or not: "$-1", "$0", "-1". */
-const PLACEHOLDER_AMOUNT = /^\s*[-+]?\s*\$?\s*[-+]?\d[\d,]*(?:\.\d+)?\s*$/;
+/**
+ * A price slot that prints numbers and nothing else, every one of them too
+ * small to be a rent: "$-1", "$0", "-1", "$-1 – $-1". A rent-sized number
+ * ("3,555" without its dollar sign) is not a placeholder, whatever else is
+ * wrong with it, and is quoted as the site prints it.
+ */
+function isPlaceholderAmount(slot: string): boolean {
+  const text = slot.replace(/[\u2212\u2012\u2013\u2014]/g, "-");
+  if (!/^[\s$\d.,+-]+$/.test(text)) return false;
+  const numbers = [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => Number.parseFloat(m[0].replace(/,/g, "")));
+  return numbers.length > 0 && numbers.every((n) => n < MIN_SANE_RENT);
+}
 
 function dollarAmounts(text: string): number[] {
   return [...text.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)/g)]
@@ -108,41 +118,66 @@ function dollarAmounts(text: string): number[] {
 /** A plain amount, or a plain range of two: "$12.00", "$375.00 – $450.00". Anything else in the slot is words. */
 const PLAIN_AMOUNT = /^\$\s?(\d[\d,]*(?:\.\d+)?)(?:\s*[–—-]\s*\$\s?(\d[\d,]*(?:\.\d+)?))?$/;
 
+/** "Per Unit", and the other ways the guide could say one apartment. */
+const PER_APARTMENT = /^per (?:unit|apartment|home|residence)$/i;
+/** A label that names the towers its row is for: "(Tower 3)", "(Towers 1 & 2)". */
+const TOWERS_NAMED = /\(\s*towers?\s+(\d[\d\s,&and]*)\)/i;
+/** A label that names the kind of apartment its row is for: "– Penthouse Suite", "– Standard Suite". */
+const SUITE_NAMED = /\b(?:penthouse|standard|townhome|townhouse)s?\s+suites?\b/i;
+
 /** The required monthly charges a page's fee guide lists: what every rent on that page is owed with. */
 export interface RequiredMonthly {
-  /** The sum of the per-apartment charges the guide puts a plain amount on. Absent when it prices none. */
+  /** The sum of the charges the guide puts a plain amount on, per apartment, for every apartment on the page. Absent when there is none. */
   fees?: { min: number; max: number };
-  /** The charges it gives in words, or on another basis than per apartment — each as the site writes it. */
+  /** The required monthly charges that are not in that sum, each as the site writes it: given in words, on another basis, or for some apartments only. */
   unpriced: string[];
 }
 
 /**
  * The page's own "Fee Guides" (section#fees): rows marked Required and
- * Monthly. A charge per unit with a plain amount ("$12.00") is added up; one
- * given in words ("Allocated (Utilities)", "Billed Directly by ComEd") is
- * named as the site names it. One-time fees, optional add-ons and
+ * Monthly. A charge per apartment with a plain amount ("$12.00") is added
+ * up; one given in words ("Allocated (Utilities)", "Billed Directly by
+ * ComEd") is named as the site names it. One-time fees, optional add-ons and
  * situational fees are not part of a month's rent and are left where they
  * are. Until 23 Nov 2026 none of this was read, so these towers showed rent
  * alone next to a building whose required charges were named.
+ *
+ * The guide is one table for the whole complex, printed on every tower's
+ * page, and some of its rows say whom they are for. A row that names its
+ * towers ("(Tower 3)") is not read on another tower's page. A row for one
+ * kind of suite ("– Penthouse Suite") is owed by some apartments on the
+ * page and not by others: it is named with its amount and kept out of the
+ * sum. A row printed twice is one charge.
  */
-function requiredMonthlyCharges($: cheerio.CheerioAPI): RequiredMonthly {
+function requiredMonthlyCharges($: cheerio.CheerioAPI, tower: number | null): RequiredMonthly {
   let min = 0;
   let max = 0;
   let priced = false;
   const unpriced: string[] = [];
+  const seen = new Set<string>();
   $("#fees table tbody tr").each((_, tr) => {
     const cell = (name: string): string => {
       const td = $(tr).find(`td.${name}`).first().clone();
       td.find("sup").remove(); // footnote marks
-      return td.text().replace(/\s+/g, " ").trim();
+      return td.length === 0 ? "" : spacedText($, td[0]!); // elements side by side must not run together
     };
     if (!/^required$/i.test(cell("status")) || !/^monthly$/i.test(cell("freq"))) return;
     const label = cell("label");
     if (label === "") return;
     const amount = cell("amount");
     const applied = cell("applied");
+    const row = [label, amount, applied].join("\u0000");
+    if (seen.has(row)) return;
+    seen.add(row);
+
+    const towers = TOWERS_NAMED.exec(label);
+    if (towers && tower !== null && ![...towers[1]!.matchAll(/\d+/g)].some((n) => Number(n[0]) === tower)) return;
+    // For every apartment on this page? Not a row for one kind of suite, and
+    // not a row for certain towers on a page that does not say which tower it is.
+    const forEveryApartmentHere = !SUITE_NAMED.test(label) && (!towers || tower !== null);
+
     const plain = PLAIN_AMOUNT.exec(amount);
-    if (plain && /^per unit$/i.test(applied)) {
+    if (plain && PER_APARTMENT.test(applied) && forEveryApartmentHere) {
       const low = Number.parseFloat(plain[1]!.replace(/,/g, ""));
       const high = plain[2] !== undefined ? Number.parseFloat(plain[2].replace(/,/g, "")) : low;
       if (Number.isFinite(low) && Number.isFinite(high) && high >= low) {
@@ -153,7 +188,7 @@ function requiredMonthlyCharges($: cheerio.CheerioAPI): RequiredMonthly {
       }
     }
     // An amount on another basis (per leaseholder, per pet) cannot be added to an apartment's rent: it is quoted with its basis.
-    const basis = plain && applied !== "" ? ` (${applied.toLowerCase()})` : "";
+    const basis = plain && applied !== "" && !PER_APARTMENT.test(applied) ? ` (${applied.toLowerCase()})` : "";
     unpriced.push(`${label}: ${amount === "" ? "no amount given" : amount}${basis}`);
   });
   const cents = (n: number): number => Math.round(n * 100) / 100;
@@ -190,7 +225,8 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
   let rowCount = 0;
   let unreadableRows = 0;
   const text = (el: object | undefined): string => (el ? spacedText($, el) : "");
-  const requiredMonthly = requiredMonthlyCharges($);
+  const pageTower = /\bpage-(availability-tower-\d+)\b/.exec($("body").attr("class") ?? "")?.[1] ?? null;
+  const requiredMonthly = requiredMonthlyCharges($, pageTower === null ? null : Number(/\d+$/.exec(pageTower)![0]));
 
   // Every unit row on the page, wherever it sits — a row outside a plan
   // group, or without its data attribute, must not simply go unnoticed.
@@ -298,13 +334,13 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
       } else if (priceText) {
         // The price slot does not print a rent: the site is not quoting this
         // unit. Words ("Contact for Pricing") are the site's own answer and
-        // are quoted as they stand. A bare number that cannot be a rent is a
+        // are quoted as they stand. Numbers too small to be a rent are a
         // placeholder — "$-1", with data-rent-min="-1", is what the site
         // prints for a unit its pricing has not reached yet (23 Nov 2026,
-        // #0302 and #2410, both newly listed) — and is said to be one, so
+        // #0302 and #2410, both newly listed) — and are said to be one, so
         // that nobody reads "1 Bed — $-1" as a rent.
         const shown = priceText.slice(0, 60);
-        noPriceNote = PLACEHOLDER_AMOUNT.test(priceText) ? `No price on the site (it shows “${shown}”)` : shown;
+        noPriceNote = isPlaceholderAmount(priceText) ? `No usable price on the site (it shows “${shown}”)` : shown;
       }
     } else if (Number.isFinite(attrMin) && attrMin >= MIN_SANE_RENT && attrMin <= MAX_SANE_RENT) {
       // Markup with no price element at all: the data attributes are all there is.
@@ -371,8 +407,6 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
       `${listings.length - deduped.length} duplicate unit row(s) on the page — kept the first of each`,
     );
   }
-  const pageTower = /\bpage-(availability-tower-\d+)\b/.exec($("body").attr("class") ?? "")?.[1] ?? null;
-
   return {
     listings: deduped,
     alsoListed,
@@ -385,6 +419,10 @@ export function parseOldTownParkPage(html: string, pageUrl: string, ref: Date): 
     requiredMonthly,
   };
 }
+
+/** What the building's page says when its fee guide could not be read. */
+export const FEE_GUIDE_GAP =
+  "The site’s fee guide could not be read this run (it has moved, or is written differently), so the charges it requires on top of rent every month are missing from this snapshot — the building has not necessarily dropped them.";
 
 export const oldtownpark: Adapter = {
   id: "oldtownpark",
@@ -428,6 +466,15 @@ export const oldtownpark: Adapter = {
     }
     for (const row of page.alsoListed) ctx.reportAlsoListed?.(row);
     for (const notice of page.notices) ctx.reportNotice?.(notice);
+    const guide = page.requiredMonthly;
+    if (guide.fees || guide.unpriced.length > 0) {
+      const summed = guide.fees ? `$${guide.fees.min}${guide.fees.max > guide.fees.min ? `–$${guide.fees.max}` : ""} a month required of every apartment` : "no required monthly charge with a plain amount";
+      ctx.log(`fee guide: ${summed}${guide.unpriced.length > 0 ? `; ${guide.unpriced.length} more required and outside that sum` : ""}`);
+    } else if (page.listings.length > 0) {
+      // Rent with nothing beside it would look like the whole bill. Say what is missing, where the data is shown.
+      ctx.log("fee guide: no required monthly charge could be read from the page");
+      ctx.reportGap?.(FEE_GUIDE_GAP);
+    }
     for (const remark of page.remarks) ctx.log(remark);
     const accounted = page.listings.length + page.alsoListed.length;
     const dated = page.listings.filter((l) => l.availableDate !== null).length;
