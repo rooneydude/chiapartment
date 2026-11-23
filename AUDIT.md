@@ -539,6 +539,22 @@ in the browser:
   dependencies and the browser, and the skyline and unit-map steps, which
   ask outside services.
 
+- **23 Nov 2026 — merged; the refresh on the new workflow worked, the
+  deployment after it did not take.** The scheduled runs of 20, 21 and 22
+  Nov each read six of six buildings. The merge started a refresh on the
+  changed workflow: flags, scrape (six of six), the new commit step and the
+  alert step all succeeded, and the snapshot of 10:28 UTC is on the branch.
+  The site, though, went on serving the build made a moment before that
+  snapshot existed. The merge had asked for two deployments of the same
+  commit — the deploy workflow's own, and the one the refresh ends with —
+  and the second, which carried the snapshot, cancelled the first while it
+  was publishing. GitHub Pages kept the first one's content and reported
+  the second a success. Nothing in the run was red. Until then the timing
+  had happened to keep the two apart; the refresh is quicker now.
+  Deployments now wait for one another instead of cancelling. (This
+  session may not start a workflow by hand, so the site caught up with the
+  next deployment rather than at once.)
+
 ---
 
 # Previous audit — 8 Sep 2026

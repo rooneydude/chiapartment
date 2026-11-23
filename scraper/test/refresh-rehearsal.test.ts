@@ -160,6 +160,18 @@ describe("the refresh workflow keeps no logic of its own", () => {
     expect(jobSteps("deploy.yml", "build").filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run build"]);
     expect(scripts["build"]).toBe("npm run build:data && npm run -w web build");
   });
+
+  it("deployments wait for one another; none is cancelled while it publishes", () => {
+    // Not something a test here can run: it is GitHub's own scheduling. What
+    // can be held is the setting, and the reason for it (see deploy.yml): on
+    // 23 Nov 2026 a deployment cancelled mid-publish left the site a
+    // snapshot behind while the run that replaced it reported success.
+    const deploy = readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
+    expect(deploy).toMatch(/\nconcurrency:\n  group: pages\n(?:  #.*\n)*  cancel-in-progress: false\n/);
+    // and the build checks out the branch, not the commit that started the run:
+    // the refresh's own deployment has to carry the snapshot it has just pushed
+    expect(deploy).toContain("ref: ${{ github.ref_name }}");
+  });
 });
 
 describe("step “Resolve flags”, started every way the job can start", () => {

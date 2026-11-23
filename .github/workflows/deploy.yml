@@ -13,7 +13,16 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # One deployment at a time, in the order they were asked for, and none cut
+  # short. A merge that also starts a refresh (one that changes
+  # .github/refresh-trigger) asks for two deployments of the same commit:
+  # this workflow's own, and the one the refresh ends with, which carries the
+  # new snapshot. When a later deployment was allowed to cancel an earlier
+  # one, the second cancelled the first while it was publishing; GitHub Pages
+  # kept the first one's content and reported the second a success, and the
+  # site stayed one snapshot behind (23 Nov 2026, runs 45156408985 and
+  # 45156409034). Queued, the second publishes after the first has finished.
+  cancel-in-progress: false
 
 jobs:
   build:
