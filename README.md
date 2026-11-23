@@ -116,8 +116,34 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
 | `npm run dev` | Compile data + start the dashboard dev server |
 | `npm run build` | Production build (what Pages deploys) |
 | `npm test` / `npm run typecheck` | Vitest / tsc across workspaces |
+| `npm run test:browser` | The dashboard in a real browser (after `npm run build`; needs Chromium: `npx playwright install chromium`) |
 
 Node 22+. `npm install` once at the repo root (npm workspaces).
+
+**What the tests cover.** `npm test` runs the scrapers against recorded
+pages, the change detection and the compiler — and the refresh job itself.
+Its flag handling is code (`scraper/src/ci-flags.ts`). Its commit-and-push
+step (`.github/scripts/commit-snapshot.sh`) is run against real throwaway
+repositories: a pull request merged during the scrape, another refresh run
+that pushed first (the two runs' unit maps are merged by
+`.github/scripts/merge-unitmap.mjs`; one that cannot be merged stays as it
+landed and the prices go through), changes that do not go together with
+what landed (the step stops and pushes nothing), a remote that refuses.
+And the job is
+rehearsed offline by running the workflow's own commands
+(`scraper/test/refresh-rehearsal.test.ts`): the command and variables of
+the browser check, the flags, the scrape and the alert step, and of the
+alarm for a day when nothing could be read, are read out of `refresh.yml`
+and run with `bash -e` in a throwaway copy of the project. Not run by any
+test: installing dependencies and the browser, and the skyline and unit-map
+steps, which ask outside services — their command lines are pinned instead.
+That test lists every step and job of the workflow, and its reader refuses
+settings it does not reproduce (another shell or working directory,
+workflow- or job-wide variables), so a change of that kind fails until it
+has been looked at there. `npm run test:browser` drives the built dashboard
+in Chromium against a few days of hand-made snapshots compiled by the real
+compiler; the 3D view is judged by its picture. Both run on every pull
+request.
 
 ## Data status
 

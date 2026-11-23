@@ -1,2 +1,2 @@
-# 2026-11-17: refresh after the fee and unread-page fix, so the new fields are in the day's snapshot
+# 2026-11-20: first run of the refresh job after its flag and commit steps moved into tested code
 # (no flags: scrape all buildings)

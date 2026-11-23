@@ -405,6 +405,140 @@ in the browser:
   now records what the run could not read (`gaps`) and the building's page
   says so, instead of yesterday's offer silently disappearing.
 
+- **20 Nov 2026 — the two untested areas are under test.** The three
+  scheduled runs after the merge (17, 18, 19 Nov) each read six of six
+  buildings. The failure of 17 Nov came from shell written inside the
+  refresh workflow, which nothing tested; that logic is now code with tests
+  (`ci-flags.ts`, `commit-snapshot.sh`) and the whole job is rehearsed
+  offline on every pull request. The dashboard, until then checked only by
+  hand-run browser scripts, has a committed browser suite (`web/e2e`) that
+  runs in CI; breaking the listing of left-out units, or removing the
+  boundary round the 3D view, fails it.
+
+  Two independent reviews of that work, before it was merged, found
+  nothing broken in what the job does today, and several places where the
+  new tests — and then one of my fixes — promised more than they did.
+
+  First review:
+
+  1. *Nothing ran the program the job runs.* The tests called functions;
+     the job runs commands. Re-adding the very line that failed on 17 Nov
+     to the program's entry point left every test green. The rehearsal now
+     reads the command and variables of the browser check, the flags, the
+     scrape, the alert step and the alarm out of `refresh.yml` and runs
+     them with `bash -e` in a throwaway copy of the project; re-adding that
+     line, renaming a variable on one side only, or dropping the scrape's
+     arguments now fails it.
+  2. *Two overlapping refresh runs lost the later run's snapshot* — older
+     than this work, and real: every run rewrites the unit map, so the
+     second push's retry met a conflict and the step failed. The script's
+     own comment said that could not happen.
+  3. *"Starts without the 3D and chart libraries" passed with both compiled
+     into the start-up file.* It now requires them to exist as files of
+     their own and holds the start-up scripts to a size budget.
+  4. *The 3D test passed with nothing drawn on the tower and the sun fixed
+     at noon.* It now compares pictures: pointing at each unit's row must
+     change the picture, differently for every unit, and the scene must be
+     much darker at 11 PM than at 1 PM and at noon.
+
+  Second review, of those fixes:
+
+  5. *My fix for 2 was wrong.* I had the later run's unit map replace the
+     earlier one's whole, on the belief that the file is regenerated each
+     run. It is not: it accumulates the positions of units seen listed, so
+     that rule silently dropped whatever the earlier run had just learned —
+     and my test asserted the loss. The two files are now merged by unit
+     (`.github/scripts/merge-unitmap.mjs`): what either run learned is
+     kept, a unit both placed is the later run's. Only the skyline, which
+     is regenerated whole, is replaced whole.
+  6. *The rehearsal read the commands but not the settings around them.* A
+     step made conditional, given another shell or working directory, or a
+     job-wide setting would have stopped the scrape on GitHub with every
+     test green. The reader now refuses settings it does not reproduce,
+     and the test pins every step and job and each condition.
+  7. *The 3D test would have failed on a missing optional file* (the
+     browser logs the 404 as an error, and the test had begun to treat
+     console errors as failures). That line is no longer counted.
+  8. *Sentences here and in the README said more than the code did* — for
+     one, that the rehearsal runs every step's command (it runs five; the
+     rest are named with the reason they are not run). Reworded.
+
+  Third review, of the commit step alone:
+
+  9. *The stricter merge could cost a run its prices.* A hand edit that
+     leaves a unit map unreadable, landing while a run is under way, made
+     the new merge refuse — and the step then pushed nothing, where the
+     old one would have pushed the snapshot. The workflow's own rule is
+     that positional data never blocks prices. The merge program now keeps
+     to it: where two unit maps cannot be merged (one is unreadable, they
+     are in different versions of the format) it leaves the one that
+     landed exactly as it is, drops this run's, and puts a warning on the
+     run's page. The prices go through.
+  10. *What the step sets up for a race ran before every push*, and under
+      `set -e` could have stopped a run nothing raced with. Its failure is
+      now a warning, and the step goes on to push.
+  11. *The tests ran the script from outside the checkout it works in*, so
+      three ways of breaking it went unnoticed. They now run it the way the
+      workflow does, from inside a checkout that holds it — including a
+      case where what lands replaces the script while it runs.
+  12. Smaller: the settings were written where a linked worktree does not
+      read them; a per-cent sign in the checkout's path broke the merge
+      program's command line; unit maps in two versions of the format were
+      joined; no test pinned the order of units in a merged map.
+
+  Fourth review, of my first answer to 9:
+
+  13. *That answer could undo what had landed.* I had first made the step
+      replace its commit by one carrying the snapshot alone whenever the
+      rest did not go together with what landed. Where a pull request had
+      left a link or a file at `data/snapshots`, that commit replaced it
+      with a folder; where the folder had been moved, it put the snapshot
+      in the old place and called the run a success; and it also ran when
+      a pull had merely failed. I took it out. What it was for is covered
+      by 9, inside the merge program, with nothing that rebuilds a commit.
+      Every other case in which this run's files do not go together with
+      what landed — a pull request removed the unit map, a recorded
+      response was changed on both sides, the snapshots folder moved —
+      stops the step, pushing nothing, as it did before any of this work.
+  14. *Its tests never read the snapshot they said had been pushed.* The
+      commit-step tests now compare what is on the branch, byte for byte,
+      with what each side wrote.
+
+  Fifth review, of the commit step as simplified: nothing serious, and
+  four smaller notes, each taken up.
+
+  15. A file that exists but cannot be staged (one git has since been told
+      to ignore, say) stopped the step before it committed anything. The
+      step now warns and goes on with what was staged.
+  16. The two merge rules stayed written in the checkout's settings, where
+      they would have changed a person's later merges had the step ever
+      been run in a checkout that is kept. They are now handed to the
+      step's own `git pull` and stored nowhere.
+  17. Two messages said more than was known: the error after a failed pull
+      named a cause that may not have happened, and the merge program's
+      warning spoke of the prices before their push had been tried. Each
+      now says only what was done. The warning is also kept to one line
+      whatever the files hold, so that a file cannot write a line of its
+      own into the run's log.
+
+  A last, short check of those four changes found nothing serious
+  either; its notes were about wording, one test that did not try a
+  carriage return, and a checkout path Node cannot load a program from
+  (now known before the push and said, instead of surfacing mid-retry).
+
+  What the commit step does differently from before this work, in full:
+  two overlapping refresh runs no longer cost the later one its snapshot
+  (their unit maps are merged, the later skyline wins); a unit map that
+  cannot be merged stays as it landed instead of being merged line by
+  line; a step that stops says why on the run's page and leaves the
+  checkout on the run's own commit; and a missing skyline file, or a file
+  that cannot be staged, no longer keeps the run's other files from being
+  committed. Nothing else changed.
+
+  Not run by any test, and said so in the rehearsal: installing
+  dependencies and the browser, and the skyline and unit-map steps, which
+  ask outside services.
+
 ---
 
 # Previous audit — 8 Sep 2026

@@ -74,32 +74,19 @@ jobs:
           # has the OS libs Chromium needs.
           npx playwright install chromium
 
+      # What this run was asked to do: a manual run's typed-in inputs, or —
+      # for a run started by committing a change to .github/refresh-trigger —
+      # the words in that file. Worked out by scraper/src/ci-flags.ts, which
+      # `npm test` covers: this used to be shell written here, and one line of
+      # it stopped the daily refresh on 17 Nov 2026 (run 44099079573).
       - name: Resolve flags (inputs or trigger file)
         id: flags
         env:
-          # Typed-in text reaches the shell as data, never as script.
+          # Typed-in text reaches the program as data, never as script.
           INPUT_BUILDINGS: ${{ inputs.buildings }}
-        run: |
-          # The trigger file's words are flags for the push run that committed
-          # it — manual and scheduled runs must not inherit stale flags from it.
-          TRIG=""
-          if [ "${{ github.event_name }}" = "push" ] && [ -f .github/refresh-trigger ]; then
-            TRIG=$(cat .github/refresh-trigger)
-          fi
-          CAPTURE=false; SKYLINE=false; BUILDINGS="$INPUT_BUILDINGS"
-          if [ "${{ inputs.capture }}" = "true" ] || echo "$TRIG" | grep -qw capture; then CAPTURE=true; fi
-          if [ "${{ inputs.skyline }}" = "true" ] || echo "$TRIG" | grep -qw skyline; then SKYLINE=true; fi
-          if [ -z "$BUILDINGS" ]; then BUILDINGS=$(echo "$TRIG" | grep -oE 'buildings=[a-z0-9,-]+' | head -1 | cut -d= -f2 || true); fi
-          # Empty means scrape every building. `printf '%s'` with no newline
-          # makes grep exit 1 on empty stdin, which aborted the 2026-11-17
-          # post-merge refresh (run 44099079573) and would fail every cron.
-          if [ -n "$BUILDINGS" ] && ! printf '%s\n' "$BUILDINGS" | grep -Eq '^[a-z0-9,-]+$'; then
-            echo "::error::Unexpected characters in the buildings list."
-            exit 1
-          fi
-          echo "capture=$CAPTURE" >> "$GITHUB_OUTPUT"
-          echo "skyline=$SKYLINE" >> "$GITHUB_OUTPUT"
-          echo "buildings=$BUILDINGS" >> "$GITHUB_OUTPUT"
+          INPUT_CAPTURE: ${{ inputs.capture }}
+          INPUT_SKYLINE: ${{ inputs.skyline }}
+        run: npm run -s ci:flags
 
       - name: Generate skyline (when missing or requested)
         if: steps.flags.outputs.skyline == 'true' || hashFiles('data/skyline.geojson') == ''
@@ -111,12 +98,10 @@ jobs:
       - name: Scrape
         id: scrape
         env:
-          BUILDINGS: ${{ steps.flags.outputs.buildings }}
-        run: |
-          FLAGS=""
-          if [ -n "$BUILDINGS" ]; then FLAGS="$FLAGS --buildings=$BUILDINGS"; fi
-          if [ "${{ steps.flags.outputs.capture }}" = "true" ]; then FLAGS="$FLAGS --capture"; fi
-          npm run refresh -- $FLAGS
+          # "" for a plain scrape of everything; otherwise the scraper's own
+          # flags, built from validated building ids (see ci-flags.ts).
+          REFRESH_ARGS: ${{ steps.flags.outputs.refresh_args }}
+        run: npm run refresh -- $REFRESH_ARGS
 
       - name: Update unit-position maps
         continue-on-error: true # positional data is a bonus, never a blocker
@@ -124,29 +109,12 @@ jobs:
 
       # The data is committed BEFORE anyone is alerted, so an alert can never
       # describe a snapshot that failed to land (and be repeated tomorrow).
+      # The script retries the push when something else landed on the branch
+      # during the scrape, merging the unit maps of two overlapping runs; what
+      # does not go together with what landed stops it, pushing nothing.
+      # `npm test` runs it against real repositories.
       - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots data/skyline.geojson data/unitmaps scraper/fixtures 2>/dev/null || git add data/snapshots
-          if git diff --cached --quiet; then
-            echo "Nothing changed."
-            exit 0
-          fi
-          git commit -m "data: snapshot $(date -u +%FT%TZ)"
-          # Something else may have landed on the branch while we scraped (a
-          # merge, another run). Snapshot files have unique names, so a rebase
-          # never conflicts — retry instead of losing the day's data.
-          pushed=false
-          for attempt in 1 2 3; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then pushed=true; break; fi
-            echo "Push rejected (attempt $attempt); rebasing onto origin/${GITHUB_REF_NAME} and trying again."
-            git pull --rebase origin "${GITHUB_REF_NAME}"
-          done
-          if [ "$pushed" != true ]; then
-            echo "::error::Could not push today's snapshot after 3 attempts."
-            exit 1
-          fi
+        run: bash .github/scripts/commit-snapshot.sh
 
       - name: Price alerts (GitHub issue → phone push via the GitHub app)
         continue-on-error: true # alerting must never fail the scrape
