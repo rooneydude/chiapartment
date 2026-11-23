@@ -208,37 +208,65 @@ describe("the refresh workflow keeps no logic of its own", () => {
     });
   });
 
+  /** deploy.yml as text, and the part of it that is one job (from its name to the next job's, comments included). */
+  const deployText = (): string => readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
+  const jobText = (job: string): string => {
+    const text = deployText();
+    const start = text.indexOf(`\n  ${job}:\n`);
+    expect(start, `deploy.yml has a job "${job}"`).toBeGreaterThan(-1);
+    const next = text.slice(start + 1).search(/\n  [a-z][\w-]*:\n/);
+    return next === -1 ? text.slice(start) : text.slice(start, start + 1 + next);
+  };
+
   it("the site is built by one command, whose first half this file runs, and then looked at", () => {
-    expect(jobNames("deploy.yml")).toEqual(["build", "deploy", "verify"]);
-    const build = readJob("deploy.yml", "build");
-    expect(build.keys).toEqual({ "runs-on": "ubuntu-latest", outputs: "", steps: "" });
-    expect(build.steps.filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run build", "npm run -s ci:built-at"]);
-    expect(stepNamed(build.steps, BUILT).keys).toEqual({ name: BUILT, id: "built" });
+    expect(jobNames("deploy.yml")).toEqual(["publish", "verify"]);
+    const publish = readJob("deploy.yml", "publish");
+    expect(publish.keys).toEqual({ "runs-on": "ubuntu-latest", concurrency: "", environment: "", outputs: "", steps: "" });
+    expect(publish.steps.filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run build", "npm run -s ci:built-at"]);
+    expect(stepNamed(publish.steps, BUILT).keys).toEqual({ name: BUILT, id: "built" });
     expect(scripts["build"]).toBe("npm run build:data && npm run -w web build");
 
-    // The last job is handed where the site is and what was built, by the two jobs before it.
-    const deploy = readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
-    expect(deploy).toContain("      built_at: ${{ steps.built.outputs.built_at }}\n");
-    expect(deploy).toContain("      page_url: ${{ steps.deployment.outputs.page_url }}\n");
+    // In this order: build, note what was built, hand the files over, publish.
+    // (A note taken before the build would be of the copy from before.)
+    const text = jobText("publish");
+    const order = ["- run: npm run build\n", "run: npm run -s ci:built-at\n", "uses: actions/upload-pages-artifact@v3\n", "uses: actions/deploy-pages@v4\n"].map((line) => text.indexOf(line));
+    expect(order.every((at) => at > -1), JSON.stringify(order)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+
+    // The last job is handed where the site is and what was built, by the job before it.
+    expect(text).toContain("      built_at: ${{ steps.built.outputs.built_at }}\n");
+    expect(text).toContain("      page_url: ${{ steps.deployment.outputs.page_url }}\n");
+    expect(text).toContain("      - id: deployment\n        uses: actions/deploy-pages@v4\n");
     const verify = readJob("deploy.yml", "verify");
-    expect(verify.keys).toEqual({ needs: "[build, deploy]", "runs-on": "ubuntu-latest", steps: "" });
+    expect(verify.keys).toEqual({ needs: "publish", "runs-on": "ubuntu-latest", steps: "" });
     expect(verify.steps.filter((s) => s.run !== null).map((s) => s.run)).toEqual(["npm ci", "npm run -s ci:verify-live"]);
     const look = stepNamed(verify.steps, LIVE);
     // not conditional, and not allowed to fail quietly: a page that is behind turns the run red
     expect(look.keys).toEqual({ name: LIVE });
-    expect(look.env).toEqual({ SITE_URL: "${{ needs.deploy.outputs.page_url }}", BUILT_AT: "${{ needs.build.outputs.built_at }}" });
+    expect(look.env).toEqual({ SITE_URL: "${{ needs.publish.outputs.page_url }}", BUILT_AT: "${{ needs.publish.outputs.built_at }}" });
   });
 
-  it("deployments wait for one another; none is cancelled while it publishes", () => {
+  it("deployments wait for one another; none is cancelled while it publishes, and none waits for another's check", () => {
     // Not something a test here can run: it is GitHub's own scheduling. What
     // can be held is the setting, and the reason for it (see deploy.yml): on
     // 23 Nov 2026 a deployment cancelled mid-publish left the site a
     // snapshot behind while the run that replaced it reported success.
-    const deploy = readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
-    expect(deploy).toMatch(/\nconcurrency:\n  group: pages\n(?:  #.*\n)*  cancel-in-progress: false\n/);
-    // and the build checks out the branch, not the commit that started the run:
-    // the refresh's own deployment has to carry the snapshot it has just pushed
-    expect(deploy).toContain("ref: ${{ github.ref_name }}");
+    const publish = jobText("publish");
+    expect(publish).toMatch(/\n    concurrency:\n      group: pages\n(?:      #.*\n)*      cancel-in-progress: false\n/);
+    // The queue is the publishing job's alone. Held by the whole workflow, it
+    // would also be held while a failing check looks for twelve minutes, and
+    // the deployment that would put the page right would wait behind it.
+    expect(deployText()).not.toMatch(/^concurrency:/m);
+    expect(jobText("verify")).not.toContain("concurrency");
+
+    // The build — inside the queue — checks out the branch, not the commit
+    // that started the run: the refresh's own deployment has to carry the
+    // snapshot it has just pushed. This is asked of the publishing job's own
+    // text: another job's checkout must not be able to stand in for it.
+    expect(publish).toMatch(/\n      - uses: actions\/checkout@v4\n        with:\n(?:          #.*\n)*          ref: \$\{\{ github\.ref_name \}\}\n/);
+    // The check needs no data from the branch, so its checkout names no ref
+    // (and so cannot satisfy the line above by accident, as it once did).
+    expect(jobText("verify")).not.toContain("ref:");
   });
 });
 
@@ -427,7 +455,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     expect(Number.isNaN(Date.parse(builtAt))).toBe(false);
 
     // The deploy workflow's own two steps. "Note what was built" hands the last job the time this copy was built…
-    const deployBuild = jobSteps("deploy.yml", "build");
+    const deployBuild = jobSteps("deploy.yml", "publish");
     const built = await p.run(stepNamed(deployBuild, BUILT), "schedule", {});
     expect(built.code, built.stderr).toBe(0);
     expect(built.written).toBe(`built_at=${builtAt}\n`);
@@ -439,7 +467,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     expect(look.run).toBe("npm run -s ci:verify-live");
     const site = await serveData(join(p.root, "web", "public", "data"));
     try {
-      const handed = { "needs.deploy.outputs.page_url": site.url, "needs.build.outputs.built_at": built.outputs["built_at"]! };
+      const handed = { "needs.publish.outputs.page_url": site.url, "needs.publish.outputs.built_at": built.outputs["built_at"]! };
       // First with two quick looks, so that a check which no longer knows its
       // own copy fails here in a second, not after twelve minutes of looking…
       const quick = await p.run(look, "schedule", handed, { append: " -- --attempts=2 --wait-ms=20" });
@@ -460,7 +488,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     const before = JSON.stringify({ ...config, health: { ...config.health, generated: earlier, snapshots: 1, latestSnapshot: yesterday.timestamp } });
     const behind = await serveData(join(p.root, "web", "public", "data"), { "config.json": before });
     try {
-      const handed = { "needs.deploy.outputs.page_url": behind.url, "needs.build.outputs.built_at": builtAt };
+      const handed = { "needs.publish.outputs.page_url": behind.url, "needs.publish.outputs.built_at": builtAt };
       const stale = await p.run(look, "schedule", handed, { append: " -- --attempts=3 --wait-ms=20" });
       expect(stale.code).toBe(1);
       expect(stale.stderr).toContain(
@@ -470,10 +498,10 @@ describe("the job from start to compiled data, command by command", { timeout: 3
 
       // Told nothing, the check does not pass: an empty hand-over means the
       // workflow's wiring is broken, and a check that passed then would pass for ever.
-      const untold = await p.run(look, "schedule", { "needs.deploy.outputs.page_url": behind.url, "needs.build.outputs.built_at": "" });
+      const untold = await p.run(look, "schedule", { "needs.publish.outputs.page_url": behind.url, "needs.publish.outputs.built_at": "" });
       expect(untold.code).toBe(1);
       expect(untold.stderr).toContain("::error::The build did not say when the site's copy was built (BUILT_AT is empty)");
-      const nowhere = await p.run(look, "schedule", { "needs.deploy.outputs.page_url": "", "needs.build.outputs.built_at": builtAt });
+      const nowhere = await p.run(look, "schedule", { "needs.publish.outputs.page_url": "", "needs.publish.outputs.built_at": builtAt });
       expect(nowhere.code).toBe(1);
       expect(nowhere.stderr).toContain("::error::The deployment did not say where the site is (SITE_URL is empty)");
       expect(behind.asked).toHaveLength(3); // neither looked anywhere
@@ -486,7 +514,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     const sameData = JSON.stringify({ ...config, health: { ...config.health, generated: earlier } });
     const codeBehind = await serveData(join(p.root, "web", "public", "data"), { "config.json": sameData });
     try {
-      const handed = { "needs.deploy.outputs.page_url": codeBehind.url, "needs.build.outputs.built_at": builtAt };
+      const handed = { "needs.publish.outputs.page_url": codeBehind.url, "needs.publish.outputs.built_at": builtAt };
       const stale = await p.run(look, "schedule", handed, { append: " -- --attempts=1" });
       expect(stale.code).toBe(1);
       expect(stale.stderr).toContain(`after one look at ${codeBehind.url} the site serves a copy built at ${earlier}, from the snapshot of ${today.timestamp}.`);
@@ -500,14 +528,14 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     const build = await p.run({ name: "build:data", run: "npm run -s build:data", env: {}, keys: {} } satisfies Step, "push", {});
     expect(build.code, build.stderr).toBe(0);
     const builtAt = (JSON.parse(readFileSync(join(p.root, "web", "public", "data", "config.json"), "utf8")) as CompiledConfig).health!.generated;
-    const built = await p.run(stepNamed(jobSteps("deploy.yml", "build"), BUILT), "push", {});
+    const built = await p.run(stepNamed(jobSteps("deploy.yml", "publish"), BUILT), "push", {});
     expect(built.code, built.stderr).toBe(0);
     expect(built.written).toBe(`built_at=${builtAt}\n`);
     expect(built.stdout).toContain(`The site's data was built at ${builtAt}, with no snapshot in it yet.`);
     const look = stepNamed(jobSteps("deploy.yml", "verify"), LIVE);
     const site = await serveData(join(p.root, "web", "public", "data"));
     try {
-      const handed = { "needs.deploy.outputs.page_url": site.url, "needs.build.outputs.built_at": built.outputs["built_at"]! };
+      const handed = { "needs.publish.outputs.page_url": site.url, "needs.publish.outputs.built_at": built.outputs["built_at"]! };
       const ran = await p.run(look, "push", handed, { append: " -- --attempts=2 --wait-ms=20" });
       expect(ran.code, ran.stderr).toBe(0);
       expect(ran.stdout).toContain(`The site serves a copy built at ${builtAt} (look 1).`);
@@ -521,7 +549,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     const look = stepNamed(jobSteps("deploy.yml", "verify"), LIVE);
     const site = await serveSilence();
     try {
-      const handed = { "needs.deploy.outputs.page_url": site.url, "needs.build.outputs.built_at": "2026-11-23T10:29:25.000Z" };
+      const handed = { "needs.publish.outputs.page_url": site.url, "needs.publish.outputs.built_at": "2026-11-23T10:29:25.000Z" };
       const started = Date.now();
       const silent = await p.run(look, "schedule", handed, { append: " -- --attempts=2 --wait-ms=10 --timeout-ms=300" });
       expect(silent.code).toBe(1);

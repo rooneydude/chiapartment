@@ -43,8 +43,9 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   compares Chicago calendar days.
 - **Deploy, and a look at the result.** Every refresh ends by rebuilding
   and publishing the site; so does every push to the published branch.
-  Deployments wait for one another. After each, a last job looks at the
-  live site and fails — saying what it found — unless the page is the copy
+  Deployments wait for one another: only one run at a time builds and
+  publishes. After each, a second job — outside that queue — looks at the
+  live site and fails, saying what it found, unless the page is the copy
   that was just built, or a later one (`scraper/src/verify-live.ts`). A red
   **verify** job means the page is behind, not that data was lost: every
   snapshot is committed before anything is deployed.

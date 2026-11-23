@@ -569,6 +569,14 @@ in the browser:
   a check that always passes. On 23 Nov it would have ended the run red,
   with the reason.
 
+  The queue is now the publishing job's alone (build and publish as one
+  job, one run at a time), and the check runs after it, outside the queue:
+  a deployment that fails its check does not hold up the one that would put
+  the page right. An independent review of the workflow asked for both
+  this and a test that had quietly stopped holding what it said it held
+  (that the build checks out the branch, not the commit the run started
+  from); each job's text is now read on its own.
+
 ---
 
 # Previous audit — 8 Sep 2026
