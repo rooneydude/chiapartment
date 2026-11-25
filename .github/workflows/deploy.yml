@@ -36,10 +36,11 @@ jobs:
       cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}
     outputs:
       built_at: ${{ steps.built.outputs.built_at }}
-      page_url: ${{ steps.deployment.outputs.page_url }}
+      # From the second try at publishing when there was one, else the first.
+      page_url: ${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,11 +61,40 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      # The archive carries the number of the attempt in its name. A job run
+      # again by hand ("Re-run failed jobs") uploads a second archive to the
+      # same run, and under one name for both, the publishing step finds two
+      # and refuses them (actions/deploy-pages issue 451).
       - uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: web/dist
+      # The publishing step asks GitHub for the archive once, and GitHub does
+      # not always know of an archive in the moment after taking it. Twice on
+      # 24 Nov 2026 the scheduled refresh scraped, committed, and then failed
+      # here: once the archive was not listed 0.3 s after it was stored (run
+      # 45306974744), once it was listed and the deployment made from it
+      # failed within five seconds (run 45510402909). The page stayed two
+      # snapshots behind. So: a pause before publishing, and a second try, a
+      # minute later, if the first fails. Only the first try may fail without
+      # ending the job; if the second fails too, the run is red.
+      - name: Give GitHub a moment to list the archive
+        run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+      - name: Wait before publishing a second time
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::notice::The first try at publishing failed (the error above is its own). Trying once more in a minute; the run turns red only if that fails too."
+          sleep 60
+      - id: again
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
   # A deployment that reports success has not thereby reached the page a
   # person opens: on 23 Nov 2026 one did not, and every step was green. This

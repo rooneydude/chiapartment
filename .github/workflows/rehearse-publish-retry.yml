@@ -1,0 +1,129 @@
+name: Rehearse the second try at publishing (temporary)
+
+# NOT part of the tracker, and removed before this pull request is merged.
+#
+# deploy.yml tries a second time when its publishing step fails. Nothing in
+# this repository can run GitHub's own conditions, so this runs that wiring
+# on GitHub's runners — the same ids, the same conditions, the same
+# expression for the address — with a stand-in for the publishing step, four
+# ways, and a last job that says whether each ended as deploy.yml needs.
+on:
+  pull_request:
+
+jobs:
+  # The first try fails before it has an address (the archive was not listed); the second works.
+  recovers:
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        continue-on-error: true
+        run: |
+          echo "::error::stand-in: the first try fails, with no address"
+          exit 1
+      - name: Wait before publishing a second time
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::notice::stand-in: trying once more"
+          echo waited > "$RUNNER_TEMP/waited"
+      - id: again
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          test -f "$RUNNER_TEMP/waited"
+          echo "page_url=https://example.test/second/" >> "$GITHUB_OUTPUT"
+
+  # The first try fails after it has given an address (a deployment was made, and then failed); the second works.
+  recovers-late:
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        continue-on-error: true
+        run: |
+          echo "page_url=https://example.test/first/" >> "$GITHUB_OUTPUT"
+          echo "::error::stand-in: the first try fails, having given an address"
+          exit 1
+      - name: Wait before publishing a second time
+        if: steps.deployment.outcome == 'failure'
+        run: echo waited > "$RUNNER_TEMP/waited"
+      - id: again
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          test -f "$RUNNER_TEMP/waited"
+          echo "page_url=https://example.test/second/" >> "$GITHUB_OUTPUT"
+
+  # The first try works: neither the wait nor the second try runs.
+  first-works:
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        continue-on-error: true
+        run: echo "page_url=https://example.test/first/" >> "$GITHUB_OUTPUT"
+      - name: Wait before publishing a second time
+        if: steps.deployment.outcome == 'failure'
+        run: echo waited > "$RUNNER_TEMP/waited"
+      - id: again
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo tried > "$RUNNER_TEMP/tried-again"
+          echo "page_url=https://example.test/second/" >> "$GITHUB_OUTPUT"
+      - name: Nothing waited and nothing was tried again
+        run: |
+          test ! -e "$RUNNER_TEMP/waited"
+          test ! -e "$RUNNER_TEMP/tried-again"
+
+  # Both tries fail: the job must end red.
+  both-fail:
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        continue-on-error: true
+        run: |
+          echo "::error::stand-in: the first try fails"
+          exit 1
+      - name: Wait before publishing a second time
+        if: steps.deployment.outcome == 'failure'
+        run: echo waited > "$RUNNER_TEMP/waited"
+      - id: again
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::error::stand-in: the second try fails too (this job is meant to end red)"
+          exit 1
+
+  # What deploy.yml's check would see after a publishing job that failed: nothing, because it is skipped.
+  after-both-fail:
+    needs: both-fail
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "this must not run"
+
+  verdict:
+    needs: [recovers, recovers-late, first-works, both-fail, after-both-fail]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Each ended as deploy.yml needs
+        env:
+          RECOVERS: ${{ needs.recovers.result }} ${{ needs.recovers.outputs.page_url }}
+          RECOVERS_LATE: ${{ needs.recovers-late.result }} ${{ needs.recovers-late.outputs.page_url }}
+          FIRST_WORKS: ${{ needs.first-works.result }} ${{ needs.first-works.outputs.page_url }}
+          BOTH_FAIL: ${{ needs.both-fail.result }} [${{ needs.both-fail.outputs.page_url }}]
+          AFTER_BOTH_FAIL: ${{ needs.after-both-fail.result }}
+        run: |
+          echo "recovers:        $RECOVERS"
+          echo "recovers-late:   $RECOVERS_LATE"
+          echo "first-works:     $FIRST_WORKS"
+          echo "both-fail:       $BOTH_FAIL"
+          echo "after-both-fail: $AFTER_BOTH_FAIL"
+          test "$RECOVERS" = "success https://example.test/second/"
+          test "$RECOVERS_LATE" = "success https://example.test/second/"
+          test "$FIRST_WORKS" = "success https://example.test/first/"
+          test "$BOTH_FAIL" = "failure []"
+          test "$AFTER_BOTH_FAIL" = "skipped"
+          echo "As deploy.yml needs, all five."

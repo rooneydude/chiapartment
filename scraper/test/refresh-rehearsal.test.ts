@@ -36,6 +36,8 @@ const COMMIT = "Commit results";
 const ALERTS = "Price alerts (GitHub issue → phone push via the GitHub app)";
 /** The deploy workflow's two steps of our own. */
 const BUILT = "Note what was built";
+const PAUSE = "Give GitHub a moment to list the archive";
+const WAIT = "Wait before publishing a second time";
 const LIVE = "The site serves what was deployed";
 
 /** What a stand-in site was asked: the path, the rest of the address, a header the check sends, and when. */
@@ -245,6 +247,16 @@ describe("the refresh workflow keeps no logic of its own", () => {
     });
   });
 
+  /** The name the site's archive is uploaded under and asked for by, and where the published site's address comes from. */
+  const ARCHIVE = "github-pages-${{ github.run_attempt }}";
+  const PUBLISHED_AT = "${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}";
+  /** What the run says, in its summary, when the first try at publishing failed. */
+  const SECOND_TRY_NOTICE =
+    'echo "::notice::The first try at publishing failed (the error above is its own). Trying once more in a minute; the run turns red only if that fails too."';
+  /** The steps of a job that are conditional or may fail without ending it, by id or else by name. */
+  const quietOrConditional = (job: { steps: { name: string; keys: Record<string, string> }[] }): string[] =>
+    job.steps.filter((s) => "if" in s.keys || "continue-on-error" in s.keys).map((s) => s.keys["id"] ?? s.name);
+
   /** deploy.yml as text, and the part of it that is one job (from its name to the next job's, comments included). */
   const deployText = (): string => readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
   const jobText = (job: string): string => {
@@ -269,7 +281,8 @@ describe("the refresh workflow keeps no logic of its own", () => {
     // second checkout after the first would put the tree back to the commit
     // the run started from, and the page would be built without the snapshot
     // the refresh had just pushed.) The note of what was built comes after
-    // the build and before the publishing.
+    // the build and before the publishing. (The pause, the two tries at
+    // publishing and the wait between them have a test of their own, below.)
     const what = (job: typeof publish): string[] => job.steps.map((s) => s.keys["uses"] ?? s.run ?? "");
     expect(what(publish)).toEqual([
       "actions/checkout@v4",
@@ -279,25 +292,97 @@ describe("the refresh workflow keeps no logic of its own", () => {
       "npm run -s ci:built-at",
       "actions/configure-pages@v5",
       "actions/upload-pages-artifact@v3",
+      "sleep 20",
+      "actions/deploy-pages@v4",
+      `${SECOND_TRY_NOTICE}\nsleep 60`,
       "actions/deploy-pages@v4",
     ]);
     expect(what(verify)).toEqual(["actions/checkout@v4", "actions/setup-node@v4", "npm ci", "npm run -s ci:verify-live"]);
-    // None of them conditional, none allowed to fail quietly: a page that is behind turns the run red.
-    for (const step of [...publish.steps, ...verify.steps]) {
-      expect(Object.keys(step.keys).filter((key) => key === "if" || key === "continue-on-error"), step.name).toEqual([]);
-    }
+    // None of them conditional and none allowed to fail quietly — but for the
+    // three steps that make up the second try at publishing, which are named
+    // here and held, word for word, in the test below. A page that is behind
+    // turns the run red.
+    expect(quietOrConditional(publish)).toEqual(["deployment", WAIT, "again"]);
+    expect(quietOrConditional(verify)).toEqual([]);
     expect(stepNamed(publish.steps, BUILT).keys).toEqual({ name: BUILT, id: "built" });
     expect(scripts["build"]).toBe("npm run build:data && npm run -w web build");
 
     // What is published is the built site, and the check is handed where it went and what was built.
     const text = jobText("publish");
-    expect(text).toContain("      - uses: actions/upload-pages-artifact@v3\n        with:\n          path: web/dist\n");
-    expect(text).toContain("      - id: deployment\n        uses: actions/deploy-pages@v4\n");
+    expect(text).toContain(`      - uses: actions/upload-pages-artifact@v3\n        with:\n          name: ${ARCHIVE}\n          path: web/dist\n`);
     expect(text).toContain("      built_at: ${{ steps.built.outputs.built_at }}\n");
-    expect(text).toContain("      page_url: ${{ steps.deployment.outputs.page_url }}\n");
+    expect(text).toContain(`      page_url: ${PUBLISHED_AT}\n`);
     const look = stepNamed(verify.steps, LIVE);
     expect(look.keys).toEqual({ name: LIVE });
     expect(look.env).toEqual({ SITE_URL: "${{ needs.publish.outputs.page_url }}", BUILT_AT: "${{ needs.publish.outputs.built_at }}" });
+  });
+
+  it("publishing waits for the archive to be listed, is tried a second time if the first try fails, and turns the run red if both do", () => {
+    // Not something a test here can run: the publishing step is GitHub's own
+    // action, and the conditions are in GitHub's own language. What is held
+    // is the wiring, word for word, and what each word is for. (The same
+    // wiring, with a stand-in for the publishing step, was run on GitHub's
+    // runners once, before it was merged: see AUDIT.md, 25 Nov 2026.)
+    //
+    // Why it is there: the action asks for the uploaded archive once, and
+    // GitHub does not always list an archive in the moment after taking it.
+    // On 24 Nov 2026 two scheduled refreshes in a row scraped, committed,
+    // and failed at this step, and the page stayed two snapshots behind.
+    const publish = readJob("deploy.yml", "publish");
+    const steps = publish.steps;
+    const at = (id: string): number => {
+      const found = steps.flatMap((s, i) => (s.keys["id"] === id ? [i] : []));
+      expect(found, `one step with the id "${id}"`).toHaveLength(1);
+      return found[0]!;
+    };
+    const upload = steps.findIndex((s) => s.keys["uses"] === "actions/upload-pages-artifact@v3");
+    const pause = steps.indexOf(stepNamed(steps, PAUSE));
+    const wait = steps.indexOf(stepNamed(steps, WAIT));
+    // In this order, with nothing in between, and nothing after.
+    expect([upload, pause, at("deployment"), wait, at("again")]).toEqual([upload, upload + 1, upload + 2, upload + 3, upload + 4]);
+    expect(at("again")).toBe(steps.length - 1);
+
+    // The pause is unconditional: every deployment gets it.
+    expect(stepNamed(steps, PAUSE).keys).toEqual({ name: PAUSE });
+    expect(stepNamed(steps, PAUSE).run).toBe("sleep 20");
+
+    // The first try may fail without ending the job — the one step here that
+    // may, and only because the second try follows when it does.
+    expect(steps[at("deployment")]!.keys).toEqual({ id: "deployment", uses: "actions/deploy-pages@v4", "continue-on-error": "true" });
+
+    // The wait and the second try run when the first try failed, and only
+    // then. `outcome` is the step's result before "may fail" is applied;
+    // `conclusion`, the result after it, reads "success" for a failed first
+    // try, and a condition written with it would never be true: a failed
+    // deployment would end the job green. Hence the exact words.
+    const FIRST_FAILED = "steps.deployment.outcome == 'failure'";
+    expect(stepNamed(steps, WAIT).keys).toEqual({ name: WAIT, if: FIRST_FAILED });
+    expect(stepNamed(steps, WAIT).run).toBe(`${SECOND_TRY_NOTICE}\nsleep 60`);
+    // The second try may NOT fail quietly: with both tries failed the job
+    // fails, the check after it is skipped, and the run is red.
+    expect(steps[at("again")]!.keys).toEqual({ id: "again", if: FIRST_FAILED, uses: "actions/deploy-pages@v4" });
+
+    // One archive, under one name, for the upload and both tries; the name
+    // carries the attempt, so a job run again by hand publishes its own
+    // archive instead of finding two under one name and refusing both.
+    const text = jobText("publish");
+    expect(ARCHIVE).toBe("github-pages-${{ github.run_attempt }}");
+    expect(text).toContain(`      - id: deployment\n        uses: actions/deploy-pages@v4\n        continue-on-error: true\n        with:\n          artifact_name: ${ARCHIVE}\n`);
+    expect(text).toContain(`      - id: again\n        if: ${FIRST_FAILED}\n        uses: actions/deploy-pages@v4\n        with:\n          artifact_name: ${ARCHIVE}\n`);
+    // (Ten spaces: the settings handed to a step. The environment's own name, `github-pages`, is not one of them.)
+    expect(text.match(/^ {10}(?:name|artifact_name): .*$/gm)).toEqual([
+      `          name: ${ARCHIVE}`,
+      `          artifact_name: ${ARCHIVE}`,
+      `          artifact_name: ${ARCHIVE}`,
+    ]);
+
+    // Where the site went is handed on from whichever try published it: the
+    // second when there was one, else the first. (A first try that failed
+    // after it had made a deployment has an address too; the second's comes
+    // first.) The same for the address shown beside the run.
+    expect(PUBLISHED_AT).toBe("${{ steps.again.outputs.page_url || steps.deployment.outputs.page_url }}");
+    expect(text).toContain(`    environment:\n      name: github-pages\n      url: ${PUBLISHED_AT}\n`);
+    expect(text.match(/^ +(?:url|page_url): .*$/gm)).toEqual([`      url: ${PUBLISHED_AT}`, `      page_url: ${PUBLISHED_AT}`]);
   });
 
   it("deployments wait for one another; none is cancelled while it publishes, and none waits for another's check", () => {
