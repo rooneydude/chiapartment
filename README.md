@@ -43,20 +43,24 @@ data/skyline.geojson ← OSM footprints+heights via Overpass (rare regeneration)
   compares Chicago calendar days.
 - **Deploy, and a look at the result.** Every refresh ends by rebuilding
   and publishing the site; so does every push to the published branch.
-  Deployments wait for one another: only one run at a time builds and
-  publishes. Publishing pauses twenty seconds after it has uploaded the
-  site and, if it fails, is tried once more a minute later: GitHub does
-  not always know of an upload in the moment after taking it, and its
-  publishing step asks only once (on 24 Nov 2026 two refreshes in a row
-  failed there). After each deployment a second job — outside that queue —
-  looks at the live site and fails, saying what it found, unless the page
-  is the copy that was just built, or a later one, and holds the newest
-  snapshot on the branch (`scraper/src/verify-live.ts`). A green run
-  therefore means the page shows the newest data there is. A red
-  **publish** job means the page was not updated, and a red **verify** job
-  that it is behind or could not be read; neither ever means that data was
-  lost: every snapshot is committed before anything is deployed, and the
-  next deployment publishes all of them.
+  Only one run at a time builds and publishes, and one more may wait its
+  turn. (A third arriving takes the waiting one's place, and that run ends
+  "cancelled" with nothing wrong: the next to run builds from the branch
+  as it is by then.) Publishing pauses twenty seconds after it has
+  uploaded the site and, if it fails, is tried once more a minute later:
+  GitHub does not always know of an upload in the moment after taking it,
+  and its publishing step asks only once (on 24 Nov 2026 two refreshes in
+  a row failed at that step, the first of them in this way). After each
+  deployment a second job — outside that queue — looks at the live site
+  and fails, saying what it found, unless the page is the copy that was
+  just built, or a later one, and holds the newest snapshot on the branch
+  (`scraper/src/verify-live.ts`). A green run therefore means the page
+  shows the newest data there is. A red **publish** job means publishing
+  was not confirmed and nothing has looked at the page, which is most
+  likely unchanged; a red **verify** job means the page is behind or could
+  not be read. Neither ever means that data was lost: every snapshot is
+  committed before anything is deployed, and the next deployment
+  publishes all of them.
 - **Weekday brief.** Compiled at build time as
   [`brief.json`](https://rooneydude.github.io/chiapartment/data/brief.json)
   (also `focusDelta` on each `data/buildings/<id>.json`). Studios + 2-beds
@@ -160,11 +164,14 @@ has been looked at there. `npm run test:browser` drives the built dashboard
 in Chromium against a few days of hand-made snapshots compiled by the real
 compiler; the 3D view is judged by its picture. Both run on every pull
 request. The two tries at publishing are GitHub's own steps under GitHub's
-own conditions, which nothing here can run: the test holds their wiring word
-for word, and says what each word is for. The check that follows a deployment is rehearsed too, against a
-stand-in for the live site: one that serves what was built, one that is a
-snapshot behind, one whose copy arrives a moment late, one built from the
-wrong commit, and one that takes the call and says nothing.
+own conditions, which nothing here can run: the test holds their wiring —
+every step, what it is handed, its conditions, and the permissions at the
+top of the file — and says what each part is for; the pause and the wait
+between the tries are run, with a stand-in for `sleep`. The check that
+follows a deployment is rehearsed too, against a stand-in for the live
+site: one that serves what was built, one that is a snapshot behind, one
+whose copy arrives a moment late, one built from the wrong commit, and one
+that takes the call and says nothing.
 
 ## Data status
 

@@ -1,2 +1,2 @@
-# 2026-11-25: first refresh whose publishing waits for the upload to be listed and is tried twice
+# 2026-11-25: first refresh whose publishing pauses after the upload and has a second try
 # (no flags: scrape all buildings)

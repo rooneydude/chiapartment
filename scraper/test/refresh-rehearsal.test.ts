@@ -34,7 +34,7 @@ const FLAGS = "Resolve flags (inputs or trigger file)";
 const SCRAPE = "Scrape";
 const COMMIT = "Commit results";
 const ALERTS = "Price alerts (GitHub issue → phone push via the GitHub app)";
-/** The deploy workflow's two steps of our own. */
+/** The deploy workflow's steps of our own: the note of what was built, the pause, the wait, and the look at the site. */
 const BUILT = "Note what was built";
 const PAUSE = "Give GitHub a moment to list the archive";
 const WAIT = "Wait before publishing a second time";
@@ -156,6 +156,15 @@ async function scrapeOffline(p: Project, event: string, flags: Ran): Promise<Ran
   return p.run(step, event, flagOutputs(flags), { append: " --fixtures" });
 }
 
+/** A stand-in for `sleep` that returns at once and only writes down how long it was asked to sleep. */
+function standInForSleep(p: Project): { path: string; slept: string } {
+  const bin = join(p.root, ".stand-in-sleep");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "sleep"), '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$SLEPT"\n');
+  chmodSync(join(bin, "sleep"), 0o755);
+  return { path: bin, slept: join(p.temp, "slept.txt") };
+}
+
 /** A stand-in for the `gh` program that only writes down how it was called. */
 function standInForGh(p: Project): { path: string; called: string } {
   const bin = join(p.root, ".stand-in");
@@ -239,6 +248,13 @@ describe("the refresh workflow keeps no logic of its own", () => {
     expect(refreshText).not.toContain("cancel-in-progress");
     // The site is rebuilt after every scrape, by the deploy workflow.
     expect(readJob("refresh.yml", "deploy").keys).toEqual({ needs: "scrape", uses: "./.github/workflows/deploy.yml", permissions: "" });
+    // What the run may do, and what of that it hands the deployment, whole:
+    // without `pages` or `id-token` no try at publishing can work, and a
+    // called workflow may be handed no more than its caller has.
+    expect(refreshText).toContain("\npermissions:\n  contents: write\n  pages: write\n  id-token: write\n  issues: write # price alerts\n\njobs:\n");
+    expect(refreshText).toContain(
+      "\n  deploy:\n    needs: scrape\n    uses: ./.github/workflows/deploy.yml\n    permissions:\n      contents: read\n      pages: write\n      id-token: write\n\n",
+    );
     expect(readJob("refresh.yml", "health").keys).toEqual({
       needs: "scrape",
       if: "needs.scrape.outputs.ok == '0'",
@@ -257,6 +273,13 @@ describe("the refresh workflow keeps no logic of its own", () => {
   const quietOrConditional = (job: { steps: { name: string; keys: Record<string, string> }[] }): string[] =>
     job.steps.filter((s) => "if" in s.keys || "continue-on-error" in s.keys).map((s) => s.keys["id"] ?? s.name);
 
+  /** A workflow's text without the lines that are only a comment. */
+  const bare = (text: string): string =>
+    text
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+
   /** deploy.yml as text, and the part of it that is one job (from its name to the next job's, comments included). */
   const deployText = (): string => readFileSync(join(REPO, ".github", "workflows", "deploy.yml"), "utf8");
   const jobText = (job: string): string => {
@@ -269,8 +292,15 @@ describe("the refresh workflow keeps no logic of its own", () => {
 
   it("the site is built by one command, whose first half this file runs, and then looked at", () => {
     expect(jobNames("deploy.yml")).toEqual(["publish", "verify"]);
-    // Started three ways: by a push to the published branch, by hand, and by the refresh.
-    expect(deployText()).toMatch(/^on:\n  push:\n    branches: \[claude\/repo-reset-4my0gv, main\]\n  workflow_dispatch:\n  workflow_call:/m);
+    // Started three ways and no other — by a push to the published branch, by
+    // hand, and by the refresh — and allowed three things and no others:
+    // without `pages` or `id-token` no try at publishing can work. The top
+    // of the file whole, comments aside.
+    expect(
+      bare(deployText()).startsWith(
+        "name: Deploy dashboard\n\non:\n  push:\n    branches: [claude/repo-reset-4my0gv, main]\n  workflow_dispatch:\n  workflow_call: # chained from refresh.yml after it pushes new data\n\npermissions:\n  contents: read\n  pages: write\n  id-token: write\n\njobs:\n",
+      ),
+    ).toBe(true);
 
     const publish = readJob("deploy.yml", "publish");
     const verify = readJob("deploy.yml", "verify");
@@ -298,10 +328,38 @@ describe("the refresh workflow keeps no logic of its own", () => {
       "actions/deploy-pages@v4",
     ]);
     expect(what(verify)).toEqual(["actions/checkout@v4", "actions/setup-node@v4", "npm ci", "npm run -s ci:verify-live"]);
-    // None of them conditional and none allowed to fail quietly — but for the
-    // three steps that make up the second try at publishing, which are named
-    // here and held, word for word, in the test below. A page that is behind
-    // turns the run red.
+    // What each of GitHub's own steps is handed, whole. A setting added to
+    // one of them — a time limit in the wrong unit, another token, a
+    // checkout of part of the tree (which would leave the check without the
+    // snapshots it holds the page to) — changes what runs as surely as a
+    // new step does.
+    const branch = { ref: "${{ github.ref_name }}" };
+    const node = { "node-version": "22", cache: "npm" };
+    expect(publish.steps.map((s) => s.with)).toEqual([
+      branch,
+      node,
+      {},
+      {},
+      {},
+      { enablement: "true" },
+      { name: ARCHIVE, path: "web/dist" },
+      {},
+      { artifact_name: ARCHIVE },
+      {},
+      { artifact_name: ARCHIVE },
+    ]);
+    expect(verify.steps.map((s) => s.with)).toEqual([branch, node, {}, {}]);
+    // No step is given variables of its own but the look at the site.
+    expect([...publish.steps, ...verify.steps].filter((s) => Object.keys(s.env).length > 0).map((s) => s.name)).toEqual([LIVE]);
+    // Each job's own settings, whole (comments aside): nothing added, nothing written twice.
+    expect(bare(jobText("publish"))).toContain(
+      `\n  publish:\n    runs-on: ubuntu-latest\n    concurrency:\n      group: pages\n      cancel-in-progress: false\n    environment:\n      name: github-pages\n      url: ${PUBLISHED_AT}\n    outputs:\n      built_at: \${{ steps.built.outputs.built_at }}\n      page_url: ${PUBLISHED_AT}\n    steps:\n`,
+    );
+    expect(bare(jobText("verify"))).toContain("\n  verify:\n    needs: publish\n    runs-on: ubuntu-latest\n    steps:\n");
+    // None of the steps conditional and none allowed to fail quietly — but
+    // for the first try at publishing, the wait and the second try, which
+    // are named here and held in the test below. A page that is behind turns
+    // the run red.
     expect(quietOrConditional(publish)).toEqual(["deployment", WAIT, "again"]);
     expect(quietOrConditional(verify)).toEqual([]);
     expect(stepNamed(publish.steps, BUILT).keys).toEqual({ name: BUILT, id: "built" });
@@ -317,17 +375,20 @@ describe("the refresh workflow keeps no logic of its own", () => {
     expect(look.env).toEqual({ SITE_URL: "${{ needs.publish.outputs.page_url }}", BUILT_AT: "${{ needs.publish.outputs.built_at }}" });
   });
 
-  it("publishing waits for the archive to be listed, is tried a second time if the first try fails, and turns the run red if both do", () => {
+  it("publishing pauses after the upload, is tried a second time if the first try fails, and turns the run red if both do", () => {
     // Not something a test here can run: the publishing step is GitHub's own
     // action, and the conditions are in GitHub's own language. What is held
-    // is the wiring, word for word, and what each word is for. (The same
-    // wiring, with a stand-in for the publishing step, was run on GitHub's
-    // runners once, before it was merged: see AUDIT.md, 25 Nov 2026.)
+    // is the wiring — each step, what it is handed, its conditions — and
+    // what each part is for. (The conditions, the ids and the hand-over of
+    // the address were run on GitHub's runners once, with a stand-in for the
+    // publishing step, before this was merged; the upload, the archive's
+    // name and the pause were not. See AUDIT.md, 24 Nov 2026.)
     //
     // Why it is there: the action asks for the uploaded archive once, and
     // GitHub does not always list an archive in the moment after taking it.
     // On 24 Nov 2026 two scheduled refreshes in a row scraped, committed,
-    // and failed at this step, and the page stayed two snapshots behind.
+    // and failed at this step — the first of them that way — and the page
+    // was left two snapshots behind.
     const publish = readJob("deploy.yml", "publish");
     const steps = publish.steps;
     const at = (id: string): number => {
@@ -362,19 +423,18 @@ describe("the refresh workflow keeps no logic of its own", () => {
     // fails, the check after it is skipped, and the run is red.
     expect(steps[at("again")]!.keys).toEqual({ id: "again", if: FIRST_FAILED, uses: "actions/deploy-pages@v4" });
 
-    // One archive, under one name, for the upload and both tries; the name
-    // carries the attempt, so a job run again by hand publishes its own
-    // archive instead of finding two under one name and refusing both.
+    // One archive, under one name, for the upload and both tries, and
+    // nothing else handed to any of the three. The name carries the attempt,
+    // so that a job run again by hand asks for its own archive: under one
+    // name for every attempt it would, by the report on the action's own
+    // tracker, find two and refuse both.
     const text = jobText("publish");
     expect(ARCHIVE).toBe("github-pages-${{ github.run_attempt }}");
+    expect(steps[upload]!.with).toEqual({ name: ARCHIVE, path: "web/dist" });
+    expect(steps[at("deployment")]!.with).toEqual({ artifact_name: ARCHIVE });
+    expect(steps[at("again")]!.with).toEqual({ artifact_name: ARCHIVE });
     expect(text).toContain(`      - id: deployment\n        uses: actions/deploy-pages@v4\n        continue-on-error: true\n        with:\n          artifact_name: ${ARCHIVE}\n`);
     expect(text).toContain(`      - id: again\n        if: ${FIRST_FAILED}\n        uses: actions/deploy-pages@v4\n        with:\n          artifact_name: ${ARCHIVE}\n`);
-    // (Ten spaces: the settings handed to a step. The environment's own name, `github-pages`, is not one of them.)
-    expect(text.match(/^ {10}(?:name|artifact_name): .*$/gm)).toEqual([
-      `          name: ${ARCHIVE}`,
-      `          artifact_name: ${ARCHIVE}`,
-      `          artifact_name: ${ARCHIVE}`,
-    ]);
 
     // Where the site went is handed on from whichever try published it: the
     // second when there was one, else the first. (A first try that failed
@@ -385,11 +445,39 @@ describe("the refresh workflow keeps no logic of its own", () => {
     expect(text.match(/^ +(?:url|page_url): .*$/gm)).toEqual([`      url: ${PUBLISHED_AT}`, `      page_url: ${PUBLISHED_AT}`]);
   });
 
+  it("the pause and the wait run as written: twenty seconds, then a notice and sixty more", async () => {
+    // These two commands are this repository's own, so they are run, as the
+    // runner runs them — with a stand-in for `sleep` that returns at once
+    // and writes down what it was asked for. (Whether the wait runs at all
+    // is GitHub's to decide, from the condition held above.)
+    const p = new Project("pause");
+    try {
+      const sleep = standInForSleep(p);
+      const steps = jobSteps("deploy.yml", "publish");
+      const pause = await p.run(stepNamed(steps, PAUSE), "schedule", {}, { path: sleep.path, env: { SLEPT: sleep.slept } });
+      expect({ code: pause.code, stdout: pause.stdout, stderr: pause.stderr }).toEqual({ code: 0, stdout: "", stderr: "" });
+      expect(readFileSync(sleep.slept, "utf8")).toBe("20\n");
+
+      const wait = await p.run(stepNamed(steps, WAIT), "schedule", {}, { path: sleep.path, env: { SLEPT: sleep.slept } });
+      expect({ code: wait.code, stderr: wait.stderr }).toEqual({ code: 0, stderr: "" });
+      // One line for the run's summary, saying what is about to happen and what would turn the run red.
+      expect(wait.stdout).toBe(
+        "::notice::The first try at publishing failed (the error above is its own). Trying once more in a minute; the run turns red only if that fails too.\n",
+      );
+      expect(readFileSync(sleep.slept, "utf8")).toBe("20\n60\n");
+    } finally {
+      p.remove();
+    }
+  });
+
   it("deployments wait for one another; none is cancelled while it publishes, and none waits for another's check", () => {
     // Not something a test here can run: it is GitHub's own scheduling. What
     // can be held is the setting, and the reason for it (see deploy.yml): on
     // 23 Nov 2026 a deployment cancelled mid-publish left the site a
     // snapshot behind while the run that replaced it reported success.
+    // (One deployment may wait. A third arriving takes the waiting one's
+    // place, by GitHub's rule; the one that then runs builds from the branch
+    // as it is by then, so nothing is left out of the page.)
     const publish = jobText("publish");
     expect(publish).toMatch(/\n    concurrency:\n      group: pages\n(?:      #.*\n)*      cancel-in-progress: false\n/);
     // The queue is the publishing job's alone. Held by the whole workflow, it
@@ -573,7 +661,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
     ]);
 
     // The deploy job's "npm run build", first half: the site's data.
-    const build = await p.run({ name: "build:data", run: "npm run -s build:data", env: {}, keys: {} } satisfies Step, "schedule", {});
+    const build = await p.run({ name: "build:data", run: "npm run -s build:data", env: {}, with: {}, keys: {} } satisfies Step, "schedule", {});
     expect(build.code, build.stderr).toBe(0);
     const compiled = <T>(path: string): T => JSON.parse(readFileSync(join(p.root, "web", "public", "data", path), "utf8")) as T;
     const config = compiled<CompiledConfig>("config.json");
@@ -722,7 +810,7 @@ describe("the job from start to compiled data, command by command", { timeout: 3
 
   it("a project with no snapshot yet builds, says so, and its site is checked like any other", async () => {
     const p = project("empty");
-    const build = await p.run({ name: "build:data", run: "npm run -s build:data", env: {}, keys: {} } satisfies Step, "push", {});
+    const build = await p.run({ name: "build:data", run: "npm run -s build:data", env: {}, with: {}, keys: {} } satisfies Step, "push", {});
     expect(build.code, build.stderr).toBe(0);
     const builtAt = (JSON.parse(readFileSync(join(p.root, "web", "public", "data", "config.json"), "utf8")) as CompiledConfig).health!.generated;
     const built = await p.run(stepNamed(jobSteps("deploy.yml", "publish"), BUILT), "push", {});

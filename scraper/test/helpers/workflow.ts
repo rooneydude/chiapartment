@@ -16,7 +16,14 @@ import { join } from "node:path";
  * or workflow). A workflow changed in such a way fails the tests that read
  * it instead of quietly escaping them. What it does hand over without
  * acting on it — a step's or job's `if:`, `continue-on-error:` — is in
- * `keys`, for the tests to pin.
+ * `keys`, and what a step hands to an action — its `with:` block — in
+ * `with`, for the tests to pin.
+ *
+ * It also refuses what GitHub itself refuses or reads differently from the
+ * eye: a key written twice (GitHub rejects the file; the last one would win
+ * here), `with:` on a step that runs a command, and white space other than
+ * a plain space (YAML keeps a no-break space that `trim()` drops). A file
+ * GitHub rejects stops every run of it.
  */
 
 export const REPO = join(__dirname, "..", "..", "..");
@@ -28,6 +35,8 @@ export interface Step {
   run: string | null;
   /** The step's `env:` block as written (expressions not filled in). */
   env: Record<string, string>;
+  /** The step's `with:` block as written: what a `uses:` step hands to its action. */
+  with: Record<string, string>;
   /** Its other keys: `id`, `if`, `uses`, `continue-on-error`. */
   keys: Record<string, string>;
 }
@@ -57,7 +66,8 @@ function keyValue(line: string, file: string): [key: string, value: string] {
 }
 
 function readStep(lines: string[], file: string): Step {
-  const step: Step = { name: "", run: null, env: {}, keys: {} };
+  const step: Step = { name: "", run: null, env: {}, with: {}, keys: {} };
+  const seen = new Set<string>();
   let i = 0;
   while (i < lines.length) {
     const line = lines[i]!;
@@ -70,6 +80,8 @@ function readStep(lines: string[], file: string): Step {
     if (!STEP_KEYS.has(key)) {
       throw new Error(`${file}: a step sets "${key}", which the tests that run the workflow's commands do not reproduce: ${JSON.stringify(line)}`);
     }
+    if (seen.has(key)) throw new Error(`${file}: a step sets "${key}" twice, which GitHub refuses: ${JSON.stringify(line)}`);
+    seen.add(key);
     i++;
     if (key === "run" && value === "|") {
       const block: string[] = [];
@@ -82,10 +94,14 @@ function readStep(lines: string[], file: string): Step {
       step.run = value;
     } else if (key === "env" || key === "with") {
       if (value !== "") throw new Error(`${file}: expected a block under ${key}: ${JSON.stringify(line)}`);
+      // One `name: value` a line, at ten spaces, each name once: a value continued on a second line is refused.
+      const into = key === "env" ? step.env : step.with;
       while (i < lines.length && (isNoise(lines[i]!) || indent(lines[i]!) >= 10)) {
-        if (!isNoise(lines[i]!) && key === "env") {
+        if (!isNoise(lines[i]!)) {
+          if (indent(lines[i]!) !== 10) throw new Error(`${file}: cannot read this line under ${key}: ${JSON.stringify(lines[i])}`);
           const [name, written] = keyValue(lines[i]!, file);
-          step.env[name] = unquote(written);
+          if (name in into) throw new Error(`${file}: "${name}" is written twice under ${key}, which GitHub refuses.`);
+          into[name] = unquote(written);
         }
         i++;
       }
@@ -93,18 +109,23 @@ function readStep(lines: string[], file: string): Step {
       step.keys[key] = unquote(value.replace(/\s+#.*$/, ""));
     }
   }
+  if (step.run !== null && seen.has("with")) throw new Error(`${file}: a step that runs a command also has "with", which GitHub refuses.`);
   step.name = step.keys["name"] ?? step.run ?? step.keys["uses"] ?? "";
   return step;
 }
 
 function workflowLines(file: string): string[] {
   const lines = readFileSync(join(REPO, ".github", "workflows", file), "utf8").split("\n");
+  const seen = new Set<string>();
   for (const line of lines) {
+    if (/[^\S ]/.test(line)) throw new Error(`${file}: white space other than a plain space in ${JSON.stringify(line)}`);
     if (isNoise(line) || indent(line) !== 0) continue;
     const [key] = keyValue(line, file);
     if (!WORKFLOW_KEYS.has(key)) {
       throw new Error(`${file}: the workflow sets "${key}", which the tests that run its commands do not reproduce.`);
     }
+    if (seen.has(key)) throw new Error(`${file}: the workflow sets "${key}" twice, which GitHub refuses.`);
+    seen.add(key);
   }
   return lines;
 }
@@ -140,6 +161,7 @@ export function readJob(file: string, job: string): Job {
     if (!JOB_KEYS.has(key)) {
       throw new Error(`${file}: the job "${job}" sets "${key}", which the tests that run the workflow's commands do not reproduce.`);
     }
+    if (key in keys) throw new Error(`${file}: the job "${job}" sets "${key}" twice, which GitHub refuses.`);
     keys[key] = unquote(value.replace(/\s+#.*$/, ""));
   }
   const steps: Step[] = [];
