@@ -654,6 +654,112 @@ in the browser:
   library. Both concern input a stranger controls, which neither is given
   here; they are left for a change of their own.
 
+- **24 Nov 2026 — two refreshes scraped and committed, and neither
+  reached the page.** The scheduled run of 23 Nov started at 01:42 UTC on
+  the 24th, eleven and a half hours late, and that of 24 Nov at 23:29 UTC.
+  Each read six of six buildings and committed its snapshot. Each then
+  failed at the publishing step, so the check after it, which looks at
+  the page, never ran. Both runs were red, and nothing in the tracker
+  told the owner. The page went on serving the build of 23 Nov 17:48
+  UTC: one snapshot behind from 01:43 UTC on the 24th, two from 23:32,
+  and still so when this was written, early on the 25th.
+
+  - Run 45306974744: the publishing step asked GitHub for the site's
+    archive 0.3 s after the upload step had stored it, and was told there
+    was none ("Found 0 artifact(s)"). The archive was there: GitHub listed
+    it the next day.
+  - Run 45510402909: the archive was listed and a deployment was made
+    from it; five seconds later GitHub reported that deployment failed
+    ("try again later"). It does not say why.
+
+  The first is a known fault. The publishing step asks for the archive
+  once (the action's source, at the version used here, has no second
+  look), and GitHub does not always know of an archive in the moment
+  after taking it: an open report on the action's own tracker
+  (actions/deploy-pages 451), where a change that would have it look
+  again, for fifteen seconds, was proposed on 12 Nov and is not merged.
+  The cause on this side: since 23 Nov the upload and the publishing have
+  been consecutive steps of one job — so that one queue covers the build
+  and the publishing, see above — where before they were two jobs with a
+  job's start-up between them.
+
+  The run records bear that out. Under the two-job layout, from August
+  to 23 Nov, 143 runs ended green, and in no run of that layout did the
+  publishing step fail (three times it was cut short by a newer run,
+  under the old cancelling rule); in the two runs that were measured it
+  asked for the archive 8.5 and 9.0 s after the upload had stored it.
+  Under the one-job layout it asked 0.3 to 0.5 s after, in all five runs
+  there have been, and two of the five failed: the first of them the run
+  with the shortest gap of all.
+
+  The second failure is another open report there (418), and its cause
+  is not known. It may be the same lateness met further along (GitHub had
+  taken more than twice as long as usual to finish storing that archive:
+  0.9 s, against 0.3 to 0.4), or have nothing to do with timing: three
+  runs that asked sooner than it did were green. Whether GitHub itself
+  was in trouble at either time is not known either; its status page
+  cannot be read from here.
+
+  What was done. The job stays one job; the reasons for that stand. It
+  now pauses twenty seconds after the upload, for the first kind of
+  failure, and if publishing fails it waits a minute and tries once
+  more. Only the first try may fail without ending the job: with both
+  failed the run is red, as before. The second try sends the same
+  archive under the same deployment id (the commit's), so it is known to
+  help when the archive was not listed, and only hoped to when GitHub
+  fails the deployment itself; where it does not, the next refresh,
+  which is a new commit, publishes everything. Whichever try publishes,
+  the check after it reads the page.
+
+  The archive is now named after the attempt. By the report on the
+  action's tracker, a job run again by hand uploads a second archive to
+  the same run, and under one name for both the publishing step finds
+  two and refuses them; if so, "re-run the deployment", the remedy the
+  first error message recommends, would have failed here as well. That
+  was not tried.
+
+  How far it is known to work. The conditions that decide whether the
+  second try runs are in GitHub's own language, which nothing in this
+  repository can run. So the tests hold the wiring (every step, what it
+  is handed, its conditions) and say what each part is for; and the
+  conditions, the ids and the hand-over of the address were run on
+  GitHub's own runners before this was merged, with a stand-in for the
+  publishing step (pull request 105, run 45515495271): a first try that
+  fails before it has an address, and one that fails after giving one,
+  each followed by a second that works — the job is green and hands on
+  the second's address; a first try that works — nothing else runs;
+  both failing — the job is red, and the job that depends on it is
+  skipped.
+
+  Not exercised before merging, because each takes the real thing: an
+  archive under its new name sent to GitHub Pages (every deployment from
+  the merge's own onward depends on it; the action's source and another
+  project's runs say it is accepted); a second try against the real
+  publishing step; a job run again by hand; and whether twenty seconds
+  is always enough.
+
+  An independent review found no way for a page that was not published,
+  or is behind, to pass as green. It did find statements here and in the
+  code that said more than had been seen, which are put right above, and
+  tests that held less than they claimed: a setting added to one of
+  GitHub's own steps (a time limit, another token, a checkout of part of
+  the tree), a permission removed, a key written twice — none of these
+  failed a test. The reader the tests use now hands over what each step
+  is given and refuses what GitHub would refuse; the top of both workflow
+  files and each job's own settings are held whole; and the pause and
+  the wait are run, with a stand-in for `sleep`. Of the reviewer's 134
+  deliberate breaks 126 now fail a test, where 78 did; the eight left
+  are the same thing to GitHub (a value in quotes, a comment, the same
+  keys in another order, a one-line command written as a block, an id
+  that nothing asks for). The author's own 34 fail as before.
+
+  Left as it is: the queue holds one deployment waiting, and a third
+  arriving takes its place (that run ends "cancelled"; the page still
+  ends right, because whichever runs next builds from the branch as it
+  is by then). GitHub can keep more waiting (`queue: max`). That is not
+  used: it has only been read about, and a key GitHub refused would stop
+  every deployment and, very likely, every refresh with them.
+
 ---
 
 # Previous audit — 8 Sep 2026
