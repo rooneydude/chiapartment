@@ -654,6 +654,72 @@ in the browser:
   library. Both concern input a stranger controls, which neither is given
   here; they are left for a change of their own.
 
+- **24 Nov 2026 — two refreshes scraped and committed, and neither
+  reached the page.** The scheduled run of 23 Nov started at 01:42 UTC on
+  the 24th, eleven and a half hours late, and that of 24 Nov at 23:29 UTC.
+  Each read six of six buildings and committed its snapshot. Each then
+  failed at the publishing step, so the check after it, which looks at
+  the page, never ran. Both runs were red, and nothing told the owner.
+  The page went on serving the build of 23 Nov 17:48 UTC: one snapshot
+  behind from 01:43 UTC on the 24th and two from 23:32, about a day in
+  all, until the deployment that followed this change.
+
+  - Run 45306974744: the publishing step asked GitHub for the site's
+    archive 0.3 s after the upload step had stored it, and was told there
+    was none ("Found 0 artifact(s)").
+  - Run 45510402909: the archive was listed and a deployment was made
+    from it; five seconds later GitHub reported that deployment failed
+    ("try again later"). It does not say why.
+
+  The publishing step asks for the archive once (the action's source, at
+  the version used here, has no second look), and GitHub does not always
+  know of an archive in the moment after taking it. Both failures are
+  open reports on the action's own tracker (actions/deploy-pages 451 and
+  418); a change that would have it look again, for fifteen seconds, was
+  proposed there on 12 Nov and is not merged. The cause on this side:
+  since 23 Nov the upload and the publishing have been consecutive steps
+  of one job — so that one queue covers the build and the publishing,
+  see above — where before they were two jobs with a job's start-up
+  between them.
+
+  The run records bear that out. Under the two-job layout, from August
+  to 23 Nov, 143 runs published and the publishing step failed in none
+  of them; in the two that were measured it asked for the archive 8.5
+  and 9.0 s after the upload had stored it. Under the one-job layout it
+  asked 0.3 to 0.5 s after, in all five runs there have been, and two of
+  the five failed: the first of them the run with the shortest gap of
+  all, for an archive that GitHub lists today. In the second, GitHub had
+  taken more than twice as long as usual to finish storing the archive
+  (0.9 s, against 0.3 to 0.4).
+
+  What was done. The job stays one job; the reasons for that stand. It
+  now pauses twenty seconds after the upload, and if publishing fails it
+  waits a minute and tries once more. Only the first try may fail
+  without ending the job: with both failed the run is red, as before.
+  The archive is named after the attempt, because a job run again by
+  hand uploads a second archive to the same run, and under one name for
+  both the publishing step finds two and refuses them. "Re-run the
+  deployment", the remedy the first error message recommends, could not
+  have worked here.
+
+  How it is known to work. The conditions that decide whether the second
+  try runs are in GitHub's own language, which nothing in this
+  repository can run. So the tests hold the wiring word for word (34
+  deliberate breaks of it, each one caught), and the same wiring, with a
+  stand-in for the publishing step, was run on GitHub's own runners
+  before it was merged (pull request 105, run 45515495271): a first try
+  that fails before it has an address, and one that fails after giving
+  one, each followed by a second that works — the job is green and hands
+  on the second's address; a first try that works — nothing else runs;
+  both failing — the job is red, and the job that depends on it is
+  skipped.
+
+  Not known: whether GitHub itself was in trouble at those two times (its
+  status page cannot be read from here), and so whether the second
+  failure had to do with timing at all. The second try is there for that
+  case too. Not exercised: a second try against the real publishing
+  step, which takes a real failure to see.
+
 ---
 
 # Previous audit — 8 Sep 2026

@@ -1,2 +1,2 @@
-# 2026-11-23: first refresh with deployments queued and the live site looked at after each
+# 2026-11-25: first refresh whose publishing waits for the upload to be listed and is tried twice
 # (no flags: scrape all buildings)

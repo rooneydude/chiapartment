@@ -72,12 +72,15 @@ jobs:
       # The publishing step asks GitHub for the archive once, and GitHub does
       # not always know of an archive in the moment after taking it. Twice on
       # 24 Nov 2026 the scheduled refresh scraped, committed, and then failed
-      # here: once the archive was not listed 0.3 s after it was stored (run
-      # 45306974744), once it was listed and the deployment made from it
-      # failed within five seconds (run 45510402909). The page stayed two
-      # snapshots behind. So: a pause before publishing, and a second try, a
-      # minute later, if the first fails. Only the first try may fail without
-      # ending the job; if the second fails too, the run is red.
+      # here: once the archive, asked for 0.3 s after it was stored, was not
+      # listed (run 45306974744); once it was listed, and the deployment made
+      # from it was reported failed five seconds later (run 45510402909). The
+      # page stayed behind for a day. While building and publishing were two
+      # jobs, with nine seconds between the upload and the asking, this step
+      # failed in none of 143 runs. So: a pause before publishing, and a
+      # second try, a minute later, if the first fails. Only the first try
+      # may fail without ending the job; if the second fails too, the run is
+      # red.
       - name: Give GitHub a moment to list the archive
         run: sleep 20
       - id: deployment
