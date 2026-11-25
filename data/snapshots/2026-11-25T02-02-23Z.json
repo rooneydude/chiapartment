@@ -1,0 +1,2816 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-11-25T02:02:23Z",
+  "buildings": [
+    {
+      "buildingId": "1225-old-town",
+      "status": "ok",
+      "source": {
+        "adapter": "sightmap",
+        "fetchedUrl": "https://sightmap.com/app/api/v1/60p7xoklv7n/sightmaps/87594",
+        "requests": 19
+      },
+      "units": [
+        {
+          "unitNumber": "0406",
+          "floorplanName": "bhra3.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 703,
+          "price": 3119,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4035
+            },
+            {
+              "months": 3,
+              "price": 3669
+            },
+            {
+              "months": 4,
+              "price": 3485
+            },
+            {
+              "months": 5,
+              "price": 3375
+            },
+            {
+              "months": 6,
+              "price": 4498
+            },
+            {
+              "months": 7,
+              "price": 3250
+            },
+            {
+              "months": 8,
+              "price": 4212
+            },
+            {
+              "months": 9,
+              "price": 4428
+            },
+            {
+              "months": 10,
+              "price": 3156
+            },
+            {
+              "months": 11,
+              "price": 3136
+            },
+            {
+              "months": 12,
+              "price": 3119
+            },
+            {
+              "months": 13,
+              "price": 3119
+            },
+            {
+              "months": 14,
+              "price": 3119
+            },
+            {
+              "months": 15,
+              "price": 3119
+            },
+            {
+              "months": 16,
+              "price": 3119
+            },
+            {
+              "months": 17,
+              "price": 3119
+            },
+            {
+              "months": 18,
+              "price": 3119
+            }
+          ],
+          "availableDate": "2027-02-16",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-02-16&UnitId=56&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0417",
+          "floorplanName": "bhre8.1 Convertible",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": 1,
+          "sqft": 595,
+          "price": 2767,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 3524
+            },
+            {
+              "months": 3,
+              "price": 3240
+            },
+            {
+              "months": 4,
+              "price": 3098
+            },
+            {
+              "months": 5,
+              "price": 3013
+            },
+            {
+              "months": 6,
+              "price": 4035
+            },
+            {
+              "months": 7,
+              "price": 2915
+            },
+            {
+              "months": 8,
+              "price": 3788
+            },
+            {
+              "months": 9,
+              "price": 3987
+            },
+            {
+              "months": 10,
+              "price": 2842
+            },
+            {
+              "months": 11,
+              "price": 2827
+            },
+            {
+              "months": 12,
+              "price": 2814
+            },
+            {
+              "months": 13,
+              "price": 2803
+            },
+            {
+              "months": 14,
+              "price": 2794
+            },
+            {
+              "months": 15,
+              "price": 2786
+            },
+            {
+              "months": 16,
+              "price": 2779
+            },
+            {
+              "months": 17,
+              "price": 2772
+            },
+            {
+              "months": 18,
+              "price": 2767
+            }
+          ],
+          "availableDate": "2027-02-23",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-02-23&UnitId=243&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0509",
+          "floorplanName": "bhra14.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 941,
+          "price": 3678,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4892
+            },
+            {
+              "months": 3,
+              "price": 8832
+            },
+            {
+              "months": 4,
+              "price": 4202
+            },
+            {
+              "months": 5,
+              "price": 3973
+            },
+            {
+              "months": 6,
+              "price": 3876
+            },
+            {
+              "months": 7,
+              "price": 3808
+            },
+            {
+              "months": 8,
+              "price": 3769
+            },
+            {
+              "months": 9,
+              "price": 4720
+            },
+            {
+              "months": 10,
+              "price": 4699
+            },
+            {
+              "months": 11,
+              "price": 4591
+            },
+            {
+              "months": 12,
+              "price": 4829
+            },
+            {
+              "months": 13,
+              "price": 3678
+            },
+            {
+              "months": 14,
+              "price": 3705
+            },
+            {
+              "months": 15,
+              "price": 3678
+            },
+            {
+              "months": 16,
+              "price": 3702
+            },
+            {
+              "months": 17,
+              "price": 3678
+            },
+            {
+              "months": 18,
+              "price": 3678
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-10-08",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=43&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0525",
+          "floorplanName": "bhra6.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 786,
+          "price": 3354,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4270
+            },
+            {
+              "months": 3,
+              "price": 3904
+            },
+            {
+              "months": 4,
+              "price": 3720
+            },
+            {
+              "months": 5,
+              "price": 3610
+            },
+            {
+              "months": 6,
+              "price": 4823
+            },
+            {
+              "months": 7,
+              "price": 3485
+            },
+            {
+              "months": 8,
+              "price": 4522
+            },
+            {
+              "months": 9,
+              "price": 4757
+            },
+            {
+              "months": 10,
+              "price": 3391
+            },
+            {
+              "months": 11,
+              "price": 3371
+            },
+            {
+              "months": 12,
+              "price": 3354
+            },
+            {
+              "months": 13,
+              "price": 3354
+            },
+            {
+              "months": 14,
+              "price": 3354
+            },
+            {
+              "months": 15,
+              "price": 3354
+            },
+            {
+              "months": 16,
+              "price": 3354
+            },
+            {
+              "months": 17,
+              "price": 3354
+            },
+            {
+              "months": 18,
+              "price": 3354
+            }
+          ],
+          "availableDate": "2027-02-18",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-02-18&UnitId=75&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "bhrb4.2 2 BR, 2 BTH",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1166,
+          "price": 4829,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 21564
+            },
+            {
+              "months": 3,
+              "price": 5710
+            },
+            {
+              "months": 4,
+              "price": 9544
+            },
+            {
+              "months": 5,
+              "price": 5287
+            },
+            {
+              "months": 6,
+              "price": 5181
+            },
+            {
+              "months": 7,
+              "price": 5106
+            },
+            {
+              "months": 8,
+              "price": 6586
+            },
+            {
+              "months": 9,
+              "price": 6262
+            },
+            {
+              "months": 10,
+              "price": 5953
+            },
+            {
+              "months": 11,
+              "price": 5954
+            },
+            {
+              "months": 12,
+              "price": 4917
+            },
+            {
+              "months": 13,
+              "price": 4897
+            },
+            {
+              "months": 14,
+              "price": 4879
+            },
+            {
+              "months": 15,
+              "price": 4864
+            },
+            {
+              "months": 16,
+              "price": 5804
+            },
+            {
+              "months": 17,
+              "price": 4839
+            },
+            {
+              "months": 18,
+              "price": 4829
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-11-22",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=142&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0704",
+          "floorplanName": "bhrb3.2 2 BR, 2 BTH",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1134,
+          "price": 4759,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 14247
+            },
+            {
+              "months": 3,
+              "price": 5640
+            },
+            {
+              "months": 4,
+              "price": 5376
+            },
+            {
+              "months": 5,
+              "price": 5217
+            },
+            {
+              "months": 6,
+              "price": 7131
+            },
+            {
+              "months": 7,
+              "price": 6629
+            },
+            {
+              "months": 8,
+              "price": 6191
+            },
+            {
+              "months": 9,
+              "price": 6156
+            },
+            {
+              "months": 10,
+              "price": 4997
+            },
+            {
+              "months": 11,
+              "price": 5077
+            },
+            {
+              "months": 12,
+              "price": 4941
+            },
+            {
+              "months": 13,
+              "price": 4827
+            },
+            {
+              "months": 14,
+              "price": 5882
+            },
+            {
+              "months": 15,
+              "price": 4794
+            },
+            {
+              "months": 16,
+              "price": 4781
+            },
+            {
+              "months": 17,
+              "price": 4769
+            },
+            {
+              "months": 18,
+              "price": 4759
+            }
+          ],
+          "availableDate": "2027-01-19",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-01-19&UnitId=130&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0705",
+          "floorplanName": "bhra7.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 787,
+          "price": 3454,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4600
+            },
+            {
+              "months": 3,
+              "price": 8072
+            },
+            {
+              "months": 4,
+              "price": 3935
+            },
+            {
+              "months": 5,
+              "price": 3710
+            },
+            {
+              "months": 6,
+              "price": 3637
+            },
+            {
+              "months": 7,
+              "price": 3585
+            },
+            {
+              "months": 8,
+              "price": 3546
+            },
+            {
+              "months": 9,
+              "price": 4398
+            },
+            {
+              "months": 10,
+              "price": 3491
+            },
+            {
+              "months": 11,
+              "price": 4277
+            },
+            {
+              "months": 12,
+              "price": 4500
+            },
+            {
+              "months": 13,
+              "price": 3454
+            },
+            {
+              "months": 14,
+              "price": 3487
+            },
+            {
+              "months": 15,
+              "price": 3454
+            },
+            {
+              "months": 16,
+              "price": 3483
+            },
+            {
+              "months": 17,
+              "price": 3454
+            },
+            {
+              "months": 18,
+              "price": 3454
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-11-22",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=89&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0718",
+          "floorplanName": "bhra12.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 864,
+          "price": 3603,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 10878
+            },
+            {
+              "months": 3,
+              "price": 4309
+            },
+            {
+              "months": 4,
+              "price": 3967
+            },
+            {
+              "months": 5,
+              "price": 3858
+            },
+            {
+              "months": 6,
+              "price": 3785
+            },
+            {
+              "months": 7,
+              "price": 3733
+            },
+            {
+              "months": 8,
+              "price": 4730
+            },
+            {
+              "months": 9,
+              "price": 3664
+            },
+            {
+              "months": 10,
+              "price": 4564
+            },
+            {
+              "months": 11,
+              "price": 4810
+            },
+            {
+              "months": 12,
+              "price": 3603
+            },
+            {
+              "months": 13,
+              "price": 3640
+            },
+            {
+              "months": 14,
+              "price": 3603
+            },
+            {
+              "months": 15,
+              "price": 3635
+            },
+            {
+              "months": 16,
+              "price": 3603
+            },
+            {
+              "months": 17,
+              "price": 3603
+            },
+            {
+              "months": 18,
+              "price": 3603
+            }
+          ],
+          "availableDate": "2026-12-13",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-12-13&UnitId=30&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0725",
+          "floorplanName": "bhra6.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 786,
+          "price": 3399,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4598
+            },
+            {
+              "months": 3,
+              "price": 3949
+            },
+            {
+              "months": 4,
+              "price": 3765
+            },
+            {
+              "months": 5,
+              "price": 3655
+            },
+            {
+              "months": 6,
+              "price": 3582
+            },
+            {
+              "months": 7,
+              "price": 4647
+            },
+            {
+              "months": 8,
+              "price": 3491
+            },
+            {
+              "months": 9,
+              "price": 4429
+            },
+            {
+              "months": 10,
+              "price": 4682
+            },
+            {
+              "months": 11,
+              "price": 3426
+            },
+            {
+              "months": 12,
+              "price": 3446
+            },
+            {
+              "months": 13,
+              "price": 3399
+            },
+            {
+              "months": 14,
+              "price": 3439
+            },
+            {
+              "months": 15,
+              "price": 3399
+            },
+            {
+              "months": 16,
+              "price": 3399
+            },
+            {
+              "months": 17,
+              "price": 3399
+            },
+            {
+              "months": 18,
+              "price": 3399
+            }
+          ],
+          "availableDate": "2027-01-17",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-01-17&UnitId=76&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0812",
+          "floorplanName": "bhre3.1 Studio",
+          "beds": 0,
+          "baths": 1,
+          "sqft": 543,
+          "price": 2382,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 3139
+            },
+            {
+              "months": 3,
+              "price": 2855
+            },
+            {
+              "months": 4,
+              "price": 5830
+            },
+            {
+              "months": 5,
+              "price": 5235
+            },
+            {
+              "months": 6,
+              "price": 2571
+            },
+            {
+              "months": 7,
+              "price": 3444
+            },
+            {
+              "months": 8,
+              "price": 3532
+            },
+            {
+              "months": 9,
+              "price": 2476
+            },
+            {
+              "months": 10,
+              "price": 2457
+            },
+            {
+              "months": 11,
+              "price": 5806
+            },
+            {
+              "months": 12,
+              "price": 3846
+            },
+            {
+              "months": 13,
+              "price": 2418
+            },
+            {
+              "months": 14,
+              "price": 2409
+            },
+            {
+              "months": 15,
+              "price": 3054
+            },
+            {
+              "months": 16,
+              "price": 2394
+            },
+            {
+              "months": 17,
+              "price": 2387
+            },
+            {
+              "months": 18,
+              "price": 2382
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-10-08",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=208&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0906",
+          "floorplanName": "bhra3.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 703,
+          "price": 3142,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4273
+            },
+            {
+              "months": 3,
+              "price": 7561
+            },
+            {
+              "months": 4,
+              "price": 3591
+            },
+            {
+              "months": 5,
+              "price": 3399
+            },
+            {
+              "months": 6,
+              "price": 3326
+            },
+            {
+              "months": 7,
+              "price": 3273
+            },
+            {
+              "months": 8,
+              "price": 3234
+            },
+            {
+              "months": 9,
+              "price": 4041
+            },
+            {
+              "months": 10,
+              "price": 3179
+            },
+            {
+              "months": 11,
+              "price": 3924
+            },
+            {
+              "months": 12,
+              "price": 4126
+            },
+            {
+              "months": 13,
+              "price": 3142
+            },
+            {
+              "months": 14,
+              "price": 3165
+            },
+            {
+              "months": 15,
+              "price": 3142
+            },
+            {
+              "months": 16,
+              "price": 3162
+            },
+            {
+              "months": 17,
+              "price": 3142
+            },
+            {
+              "months": 18,
+              "price": 3142
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-09-12",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=59&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "0918",
+          "floorplanName": "bhra12.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 864,
+          "price": 3496,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4639
+            },
+            {
+              "months": 3,
+              "price": 8339
+            },
+            {
+              "months": 4,
+              "price": 3951
+            },
+            {
+              "months": 5,
+              "price": 3751
+            },
+            {
+              "months": 6,
+              "price": 3678
+            },
+            {
+              "months": 7,
+              "price": 3626
+            },
+            {
+              "months": 8,
+              "price": 3587
+            },
+            {
+              "months": 9,
+              "price": 4489
+            },
+            {
+              "months": 10,
+              "price": 4468
+            },
+            {
+              "months": 11,
+              "price": 4364
+            },
+            {
+              "months": 12,
+              "price": 4590
+            },
+            {
+              "months": 13,
+              "price": 3496
+            },
+            {
+              "months": 14,
+              "price": 3522
+            },
+            {
+              "months": 15,
+              "price": 3496
+            },
+            {
+              "months": 16,
+              "price": 3519
+            },
+            {
+              "months": 17,
+              "price": 3496
+            },
+            {
+              "months": 18,
+              "price": 3496
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-09-09",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=32&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1022",
+          "floorplanName": "bhra11.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 858,
+          "price": 3653,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 11017
+            },
+            {
+              "months": 3,
+              "price": 4199
+            },
+            {
+              "months": 4,
+              "price": 4017
+            },
+            {
+              "months": 5,
+              "price": 3908
+            },
+            {
+              "months": 6,
+              "price": 3835
+            },
+            {
+              "months": 7,
+              "price": 4983
+            },
+            {
+              "months": 8,
+              "price": 4794
+            },
+            {
+              "months": 9,
+              "price": 4756
+            },
+            {
+              "months": 10,
+              "price": 4627
+            },
+            {
+              "months": 11,
+              "price": 4866
+            },
+            {
+              "months": 12,
+              "price": 3653
+            },
+            {
+              "months": 13,
+              "price": 3653
+            },
+            {
+              "months": 14,
+              "price": 3653
+            },
+            {
+              "months": 15,
+              "price": 3653
+            },
+            {
+              "months": 16,
+              "price": 3653
+            },
+            {
+              "months": 17,
+              "price": 3653
+            },
+            {
+              "months": 18,
+              "price": 3653
+            }
+          ],
+          "availableDate": "2027-01-01",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-01-01&UnitId=27&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1308",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 5544,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 7302
+            },
+            {
+              "months": 3,
+              "price": 7156
+            },
+            {
+              "months": 4,
+              "price": 6361
+            },
+            {
+              "months": 5,
+              "price": 6423
+            },
+            {
+              "months": 6,
+              "price": 5983
+            },
+            {
+              "months": 7,
+              "price": 5889
+            },
+            {
+              "months": 8,
+              "price": 5819
+            },
+            {
+              "months": 9,
+              "price": 8159
+            },
+            {
+              "months": 10,
+              "price": 7683
+            },
+            {
+              "months": 11,
+              "price": 7399
+            },
+            {
+              "months": 12,
+              "price": 6664
+            },
+            {
+              "months": 13,
+              "price": 6561
+            },
+            {
+              "months": 14,
+              "price": 5607
+            },
+            {
+              "months": 15,
+              "price": 5691
+            },
+            {
+              "months": 16,
+              "price": 5583
+            },
+            {
+              "months": 17,
+              "price": 5648
+            },
+            {
+              "months": 18,
+              "price": 5544
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-09-01",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=186&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1503",
+          "floorplanName": "bhrb6.2 2 BR, 2 BTH,",
+          "beds": 2,
+          "baths": 2,
+          "sqft": 1201,
+          "price": 4897,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 22680
+            },
+            {
+              "months": 3,
+              "price": 5778
+            },
+            {
+              "months": 4,
+              "price": 9849
+            },
+            {
+              "months": 5,
+              "price": 5355
+            },
+            {
+              "months": 6,
+              "price": 5250
+            },
+            {
+              "months": 7,
+              "price": 5174
+            },
+            {
+              "months": 8,
+              "price": 6743
+            },
+            {
+              "months": 9,
+              "price": 6402
+            },
+            {
+              "months": 10,
+              "price": 6078
+            },
+            {
+              "months": 11,
+              "price": 6081
+            },
+            {
+              "months": 12,
+              "price": 4985
+            },
+            {
+              "months": 13,
+              "price": 5072
+            },
+            {
+              "months": 14,
+              "price": 4959
+            },
+            {
+              "months": 15,
+              "price": 4932
+            },
+            {
+              "months": 16,
+              "price": 5927
+            },
+            {
+              "months": 17,
+              "price": 4907
+            },
+            {
+              "months": 18,
+              "price": 4897
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-09-10",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=168&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1505",
+          "floorplanName": "bhra7.1 1 BR, 1 BTH",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 787,
+          "price": 3519,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 4435
+            },
+            {
+              "months": 3,
+              "price": 4069
+            },
+            {
+              "months": 4,
+              "price": 3885
+            },
+            {
+              "months": 5,
+              "price": 3775
+            },
+            {
+              "months": 6,
+              "price": 3702
+            },
+            {
+              "months": 7,
+              "price": 4806
+            },
+            {
+              "months": 8,
+              "price": 3611
+            },
+            {
+              "months": 9,
+              "price": 4584
+            },
+            {
+              "months": 10,
+              "price": 4823
+            },
+            {
+              "months": 11,
+              "price": 3536
+            },
+            {
+              "months": 12,
+              "price": 3519
+            },
+            {
+              "months": 13,
+              "price": 3519
+            },
+            {
+              "months": 14,
+              "price": 3519
+            },
+            {
+              "months": 15,
+              "price": 3519
+            },
+            {
+              "months": 16,
+              "price": 3519
+            },
+            {
+              "months": 17,
+              "price": 3519
+            },
+            {
+              "months": 18,
+              "price": 3519
+            }
+          ],
+          "availableDate": "2027-01-04",
+          "availableNow": false,
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2027-01-04&UnitId=96&LeaseTerm=18"
+        },
+        {
+          "unitNumber": "1605",
+          "floorplanName": "bhrc2.2 3 BR, 2 BTH",
+          "beds": 3,
+          "baths": 2,
+          "sqft": 1486,
+          "price": 5539,
+          "monthlyFeesUnpriced": [
+            "Utility - Electric - Third Party: Usage-Based (Utilities)",
+            "Utility Billing Bundle: Varies",
+            "Renters Liability Insurance - Third Party: Varies"
+          ],
+          "leaseTermMonths": 18,
+          "leaseTerms": [
+            {
+              "months": 2,
+              "price": 7297
+            },
+            {
+              "months": 3,
+              "price": 7151
+            },
+            {
+              "months": 4,
+              "price": 6356
+            },
+            {
+              "months": 5,
+              "price": 6418
+            },
+            {
+              "months": 6,
+              "price": 5979
+            },
+            {
+              "months": 7,
+              "price": 5884
+            },
+            {
+              "months": 8,
+              "price": 5814
+            },
+            {
+              "months": 9,
+              "price": 8152
+            },
+            {
+              "months": 10,
+              "price": 7676
+            },
+            {
+              "months": 11,
+              "price": 7392
+            },
+            {
+              "months": 12,
+              "price": 6659
+            },
+            {
+              "months": 13,
+              "price": 6555
+            },
+            {
+              "months": 14,
+              "price": 5602
+            },
+            {
+              "months": 15,
+              "price": 5686
+            },
+            {
+              "months": 16,
+              "price": 5578
+            },
+            {
+              "months": 17,
+              "price": 5642
+            },
+            {
+              "months": 18,
+              "price": 5539
+            }
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-09-09",
+          "url": "https://oll-leasing.loftliving.com/oll/?siteId=4401400&MoveInDate=2026-11-25&UnitId=185&LeaseTerm=18"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Limited-Time Offer: Now Offering $1,500 Off Base Rent on Select Units! — Contact us today to schedule a tour."
+      ]
+    },
+    {
+      "buildingId": "old-town-park-1",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/availability-tower-1",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "2313",
+          "floorplanName": "S2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 565,
+          "price": 2481,
+          "priceMax": 2503,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139574&UnitID=35648567&header=1"
+        },
+        {
+          "unitNumber": "1012",
+          "floorplanName": "S2A",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 560,
+          "price": 2653,
+          "priceMax": 2676,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139575&UnitID=35648431&header=1"
+        },
+        {
+          "unitNumber": "2312",
+          "floorplanName": "S2A",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 560,
+          "price": 2762,
+          "priceMax": 2786,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139575&UnitID=35648566&header=1"
+        },
+        {
+          "unitNumber": "2111",
+          "floorplanName": "A1",
+          "beds": 1,
+          "baths": null,
+          "sqft": 680,
+          "price": 3233,
+          "priceMax": 3382,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-18",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139576&UnitID=35648535&header=1"
+        },
+        {
+          "unitNumber": "1004",
+          "floorplanName": "A2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 690,
+          "outdoorSqft": 69,
+          "price": 3398,
+          "priceMax": 3590,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-26",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139577&UnitID=35648423&header=1"
+        },
+        {
+          "unitNumber": "0302",
+          "floorplanName": "A3",
+          "beds": 1,
+          "baths": null,
+          "sqft": 740,
+          "outdoorSqft": 65,
+          "price": 3491,
+          "priceMax": 3618,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2027-01-10",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139578&UnitID=35648311&header=1"
+        },
+        {
+          "unitNumber": "2002",
+          "floorplanName": "A3",
+          "beds": 1,
+          "baths": null,
+          "sqft": 740,
+          "outdoorSqft": 65,
+          "price": 3580,
+          "priceMax": 3710,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-07",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139578&UnitID=35648511&header=1"
+        },
+        {
+          "unitNumber": "1906",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 705,
+          "outdoorSqft": 65,
+          "price": 3464,
+          "priceMax": 3589,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-12",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139579&UnitID=35648500&header=1"
+        },
+        {
+          "unitNumber": "2306",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 705,
+          "outdoorSqft": 65,
+          "price": 3520,
+          "priceMax": 3718,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-28",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139579&UnitID=35648560&header=1"
+        },
+        {
+          "unitNumber": "2906",
+          "floorplanName": "A3A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 705,
+          "outdoorSqft": 65,
+          "price": 3627,
+          "priceMax": 3759,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2027-01-22",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139579&UnitID=35648633&header=1"
+        },
+        {
+          "unitNumber": "1910",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3258,
+          "priceMax": 3409,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-15",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139580&UnitID=35648504&header=1"
+        },
+        {
+          "unitNumber": "2810",
+          "floorplanName": "A4",
+          "beds": 1,
+          "baths": null,
+          "sqft": 710,
+          "price": 3336,
+          "priceMax": 3468,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139580&UnitID=35648629&header=1"
+        },
+        {
+          "unitNumber": "0622",
+          "floorplanName": "B1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 930,
+          "outdoorSqft": 66,
+          "price": 4426,
+          "priceMax": 4810,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139583&UnitID=35648382&header=1"
+        },
+        {
+          "unitNumber": "1708",
+          "floorplanName": "B2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1080,
+          "outdoorSqft": 114,
+          "price": 4839,
+          "priceMax": 5014,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-19",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139584&UnitID=35648472&header=1"
+        },
+        {
+          "unitNumber": "0708",
+          "floorplanName": "B3",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1085,
+          "outdoorSqft": 57,
+          "price": 4737,
+          "priceMax": 5147,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139585&UnitID=35648390&header=1"
+        },
+        {
+          "unitNumber": "0619",
+          "floorplanName": "S3A-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 565,
+          "price": 2562,
+          "priceMax": 2605,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-10",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=5355927&UnitID=35648379&header=1"
+        }
+      ],
+      "alsoListed": [
+        {
+          "unitNumber": "0614",
+          "floorplanName": "B7",
+          "beds": 2,
+          "sqft": 1220,
+          "outdoorSqft": 84,
+          "availableDate": "2027-01-26",
+          "availableNow": false,
+          "note": "2 Bed — No usable price on the site (it shows “$-1”)",
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3139589&UnitID=35648374&header=1"
+        }
+      ],
+      "notices": [
+        "Limited-Time Specials — Receive up to a $1,000 Rent Credit! — Call our leasing team to learn more."
+      ]
+    },
+    {
+      "buildingId": "old-town-park-2",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/availability-tower-2",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "2912",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 510,
+          "outdoorSqft": 93,
+          "price": 2537,
+          "priceMax": 2579,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-10",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158320&UnitID=16936329&header=1"
+        },
+        {
+          "unitNumber": "3412",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 510,
+          "outdoorSqft": 93,
+          "price": 2607,
+          "priceMax": 2651,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-06",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158320&UnitID=16936322&header=1"
+        },
+        {
+          "unitNumber": "3712",
+          "floorplanName": "S1-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 510,
+          "outdoorSqft": 93,
+          "price": 2717,
+          "priceMax": 2740,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158320&UnitID=16936320&header=1"
+        },
+        {
+          "unitNumber": "2604",
+          "floorplanName": "S2-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 550,
+          "price": 2552,
+          "priceMax": 2573,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158330&UnitID=16936390&header=1"
+        },
+        {
+          "unitNumber": "0802",
+          "floorplanName": "S3",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 565,
+          "price": 2476,
+          "priceMax": 2518,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-29",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158324&UnitID=16936411&header=1"
+        },
+        {
+          "unitNumber": "1510",
+          "floorplanName": "A1M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 54,
+          "price": 3303,
+          "priceMax": 3456,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-22",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158327&UnitID=16936073&header=1"
+        },
+        {
+          "unitNumber": "3510",
+          "floorplanName": "A1M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 54,
+          "price": 3485,
+          "priceMax": 3647,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-05",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158327&UnitID=16936057&header=1"
+        },
+        {
+          "unitNumber": "3307",
+          "floorplanName": "A2M",
+          "beds": 1,
+          "baths": null,
+          "sqft": 650,
+          "outdoorSqft": 46,
+          "price": 3717,
+          "priceMax": 3926,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-28",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158340&UnitID=16936126&header=1"
+        },
+        {
+          "unitNumber": "2203",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3547,
+          "priceMax": 3782,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936166&header=1"
+        },
+        {
+          "unitNumber": "3303",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3997,
+          "priceMax": 4141,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-09",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936153&header=1"
+        },
+        {
+          "unitNumber": "3503",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 3766,
+          "priceMax": 4017,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936155&header=1"
+        },
+        {
+          "unitNumber": "3603",
+          "floorplanName": "A3-1",
+          "beds": 1,
+          "planType": "1 Bed + Flex",
+          "baths": null,
+          "sqft": 750,
+          "outdoorSqft": 51,
+          "price": 4052,
+          "priceMax": 4199,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-26",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158341&UnitID=16936156&header=1"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "B1-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1020,
+          "outdoorSqft": 61,
+          "price": 4449,
+          "priceMax": 4835,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158344&UnitID=16936179&header=1"
+        },
+        {
+          "unitNumber": "0901",
+          "floorplanName": "B1-1",
+          "beds": 2,
+          "baths": null,
+          "sqft": 1020,
+          "outdoorSqft": 61,
+          "price": 4816,
+          "priceMax": 4991,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2027-01-21",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158344&UnitID=16936180&header=1"
+        },
+        {
+          "unitNumber": "3111",
+          "floorplanName": "C1-1",
+          "beds": 3,
+          "baths": null,
+          "sqft": 1235,
+          "outdoorSqft": 54,
+          "price": 6899,
+          "priceMax": 7149,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2027-02-05",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3158347&UnitID=16936291&header=1"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Limited-Time Specials — Receive up to a $1,000 Rent Credit! — Call our leasing team to learn more."
+      ]
+    },
+    {
+      "buildingId": "old-town-park-3",
+      "status": "ok",
+      "source": {
+        "adapter": "oldtownpark",
+        "fetchedUrl": "https://oldtownpark.com/availability-tower-3",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "3603",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2466,
+          "priceMax": 2487,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573186&UnitID=28539092&header=1"
+        },
+        {
+          "unitNumber": "3803",
+          "floorplanName": "S2-2",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2577,
+          "priceMax": 2620,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-13",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573186&UnitID=28539119&header=1"
+        },
+        {
+          "unitNumber": "3605",
+          "floorplanName": "S3-1",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2466,
+          "priceMax": 2487,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573188&UnitID=28539094&header=1"
+        },
+        {
+          "unitNumber": "0804",
+          "floorplanName": "S4",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2335,
+          "priceMax": 2374,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2027-02-08",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573193&UnitID=28538713&header=1"
+        },
+        {
+          "unitNumber": "3904",
+          "floorplanName": "S4",
+          "beds": 0,
+          "planType": "Convertible",
+          "baths": null,
+          "sqft": 505,
+          "price": 2622,
+          "priceMax": 2644,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573193&UnitID=28539133&header=1"
+        },
+        {
+          "unitNumber": "1207",
+          "floorplanName": "A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 568,
+          "outdoorSqft": 160,
+          "price": 2971,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2027-01-02",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573200&UnitID=28538772&header=1"
+        },
+        {
+          "unitNumber": "3907",
+          "floorplanName": "A",
+          "beds": 1,
+          "baths": null,
+          "sqft": 568,
+          "outdoorSqft": 160,
+          "price": 3421,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-25",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573200&UnitID=28539135&header=1"
+        },
+        {
+          "unitNumber": "2406",
+          "floorplanName": "A2-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 641,
+          "outdoorSqft": 100,
+          "price": 3656,
+          "priceMax": 3862,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573204&UnitID=28538939&header=1"
+        },
+        {
+          "unitNumber": "2606",
+          "floorplanName": "A2-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 641,
+          "outdoorSqft": 100,
+          "price": 3485,
+          "priceMax": 3681,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573204&UnitID=28538964&header=1"
+        },
+        {
+          "unitNumber": "2513",
+          "floorplanName": "A3-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 642,
+          "outdoorSqft": 144,
+          "price": 3440,
+          "priceMax": 3576,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-28",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573206&UnitID=28538960&header=1"
+        },
+        {
+          "unitNumber": "3613",
+          "floorplanName": "A3-2",
+          "beds": 1,
+          "baths": null,
+          "sqft": 642,
+          "outdoorSqft": 144,
+          "price": 3556,
+          "priceMax": 3696,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573206&UnitID=28539102&header=1"
+        },
+        {
+          "unitNumber": "2410",
+          "floorplanName": "B",
+          "beds": 2,
+          "planType": "Jr. 2 Bed",
+          "baths": null,
+          "sqft": 858,
+          "outdoorSqft": 57,
+          "price": 4037,
+          "priceMax": 4183,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-08",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573208&UnitID=28538943&header=1"
+        },
+        {
+          "unitNumber": "0808",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 867,
+          "outdoorSqft": 194,
+          "price": 4317,
+          "priceMax": 4691,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573211&UnitID=28538717&header=1"
+        },
+        {
+          "unitNumber": "2108",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 867,
+          "outdoorSqft": 194,
+          "price": 4497,
+          "priceMax": 4660,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-08",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573211&UnitID=28538899&header=1"
+        },
+        {
+          "unitNumber": "2408",
+          "floorplanName": "C",
+          "beds": 2,
+          "baths": null,
+          "sqft": 867,
+          "outdoorSqft": 194,
+          "price": 4568,
+          "priceMax": 4964,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573211&UnitID=28538941&header=1"
+        },
+        {
+          "unitNumber": "0701",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 976,
+          "outdoorSqft": 94,
+          "price": 4497,
+          "priceMax": 4660,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-12-16",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573213&UnitID=28538696&header=1"
+        },
+        {
+          "unitNumber": "0901",
+          "floorplanName": "C1-2",
+          "beds": 2,
+          "baths": null,
+          "sqft": 976,
+          "outdoorSqft": 94,
+          "price": 4558,
+          "priceMax": 4953,
+          "monthlyFees": {
+            "min": 12,
+            "max": 12
+          },
+          "monthlyFeesUnpriced": [
+            "Utility – Water / Sewer / Trash / Gas (RUBS): Allocated (Utilities)",
+            "Electricity – ComEd: Billed Directly by ComEd"
+          ],
+          "availableDate": "2026-11-26",
+          "availableNow": false,
+          "url": "https://oldtownpark.securecafe.com/onlineleasing/old-town-park/oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=1093761&FloorPlanID=3573213&UnitID=28538724&header=1"
+        }
+      ],
+      "alsoListed": [
+        {
+          "unitNumber": "4003",
+          "floorplanName": "PH3-1",
+          "beds": null,
+          "sqft": 2039,
+          "outdoorSqft": 1400,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "note": "Penthouse — Contact for Pricing",
+          "url": "https://oldtownpark.com/availability-tower-3"
+        }
+      ],
+      "notices": [
+        "Limited-Time Specials — Receive up to a $1,000 Rent Credit! — Call our leasing team to learn more."
+      ]
+    },
+    {
+      "buildingId": "the-leo",
+      "status": "ok",
+      "source": {
+        "adapter": "leo",
+        "fetchedUrl": "https://leochicago.com/floorplans/",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": "705",
+          "floorplanName": "1 BR",
+          "beds": 1,
+          "baths": 1,
+          "sqft": 712,
+          "price": 3093,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "vacantSince": "2026-09-22",
+          "url": "https://leochicago.com/floorplans/unit-e1a5c099698f1638b126d177d7799a8d/"
+        }
+      ],
+      "alsoListed": [],
+      "notices": [
+        "Make your move to The Leo with a ½ month FREE on select residences. — Ask about limited-time incentives! Schedule a tour with our leasing team to explore The Leo today.",
+        "Prices listed may include concessions (free rent) and/or special offers."
+      ]
+    },
+    {
+      "buildingId": "stead-220",
+      "status": "ok",
+      "source": {
+        "adapter": "stead220",
+        "fetchedUrl": "https://stead220.com/floorplans",
+        "requests": 1
+      },
+      "units": [
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 01",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2575,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/1",
+          "sourceUpdatedAt": "2026-11-24T18:39:30.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR + Den - Unit 02",
+          "beds": 1,
+          "planType": "1 Bed + Den",
+          "baths": 1,
+          "sqft": null,
+          "price": 3765,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/2",
+          "sourceUpdatedAt": "2026-11-13T21:10:50.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 03",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 2950,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/3",
+          "sourceUpdatedAt": "2026-11-24T18:40:12.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 04",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3175,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/4",
+          "sourceUpdatedAt": "2026-09-29T22:58:45.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR - Unit 06",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3680,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/6",
+          "sourceUpdatedAt": "2026-11-20T18:51:43.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 1BR - Unit 07",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3480,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/7",
+          "sourceUpdatedAt": "2026-11-21T20:14:00.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 08",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 2640,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/8",
+          "sourceUpdatedAt": "2026-11-13T21:11:24.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 2BR - Unit 09",
+          "beds": 2,
+          "baths": 2,
+          "sqft": null,
+          "price": 4525,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/9",
+          "sourceUpdatedAt": "2026-11-13T21:11:41.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium 1BR - Unit 10",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3150,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/10",
+          "sourceUpdatedAt": "2026-11-21T20:10:19.000Z"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large 2BR - Unit 12",
+          "beds": 2,
+          "baths": 2,
+          "sqft": null,
+          "price": 4990,
+          "availableDate": "2026-11-24",
+          "availableNow": true,
+          "url": "https://stead220.com/floorplans/12",
+          "sourceUpdatedAt": "2026-09-18T21:55:53.000Z"
+        },
+        {
+          "unitNumber": "2802",
+          "floorplanName": "PH Medium 1BR - Unit 2802",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3785,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2802",
+          "sourceUpdatedAt": "2026-07-09T21:40:11.000Z"
+        },
+        {
+          "unitNumber": "2803",
+          "floorplanName": "PH Medium 1BR - Unit 2803",
+          "beds": 1,
+          "baths": 1,
+          "sqft": null,
+          "price": 3805,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2803",
+          "sourceUpdatedAt": "2026-07-09T21:39:37.000Z"
+        },
+        {
+          "unitNumber": "2809",
+          "floorplanName": "PH Medium Studio - Unit 2809",
+          "beds": 0,
+          "baths": 1,
+          "sqft": null,
+          "price": 3410,
+          "availableDate": null,
+          "url": "https://stead220.com/floorplans/2809",
+          "sourceUpdatedAt": "2026-07-09T21:39:22.000Z"
+        }
+      ],
+      "alsoListed": [
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium Studio - Unit 05",
+          "beds": 0,
+          "baths": 1,
+          "availableDate": null,
+          "note": "Contact for Pricing",
+          "url": "https://stead220.com/floorplans/5"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Medium Studio - Unit 11",
+          "beds": 0,
+          "baths": 1,
+          "availableDate": "2027-01-09",
+          "availableNow": false,
+          "note": "Contact for Pricing",
+          "url": "https://stead220.com/floorplans/11"
+        },
+        {
+          "unitNumber": null,
+          "floorplanName": "Large Studio - Unit 13",
+          "beds": 0,
+          "baths": 1,
+          "availableDate": null,
+          "note": "Contact for Pricing",
+          "url": "https://stead220.com/floorplans/13"
+        }
+      ],
+      "notices": [
+        "6 WEEKS FREE on select apartments"
+      ]
+    }
+  ]
+}
